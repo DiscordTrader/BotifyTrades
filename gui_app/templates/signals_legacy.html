@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Signal History{% endblock %}
+
+{% block content %}
+<div style="margin: 2rem 0;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2>📈 Filters</h2>
+        <div style="display: flex; gap: 10px;">
+            <select id="signal-channel-filter" style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                <option value="">All Channels</option>
+            </select>
+            <select id="signal-period-filter" style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                <option value="all">All Time</option>
+                <option value="weekly">Last 7 Days</option>
+                <option value="monthly">Last 30 Days</option>
+                <option value="yearly">Last Year</option>
+            </select>
+            <button id="refresh-signals-btn" class="btn btn-secondary" style="padding: 8px 16px;">🔄 Refresh</button>
+        </div>
+    </div>
+    
+    <!-- Summary Stats -->
+    <div id="signal-summary" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px;">
+        <div class="stat-card" style="padding: 15px;">
+            <div class="stat-label">Total Signals</div>
+            <div class="stat-value" id="summary-total-signals">0</div>
+        </div>
+        <div class="stat-card" style="padding: 15px;">
+            <div class="stat-label">BTO Signals</div>
+            <div class="stat-value" id="summary-bto-signals">0</div>
+        </div>
+        <div class="stat-card" style="padding: 15px;">
+            <div class="stat-label">STC Signals</div>
+            <div class="stat-value" id="summary-stc-signals">0</div>
+        </div>
+        <div class="stat-card" style="padding: 15px;">
+            <div class="stat-label">Total P&L</div>
+            <div class="stat-value profit" id="summary-total-pnl">$0.00</div>
+        </div>
+        <div class="stat-card" style="padding: 15px;">
+            <div class="stat-label">Avg Return %</div>
+            <div class="stat-value" id="summary-avg-return">0%</div>
+        </div>
+    </div>
+    
+    <!-- Signal Table -->
+    <div id="signal-table-container">
+        <div class="loading">Loading signal history...</div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Load channels for filter dropdown
+async function loadChannelsFilter() {
+    try {
+        const response = await fetch('/api/channels');
+        const channels = await response.json();
+        const select = document.getElementById('signal-channel-filter');
+        
+        // Clear existing options except the first "All Channels"
+        select.innerHTML = '<option value="">All Channels</option>';
+        
+        channels.forEach(channel => {
+            const option = document.createElement('option');
+            option.value = channel.id;
+            option.textContent = channel.name;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Failed to load channels:', error);
+    }
+}
+
+// Load signal history
+async function loadSignalHistory() {
+    const period = document.getElementById('signal-period-filter').value;
+    const channelId = document.getElementById('signal-channel-filter').value;
+    const container = document.getElementById('signal-table-container');
+    
+    try {
+        let url = `/api/signals?period=${period}&limit=200`;
+        if (channelId) {
+            url += `&channel_id=${channelId}`;
+        }
+        
+        const response = await fetch(url);
+        const signals = await response.json();
+        
+        if (!response.ok) {
+            throw new Error('Failed to load signal history');
+        }
+        
+        // Update summary stats
+        updateSummaryStats(signals);
+        
+        // Display table
+        if (signals.length === 0) {
+            container.innerHTML = '<div class="no-data">No signals found. Signals will appear here as they are received!</div>';
+            return;
+        }
+        
+        const tableHTML = `
+            <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <thead>
+                    <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                        <th style="padding: 12px; text-align: left; font-weight: 600;">Time</th>
+                        <th style="padding: 12px; text-align: left; font-weight: 600;">Channel</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 600;">Direction</th>
+                        <th style="padding: 12px; text-align: left; font-weight: 600;">Symbol</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 600;">QTY</th>
+                        <th style="padding: 12px; text-align: right; font-weight: 600;">Entry Price</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 600;">Execution</th>
+                        <th style="padding: 12px; text-align: right; font-weight: 600;">P&L Cash</th>
+                        <th style="padding: 12px; text-align: right; font-weight: 600;">P&L %</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 600;">Position</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${signals.map(signal => {
+                        const time = new Date(signal.received_at).toLocaleString();
+                        const pnlColor = signal.pnl_cash >= 0 ? '#28a745' : '#dc3545';
+                        const statusColor = signal.status === 'OPEN' ? '#ffc107' : '#6c757d';
+                        const directionBadge = signal.direction === 'BTO' 
+                            ? '<span style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">BTO</span>'
+                            : '<span style="background: #dc3545; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">STC</span>';
+                        
+                        // Execution status badge with color coding
+                        const execStatus = signal.execution_status || 'PENDING';
+                        const execReason = signal.execution_reason || '';
+                        let execBadge = '';
+                        let execColor = '#6c757d';
+                        let execIcon = '';
+                        
+                        if (execStatus === 'EXECUTED') {
+                            execColor = '#28a745';
+                            execIcon = '✓';
+                        } else if (execStatus === 'FAILED') {
+                            execColor = '#dc3545';
+                            execIcon = '✗';
+                        } else if (execStatus === 'SKIPPED') {
+                            execColor = '#fd7e14';
+                            execIcon = '⊘';
+                        } else {
+                            execColor = '#6c757d';
+                            execIcon = '⏳';
+                        }
+                        
+                        const reasonTooltip = execReason ? ` title="${execReason.replace(/"/g, '&quot;')}"` : '';
+                        execBadge = `<span style="background: ${execColor}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; cursor: ${execReason ? 'help' : 'default'};"${reasonTooltip}>${execIcon} ${execStatus}</span>`;
+                        
+                        // Show reason on new line if exists
+                        const reasonLine = execReason ? `<div style="font-size: 0.75em; color: #6c757d; margin-top: 4px; max-width: 150px; word-wrap: break-word;">${execReason}</div>` : '';
+                        
+                        return `
+                            <tr style="border-bottom: 1px solid #e9ecef;">
+                                <td style="padding: 12px; color: #6c757d; font-size: 0.9em;">${time}</td>
+                                <td style="padding: 12px; color: #212529;">${signal.channel_name}</td>
+                                <td style="padding: 12px; text-align: center;">${directionBadge}</td>
+                                <td style="padding: 12px; font-weight: 600; color: #212529;">${signal.symbol}</td>
+                                <td style="padding: 12px; text-align: center; color: #212529;">${signal.quantity || '-'}</td>
+                                <td style="padding: 12px; text-align: right; color: #212529;">$${signal.price ? signal.price.toFixed(2) : '-'}</td>
+                                <td style="padding: 12px; text-align: center;">${execBadge}${reasonLine}</td>
+                                <td style="padding: 12px; text-align: right; font-weight: 600; color: ${pnlColor};">
+                                    ${signal.pnl_cash >= 0 ? '+' : ''}$${signal.pnl_cash.toFixed(2)}
+                                </td>
+                                <td style="padding: 12px; text-align: right; font-weight: 600; color: ${pnlColor};">
+                                    ${signal.pnl_percent >= 0 ? '+' : ''}${signal.pnl_percent.toFixed(2)}%
+                                </td>
+                                <td style="padding: 12px; text-align: center;">
+                                    <span style="background: ${statusColor}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">
+                                        ${signal.status}
+                                    </span>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+        
+        container.innerHTML = tableHTML;
+        
+    } catch (error) {
+        console.error('Failed to load signal history:', error);
+        container.innerHTML = '<div class="error">Failed to load signal history: ' + error.message + '</div>';
+    }
+}
+
+// Update summary statistics
+function updateSummaryStats(signals) {
+    const totalSignals = signals.length;
+    const btoSignals = signals.filter(s => s.direction === 'BTO').length;
+    const stcSignals = signals.filter(s => s.direction === 'STC').length;
+    
+    const totalPNL = signals.reduce((sum, s) => sum + s.pnl_cash, 0);
+    const avgReturn = signals.length > 0 
+        ? signals.reduce((sum, s) => sum + s.pnl_percent, 0) / signals.length 
+        : 0;
+    
+    document.getElementById('summary-total-signals').textContent = totalSignals;
+    document.getElementById('summary-bto-signals').textContent = btoSignals;
+    document.getElementById('summary-stc-signals').textContent = stcSignals;
+    document.getElementById('summary-total-pnl').textContent = '$' + totalPNL.toFixed(2);
+    document.getElementById('summary-total-pnl').className = 'stat-value ' + (totalPNL >= 0 ? 'profit' : 'loss');
+    document.getElementById('summary-avg-return').textContent = (avgReturn >= 0 ? '+' : '') + avgReturn.toFixed(2) + '%';
+    document.getElementById('summary-avg-return').className = 'stat-value ' + (avgReturn >= 0 ? 'profit' : 'loss');
+}
+
+// Event listeners
+document.getElementById('signal-channel-filter').addEventListener('change', loadSignalHistory);
+document.getElementById('signal-period-filter').addEventListener('change', loadSignalHistory);
+document.getElementById('refresh-signals-btn').addEventListener('click', loadSignalHistory);
+
+// Get URL parameters
+function getURLParameter(name) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(name);
+}
+
+// Load on page load
+loadChannelsFilter().then(() => {
+    // Pre-select channel if provided in URL
+    const channelId = getURLParameter('channel_id');
+    if (channelId) {
+        document.getElementById('signal-channel-filter').value = channelId;
+    }
+    loadSignalHistory();
+});
+</script>
+{% endblock %}

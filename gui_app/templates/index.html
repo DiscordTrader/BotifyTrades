@@ -1,0 +1,4007 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<!-- Broker Disconnection Alert Banner -->
+<div id="broker-alert-banner" style="display: none; margin-bottom: 16px; padding: 16px 20px; 
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.08));
+    border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);">
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 1.5rem;">⚠️</span>
+        <div style="flex: 1;">
+            <div id="broker-alert-title" style="font-weight: 600; color: #ef4444; font-size: 1rem; margin-bottom: 4px;">
+                Broker Disconnected
+            </div>
+            <div id="broker-alert-message" style="color: #fca5a5; font-size: 0.875rem;">
+                <!-- Dynamic message with reason -->
+            </div>
+        </div>
+        <button onclick="dismissBrokerAlert()" style="background: none; border: none; 
+            color: #f87171; cursor: pointer; font-size: 1.25rem; padding: 4px;">×</button>
+    </div>
+</div>
+
+<!-- Trading Pause/Resume Control -->
+<div id="trading-pause-bar" style="margin-bottom: 16px; padding: 12px 20px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.04));
+    border: 1px solid rgba(34, 197, 94, 0.3);">
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <span id="trading-pause-icon" style="font-size: 1.4rem;">▶️</span>
+        <div>
+            <div id="trading-pause-label" style="font-weight: 600; font-size: 0.95rem; color: #22c55e;">Trading Active</div>
+            <div id="trading-pause-detail" style="font-size: 0.78rem; color: rgba(255,255,255,0.5); margin-top: 2px;">Bot is executing signals from Discord channels</div>
+        </div>
+    </div>
+    <button id="trading-pause-btn" onclick="toggleTradingPause()" style="padding: 10px 24px; border-radius: 10px; border: none; cursor: pointer; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.5px; transition: all 0.2s;
+        background: linear-gradient(135deg, #ef4444, #dc2626); color: white; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);">
+        PAUSE TRADING
+    </button>
+</div>
+
+<!-- Daily P&L Limit Banners -->
+<div id="daily-pnl-banners" style="display: none; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;"></div>
+
+<!-- Unprotected Trades Critical Banner -->
+<div id="unprotected-trades-banner" style="display: none;">
+    <div style="margin-bottom: 16px; padding: 0; border-radius: 12px; overflow: hidden;
+        border: 1px solid rgba(239, 68, 68, 0.5); 
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.35) 0%, rgba(153, 27, 27, 0.2) 50%, rgba(127, 29, 29, 0.1) 100%);
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.15), inset 0 1px 0 rgba(255,255,255,0.03);">
+
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px;
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.18) 0%, rgba(239, 68, 68, 0.06) 100%);
+            border-bottom: 1px solid rgba(239, 68, 68, 0.2);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+                    background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.35);">
+                    <span style="font-size: 1.15rem;">🛡️</span>
+                </div>
+                <div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: #fca5a5; letter-spacing: 0.3px;">
+                        RISK PROTECTION ALERT
+                    </div>
+                    <div id="unprotected-subtitle" style="font-size: 0.78rem; color: #f87171; margin-top: 2px; font-weight: 500;">
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div id="unprotected-count-badge" style="background: rgba(239, 68, 68, 0.3); border: 1px solid rgba(239, 68, 68, 0.5);
+                    border-radius: 8px; padding: 4px 12px; font-weight: 800; font-size: 1.1rem; color: #fca5a5;
+                    min-width: 36px; text-align: center; font-variant-numeric: tabular-nums;">
+                    0
+                </div>
+                <button onclick="toggleUnprotectedDetails()" id="unprotected-expand-btn"
+                    style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);
+                    border-radius: 8px; color: #fca5a5; cursor: pointer; padding: 6px 10px; font-size: 0.85rem;
+                    transition: all 0.2s; display: flex; align-items: center; gap: 4px;">
+                    <span id="unprotected-expand-icon" style="transition: transform 0.2s;">&#9660;</span> Details
+                </button>
+                <button onclick="dismissUnprotectedBanner()" title="Dismiss for this session"
+                    style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 1.15rem; padding: 4px 6px;
+                    opacity: 0.6; transition: opacity 0.2s;"
+                    onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.6'">&#10005;</button>
+            </div>
+        </div>
+
+        <div id="unprotected-details" style="display: none; padding: 0;">
+            <div id="unprotected-trades-list" style="max-height: 320px; overflow-y: auto;"></div>
+            <div style="padding: 10px 20px; border-top: 1px solid rgba(239, 68, 68, 0.12);
+                background: rgba(239, 68, 68, 0.04);">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: rgba(252, 165, 165, 0.7);">
+                    <span>&#9432;</span>
+                    <span>Configure risk settings in <strong>Admin &rarr; Channels &rarr; Risk Controls</strong> tab. Enable risk management and set Stop Loss / Profit Targets per channel.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Execution Channels</div>
+        <div class="stat-value info" id="exec-channels-count">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Tracking Channels</div>
+        <div class="stat-value info" id="track-channels-count">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Open Positions</div>
+        <div class="stat-value warning" id="open-positions">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Position P&L</div>
+        <div class="stat-value" id="today-pnl">$0.00</div>
+    </div>
+</div>
+
+<!-- Multi-Region Broker Selector -->
+<div class="table-container" style="margin-bottom: 16px;">
+    <div class="table-header">
+        <h3 class="table-title">🌍 Multi-Broker Dashboard</h3>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <select id="region-selector" onchange="switchRegion(this.value)" 
+                style="width: auto; min-width: 120px; padding: 8px 16px; font-size: 0.875rem; font-weight: 500;
+                    background: linear-gradient(135deg, #1e293b, #334155); 
+                    border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 8px;
+                    color: #e2e8f0; cursor: pointer; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    appearance: none; -webkit-appearance: none;
+                    background-image: url('data:image/svg+xml;utf8,<svg fill=\"%23e2e8f0\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M7 10l5 5 5-5z\"/></svg>');
+                    background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
+                    padding-right: 32px;">
+                <option value="USA" style="background: #1e293b; color: #e2e8f0;">🇺🇸 USA</option>
+                <option value="Canada" style="background: #1e293b; color: #e2e8f0;">🇨🇦 Canada</option>
+                <option value="UK_EU" style="background: #1e293b; color: #e2e8f0;">🇬🇧 UK / EU</option>
+            </select>
+            <button onclick="refreshBrokerDashboard()" 
+                style="padding: 8px 16px; font-size: 0.875rem; font-weight: 600;
+                    background: linear-gradient(135deg, #10b981, #059669); 
+                    border: none; border-radius: 8px;
+                    color: white; cursor: pointer; 
+                    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+                    transition: all 0.2s ease;">
+                🔄 Refresh
+            </button>
+        </div>
+    </div>
+    <div id="multi-broker-selector" style="padding: 16px 0;">
+        <!-- Dynamic broker dashboard - only selected region shows -->
+        <div id="broker-region-content">
+            <!-- USA region -->
+            <div id="region-USA" class="region-brokers">
+                {% if broker_states and broker_states.USA and broker_states.USA|length > 0 %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                    {% for broker in broker_states.USA %}
+                        <div class="broker-card" data-broker="{{ broker.broker_name }}" style="padding: 14px 24px; border-radius: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+                            background: {% if broker.is_connected %}rgba(16, 185, 129, 0.12){% else %}rgba(239, 68, 68, 0.12){% endif %}; 
+                            border: 1px solid {% if broker.is_connected %}rgba(16, 185, 129, 0.35){% else %}rgba(239, 68, 68, 0.35){% endif %};
+                            transition: all 0.2s ease; min-width: 140px;">
+                            <span style="width: 10px; height: 10px; border-radius: 50%; 
+                                background: {% if broker.is_connected %}#10b981{% else %}#ef4444{% endif %};
+                                box-shadow: 0 0 8px {% if broker.is_connected %}rgba(16, 185, 129, 0.6){% else %}rgba(239, 68, 68, 0.6){% endif %};"></span>
+                            <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">{{ broker.broker_name }}</span>
+                            {% if broker.is_paper %}
+                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); 
+                                    border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    </div>
+                {% else %}
+                    <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
+                        No brokers configured for USA
+                    </div>
+                {% endif %}
+            </div>
+            <!-- Canada region (hidden by default) -->
+            <div id="region-Canada" class="region-brokers" style="display: none;">
+                {% if broker_states and broker_states.Canada and broker_states.Canada|length > 0 %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                    {% for broker in broker_states.Canada %}
+                        <div class="broker-card" data-broker="{{ broker.broker_name }}" style="padding: 14px 24px; border-radius: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+                            background: {% if broker.is_connected %}rgba(16, 185, 129, 0.12){% else %}rgba(239, 68, 68, 0.12){% endif %}; 
+                            border: 1px solid {% if broker.is_connected %}rgba(16, 185, 129, 0.35){% else %}rgba(239, 68, 68, 0.35){% endif %};
+                            transition: all 0.2s ease; min-width: 140px;">
+                            <span style="width: 10px; height: 10px; border-radius: 50%; 
+                                background: {% if broker.is_connected %}#10b981{% else %}#ef4444{% endif %};
+                                box-shadow: 0 0 8px {% if broker.is_connected %}rgba(16, 185, 129, 0.6){% else %}rgba(239, 68, 68, 0.6){% endif %};"></span>
+                            <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">{{ broker.broker_name }}</span>
+                            {% if broker.is_paper %}
+                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); 
+                                    border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    </div>
+                {% else %}
+                    <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
+                        No brokers configured for Canada
+                    </div>
+                {% endif %}
+            </div>
+            <!-- UK/EU region (hidden by default) -->
+            <div id="region-UK_EU" class="region-brokers" style="display: none;">
+                {% if broker_states and broker_states.UK_EU and broker_states.UK_EU|length > 0 %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                    {% for broker in broker_states.UK_EU %}
+                        <div class="broker-card" data-broker="{{ broker.broker_name }}" style="padding: 14px 24px; border-radius: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+                            background: {% if broker.is_connected %}rgba(16, 185, 129, 0.12){% else %}rgba(239, 68, 68, 0.12){% endif %}; 
+                            border: 1px solid {% if broker.is_connected %}rgba(16, 185, 129, 0.35){% else %}rgba(239, 68, 68, 0.35){% endif %};
+                            transition: all 0.2s ease; min-width: 140px;">
+                            <span style="width: 10px; height: 10px; border-radius: 50%; 
+                                background: {% if broker.is_connected %}#10b981{% else %}#ef4444{% endif %};
+                                box-shadow: 0 0 8px {% if broker.is_connected %}rgba(16, 185, 129, 0.6){% else %}rgba(239, 68, 68, 0.6){% endif %};"></span>
+                            <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">{{ broker.broker_name }}</span>
+                            {% if broker.is_paper %}
+                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); 
+                                    border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    </div>
+                {% else %}
+                    <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
+                        No brokers configured for UK / EU
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Account Balance Section -->
+<div class="table-container" style="margin-bottom: 32px;">
+    <div class="table-header">
+        <h3 class="table-title">💰 Account Balance</h3>
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: var(--text-secondary);">Broker:</label>
+                <select id="broker-filter" onchange="onBrokerChange(this.value)" class="form-select" style="min-width: 140px; background-color: #2C2C2E; color: #FFFFFF;">
+                    <option value="" style="background-color: #2C2C2E; color: #FFFFFF;">All Brokers</option>
+                    <optgroup label="🇺🇸 USA">
+                        <option value="Webull" style="background-color: #2C2C2E; color: #FFFFFF;">Webull LIVE</option>
+                        <option value="WEBULL_OFFICIAL" style="background-color: #1a3a5c; color: #4fc3f7;">Webull Official API</option>
+                        <option value="ALPACA" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca LIVE</option>
+                        <option value="ALPACA_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca PAPER</option>
+                        <option value="IBKR" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR LIVE</option>
+                        <option value="IBKR_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR PAPER</option>
+                        <option value="TASTYTRADE_LIVE" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade LIVE</option>
+                        <option value="TASTYTRADE_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade PAPER</option>
+                        <option value="SCHWAB" style="background-color: #0078d7; color: #FFFFFF;">Charles Schwab</option>
+                        <option value="ROBINHOOD" style="background-color: #1a2f1a; color: #00c853;">Robinhood (LIVE)</option>
+                    </optgroup>
+                    <optgroup label="🇨🇦 Canada">
+                        <option value="QUESTRADE" style="background-color: #2C2C2E; color: #FFFFFF;">Questrade</option>
+                    </optgroup>
+                    <optgroup label="🇬🇧 UK / EU">
+                        <option value="TRADING212" style="background-color: #0052FF; color: #FFFFFF;">Trading 212 LIVE</option>
+                        <option value="TRADING212_PAPER" style="background-color: #003399; color: #FFFFFF;">Trading 212 PAPER</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="toggle-switch">
+                <span style="font-size: 0.875rem; color: var(--text-secondary);">Hide Balance</span>
+                <div class="toggle" id="privacy-toggle" onclick="togglePrivacy()"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px;">
+        <div class="card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Buying Power</div>
+            <div style="font-size: 1.75rem; font-weight: 700; color: var(--success);" class="sensitive-data" id="buying-power" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Net Liquidation</div>
+            <div style="font-size: 1.75rem; font-weight: 700; color: var(--accent-teal);" class="sensitive-data" id="net-liquidation" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Unrealized P&L</div>
+            <div style="font-size: 1.75rem; font-weight: 700;" class="sensitive-data" id="unrealized-pnl" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Cash Balance</div>
+            <div style="font-size: 1.75rem; font-weight: 700; color: var(--warning);" class="sensitive-data" id="cash-balance" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card" id="settled-cash-card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Settled Cash</div>
+            <div style="font-size: 1.75rem; font-weight: 700;" class="sensitive-data" id="settled-cash" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card" id="unsettled-cash-card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Unsettled Cash</div>
+            <div style="font-size: 1.75rem; font-weight: 700; color: var(--info);" class="sensitive-data" id="unsettled-cash" data-value="$0.00">$0.00</div>
+        </div>
+    </div>
+</div>
+
+<!-- Live Trades Section -->
+<div class="table-container">
+    <div class="table-header">
+        <h3 class="table-title">📈 Live Trading Monitor
+            <span id="streaming-indicator" style="display:none; margin-left:10px; font-size:0.7rem; padding:2px 8px; border-radius:10px; background:#22c55e33; color:#22c55e; font-weight:500; vertical-align:middle;">⚡ LIVE</span>
+        </h3>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <span id="summary-text" style="color: var(--text-secondary); font-size: 0.875rem;">Loading...</span>
+            <button id="syncPositionsBtn" onclick="syncPositions()" class="btn btn-small" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; color: white;" title="Sync with broker - closes stale positions">
+                🔄 Sync Positions
+            </button>
+            <button onclick="refreshPrices()" class="btn btn-primary btn-small">
+                🔄 Refresh Prices
+            </button>
+        </div>
+    </div>
+    
+    <!-- Tabs -->
+    <div class="tabs">
+        <button id="tab-live" class="tab active" onclick="switchTab('live')">
+            📊 Live Positions
+        </button>
+        <button id="tab-pending" class="tab" onclick="switchTab('pending')">
+            ⏳ Pending Orders
+        </button>
+        <button id="tab-filled" class="tab" onclick="switchTab('filled')">
+            ✅ Filled Orders
+        </button>
+        <button id="tab-bot-trades" class="tab" onclick="switchTab('bot-trades')">
+            🤖 Bot Trades
+        </button>
+        <button id="tab-conditional" class="tab" onclick="switchTab('conditional')">
+            ⏳ Conditional Orders
+        </button>
+    </div>
+    
+    <div id="trades-table-container">
+        <div style="text-align: center; padding: 60px 20px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading trades...</div>
+        </div>
+    </div>
+    
+    <!-- Bot Trades Container (hidden by default) -->
+    <div id="bot-trades-container" style="display: none;">
+        <!-- Filter Bar -->
+        <div class="bot-trades-filters" style="display: flex; gap: 12px; padding: 16px; background: #2C2C2E; border-radius: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: #8E8E93; white-space: nowrap; font-weight: 500;">Channel:</label>
+                <select id="bot-filter-channel" onchange="loadBotTrades()" class="form-select" style="min-width: 180px; background-color: #1C1C1E; color: #FFFFFF; border: 1px solid #3A3A3C; border-radius: 8px; padding: 8px 12px;">
+                    <option value="">All Channels</option>
+                </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: #8E8E93; white-space: nowrap; font-weight: 500;">Symbol:</label>
+                <input type="text" id="bot-filter-symbol" placeholder="Search symbol..." 
+                       class="form-control" style="min-width: 120px; max-width: 150px; background-color: #1C1C1E; color: #FFFFFF; border: 1px solid #3A3A3C; border-radius: 8px; padding: 8px 12px;"
+                       oninput="debounceBotSearch()">
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: #8E8E93; white-space: nowrap; font-weight: 500;">Status:</label>
+                <select id="bot-filter-status" onchange="loadBotTrades()" class="form-select" style="min-width: 120px; background-color: #1C1C1E; color: #FFFFFF; border: 1px solid #3A3A3C; border-radius: 8px; padding: 8px 12px;">
+                    <option value="">All Status</option>
+                    <option value="OPEN">OPEN</option>
+                    <option value="PARTIAL">PARTIAL</option>
+                    <option value="CLOSED">CLOSED</option>
+                    <option value="PENDING">PENDING</option>
+                </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: #8E8E93; white-space: nowrap; font-weight: 500;">Broker:</label>
+                <select id="bot-filter-broker" onchange="loadBotTrades()" class="form-select" style="min-width: 140px; background-color: #1C1C1E; color: #FFFFFF; border: 1px solid #3A3A3C; border-radius: 8px; padding: 8px 12px;">
+                    <option value="">All Brokers</option>
+                </select>
+            </div>
+            <button onclick="loadBotTrades()" style="padding: 8px 20px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-left: auto;">
+                Refresh
+            </button>
+            <button onclick="resetBotFilters()" style="padding: 8px 20px; background: #3A3A3C; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                Reset
+            </button>
+        </div>
+        
+        <!-- Summary Stats Bar -->
+        <div id="bot-summary-stats" style="display: flex; gap: 24px; margin-bottom: 20px; padding: 16px 20px; background: #2C2C2E; border-radius: 12px; font-size: 14px; flex-wrap: wrap;">
+            <div style="color: #00d4ff;">
+                <strong>Positions:</strong> <span id="botTotalPositions">0</span>
+            </div>
+            <div style="color: #22c55e;">
+                <strong>Open:</strong> <span id="botOpenCount">0</span>
+            </div>
+            <div style="color: #9ca3af;">
+                <strong>Closed:</strong> <span id="botClosedCount">0</span>
+            </div>
+            <div>
+                <strong style="color: #fff;">Total P/L:</strong> <span id="botTotalPNL" style="color: #00ff88;">$0.00</span>
+            </div>
+            <div>
+                <strong style="color: #fff;">Win Rate:</strong> <span id="botWinRate" style="color: #ffaa00;">0%</span>
+            </div>
+            <div>
+                <strong style="color: #fff;">Avg Return:</strong> <span id="botAvgReturn" style="color: #ffaa00;">0%</span>
+            </div>
+        </div>
+        
+        <!-- Bot Trades Position Cards -->
+        <div id="bot-trades-table">
+            <div style="text-align: center; padding: 60px 20px;">
+                <div class="spinner" style="margin: 0 auto 20px;"></div>
+                <div style="color: #8E8E93; font-size: 0.9375rem;">Loading bot trades...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filled Orders Container -->
+    <div id="filled-orders-container" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;">
+            <div>
+                <span style="font-size: 0.875rem; color: var(--text-secondary);">Broker-synced filled orders (updated every ~2.5 min)</span>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <select id="filled-filter-broker" onchange="loadFilledOrders()" class="form-select" style="min-width: 140px; background-color: #2C2C2E; color: #FFFFFF;">
+                    <option value="">All Brokers</option>
+                    <option value="Webull">Webull</option>
+                    <option value="ALPACA_PAPER">Alpaca Paper</option>
+                    <option value="ALPACA_LIVE">Alpaca Live</option>
+                    <option value="schwab">Charles Schwab</option>
+                    <option value="trading212">Trading 212</option>
+                </select>
+                <select id="filled-filter-days" onchange="loadFilledOrders()" class="form-select" style="min-width: 100px; background-color: #2C2C2E; color: #FFFFFF;">
+                    <option value="1">Today</option>
+                    <option value="7" selected>7 Days</option>
+                    <option value="30">30 Days</option>
+                </select>
+                <button onclick="loadFilledOrders()" class="btn btn-small" style="background: linear-gradient(135deg, #10b981, #059669);">
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+        <div id="filled-orders-table">
+            <div style="text-align: center; padding: 60px 20px;">
+                <div class="spinner" style="margin: 0 auto 20px;"></div>
+                <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading filled orders...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Conditional Orders Container -->
+    <div id="conditional-orders-container" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;">
+            <div>
+                <span style="font-size: 0.875rem; color: var(--text-secondary);">Monitoring price conditions for automated execution (US/Canada only)</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="purgeConditionalOrders()" class="btn btn-small" style="background: linear-gradient(135deg, #ef4444, #dc2626);" title="Remove executed/cancelled orders">
+                    🗑️ Purge
+                </button>
+                <button onclick="loadConditionalOrders()" class="btn btn-small" style="background: linear-gradient(135deg, #10b981, #059669);">
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+        <div id="conditional-orders-table">
+            <div style="text-align: center; padding: 60px 20px;">
+                <div class="spinner" style="margin: 0 auto 20px;"></div>
+                <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading conditional orders...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Inline Close Controls - No Modal Needed -->
+
+<!-- Quick Actions -->
+<div class="card-grid" style="margin-top: 32px;">
+    <a href="/execution" class="card" style="text-decoration: none; text-align: center; padding: 32px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">⚡</div>
+        <div style="font-size: 1.125rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary);">Add Execution Channel</div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary);">Start auto-executing signals</div>
+    </a>
+    
+    <a href="/tracking" class="card" style="text-decoration: none; text-align: center; padding: 32px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">📡</div>
+        <div style="font-size: 1.125rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary);">Add Tracking Channel</div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary);">Monitor signal performance</div>
+    </a>
+    
+    <a href="/leaderboard" class="card" style="text-decoration: none; text-align: center; padding: 32px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">🏆</div>
+        <div style="font-size: 1.125rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary);">View Leaderboard</div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary);">Compare channel performance</div>
+    </a>
+    
+    <a href="/settings" class="card" style="text-decoration: none; text-align: center; padding: 32px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">⚙️</div>
+        <div style="font-size: 1.125rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary);">Configure Settings</div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary);">Manage credentials & preferences</div>
+    </a>
+</div>
+
+<style>
+.sensitive-data {
+    transition: all 0.3s ease;
+}
+
+.sensitive-data.hidden {
+    filter: blur(8px);
+    user-select: none;
+}
+
+/* Risk Engine Badges for Position Cards */
+.risk-engine-strip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 20px;
+    background: linear-gradient(90deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.12) 100%);
+    border-top: 1px solid rgba(255,255,255,0.04);
+    min-height: 32px;
+    flex-wrap: wrap;
+}
+.risk-engine-strip .re-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #5a5f70;
+    margin-right: 4px;
+    white-space: nowrap;
+}
+.risk-engine-strip .re-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+.re-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    border: 1px solid;
+    transition: all 0.3s ease;
+}
+.re-badge .re-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.re-badge.re-active {
+    background: rgba(0,245,255,0.08);
+    color: #00f5ff;
+    border-color: rgba(0,245,255,0.25);
+}
+.re-badge.re-active .re-dot {
+    background: #00f5ff;
+    box-shadow: 0 0 6px #00f5ff;
+    animation: reDotPulse 2s ease-in-out infinite;
+}
+.re-badge.re-closing {
+    background: rgba(255,59,48,0.2);
+    color: #ff3b30;
+    border-color: rgba(255,59,48,0.4);
+    animation: reClosePulse 0.8s ease-in-out infinite;
+}
+.re-badge.re-closing .re-dot {
+    background: #ff3b30;
+    box-shadow: 0 0 6px #ff3b30;
+}
+.re-badge.re-sl {
+    background: rgba(255,59,48,0.1);
+    color: #ff3b30;
+    border-color: rgba(255,59,48,0.3);
+}
+.re-badge.re-pt {
+    background: rgba(48,209,88,0.1);
+    color: #30d158;
+    border-color: rgba(48,209,88,0.3);
+}
+.re-badge.re-pt-hit {
+    background: rgba(48,209,88,0.25);
+    color: #30d158;
+    border-color: rgba(48,209,88,0.5);
+}
+.re-badge.re-trail-ready {
+    background: rgba(175,130,255,0.06);
+    color: rgba(175,130,255,0.45);
+    border-color: rgba(175,130,255,0.12);
+}
+.re-badge.re-trail-active {
+    background: rgba(175,130,255,0.18);
+    color: #af82ff;
+    border-color: rgba(175,130,255,0.4);
+    animation: reClosePulse 2s ease-in-out infinite;
+}
+.re-badge.re-trail-active .re-dot {
+    background: #af82ff;
+    box-shadow: 0 0 4px #af82ff;
+}
+.re-badge.re-early-ready {
+    background: rgba(6,182,212,0.06);
+    color: rgba(6,182,212,0.45);
+    border-color: rgba(6,182,212,0.12);
+}
+.re-badge.re-early-breakeven {
+    background: rgba(6,182,212,0.18);
+    color: #06b6d4;
+    border-color: rgba(6,182,212,0.4);
+    animation: reClosePulse 2s ease-in-out infinite;
+}
+.re-badge.re-early-breakeven .re-dot {
+    background: #06b6d4;
+    box-shadow: 0 0 4px #06b6d4;
+}
+.re-badge.re-early-profit {
+    background: rgba(34,197,94,0.2);
+    color: #22c55e;
+    border-color: rgba(34,197,94,0.45);
+    animation: reClosePulse 1.5s ease-in-out infinite;
+}
+.re-badge.re-early-profit .re-dot {
+    background: #22c55e;
+    box-shadow: 0 0 6px #22c55e;
+}
+.re-badge.re-giveback-ready {
+    background: rgba(251,191,36,0.06);
+    color: rgba(251,191,36,0.45);
+    border-color: rgba(251,191,36,0.12);
+}
+.re-badge.re-giveback-armed {
+    background: rgba(251,191,36,0.2);
+    color: #fbbf24;
+    border-color: rgba(251,191,36,0.45);
+    animation: reClosePulse 2s ease-in-out infinite;
+}
+.re-badge.re-giveback-armed .re-dot {
+    background: #fbbf24;
+    box-shadow: 0 0 4px #fbbf24;
+}
+.re-badge.re-dsl {
+    background: rgba(255,149,0,0.12);
+    color: #ff9500;
+    border-color: rgba(255,149,0,0.3);
+}
+.re-badge.re-peak {
+    background: rgba(255,255,255,0.03);
+    color: #6b7280;
+    border-color: rgba(255,255,255,0.06);
+    font-size: 9px;
+}
+.re-badge.re-not-monitored {
+    background: rgba(255,255,255,0.02);
+    color: #3a3f50;
+    border-color: rgba(255,255,255,0.04);
+    font-style: italic;
+    font-weight: 500;
+}
+.re-badge.re-loading {
+    background: rgba(255,255,255,0.02);
+    color: #444;
+    border-color: rgba(255,255,255,0.04);
+    font-size: 9px;
+}
+@keyframes reDotPulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 6px currentColor; }
+    50% { opacity: 0.5; box-shadow: 0 0 2px currentColor; }
+}
+@keyframes reClosePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+.re-tooltip {
+    position: relative;
+    cursor: help;
+}
+.re-tooltip .re-tooltip-content {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    background: #12141a;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-width: 220px;
+    max-width: 300px;
+    z-index: 1000;
+    font-size: 11px;
+    color: #c9d1d9;
+    line-height: 1.5;
+    white-space: normal;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    transition: all 0.2s ease;
+    pointer-events: none;
+}
+.re-tooltip:hover .re-tooltip-content {
+    visibility: visible;
+    opacity: 1;
+}
+.re-tooltip-content .ret-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+}
+.re-tooltip-content .ret-label { color: #8b8fa3; }
+.re-tooltip-content .ret-value { color: #e6edf3; font-weight: 600; }
+.re-tooltip-content .ret-divider { border-top: 1px solid rgba(255,255,255,0.06); margin: 4px 0; }
+
+/* Position Card System */
+.positions-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.position-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.position-card:hover {
+    border-color: rgba(15, 240, 179, 0.3);
+}
+
+.position-card.profit {
+    border-left: 3px solid #22c55e;
+}
+
+.position-card.loss {
+    border-left: 3px solid #ef4444;
+}
+
+.position-main {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto;
+    gap: 16px;
+    padding: 16px 20px;
+    align-items: center;
+    min-height: 72px;
+}
+
+.position-symbol {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.position-symbol .symbol-name {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.position-symbol .symbol-details {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.position-metrics {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.position-metrics .metric-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.position-metrics .metric-value {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.position-pnl {
+    min-width: 100px;
+    text-align: right;
+}
+
+.position-pnl .pnl-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.position-pnl .pnl-percent {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.pnl-positive { color: #22c55e; }
+.pnl-negative { color: #ef4444; }
+
+.position-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.btn-expand {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    font-size: 0.875rem;
+}
+
+.btn-expand:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent-teal);
+    color: var(--accent-teal);
+}
+
+.btn-expand.expanded {
+    background: rgba(15, 240, 179, 0.1);
+    border-color: var(--accent-teal);
+    color: var(--accent-teal);
+    transform: rotate(180deg);
+}
+
+/* Risk Drawer */
+.position-drawer {
+    display: none;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid var(--border);
+    padding: 16px 20px;
+    animation: slideDown 0.2s ease;
+}
+
+.position-drawer.open {
+    display: block;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.drawer-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+/* Risk Panel */
+.risk-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.risk-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.channel-badge {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(15, 240, 179, 0.2));
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #a78bfa;
+}
+
+.tier-targets {
+    display: flex;
+    gap: 8px;
+}
+
+.tier-item {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+}
+
+.tier-item.active {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.tier-item.hit {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.2);
+}
+
+.tier-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.tier-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #22c55e;
+}
+
+.tier-price {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.stop-loss-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+}
+
+.stop-loss-row .sl-label {
+    font-size: 0.75rem;
+    color: #ef4444;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.stop-loss-row .sl-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ef4444;
+}
+
+.progress-section {
+    margin-top: 8px;
+}
+
+.progress-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.progress-fill.profit {
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.progress-fill.loss {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.progress-markers {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+}
+
+/* Close Panel */
+.close-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.close-header {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.quote-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-quote {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+}
+
+.btn-quote .quote-label {
+    display: block;
+    font-size: 0.65rem;
+    opacity: 0.8;
+    margin-bottom: 2px;
+}
+
+.btn-quote .quote-price {
+    display: block;
+    font-size: 0.9rem;
+}
+
+.btn-quote.bid {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.btn-quote.bid:hover {
+    background: rgba(34, 197, 94, 0.25);
+    transform: translateY(-2px);
+}
+
+.btn-quote.mid {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.btn-quote.mid:hover {
+    background: rgba(168, 85, 247, 0.25);
+    transform: translateY(-2px);
+}
+
+.btn-quote.ask {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn-quote.ask:hover {
+    background: rgba(239, 68, 68, 0.25);
+    transform: translateY(-2px);
+}
+
+.close-inputs {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.close-inputs input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+.close-inputs input:focus {
+    outline: none;
+    border-color: var(--accent-teal);
+}
+
+.close-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-close {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+}
+
+.btn-close.limit {
+    background: linear-gradient(135deg, #0ff0b3, #0cc99a);
+    color: #0e1117;
+}
+
+.btn-close.limit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(15, 240, 179, 0.4);
+}
+
+.btn-close.market {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.btn-close.market:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.btn-close:disabled, .btn-quote:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn-close.loading, .btn-quote.loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+/* Cancel button for pending orders */
+.btn-cancel {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn-cancel:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.5);
+    transform: translateY(-1px);
+}
+
+.btn-cancel:active {
+    transform: translateY(0);
+}
+
+/* Empty state */
+.empty-positions {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.empty-positions .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    opacity: 0.3;
+}
+
+.empty-positions .empty-text {
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+/* Broker Badge */
+.broker-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.broker-badge.webull { background: rgba(0, 128, 255, 0.2); color: #0080ff; }
+.broker-badge.webull_official { background: rgba(0, 168, 255, 0.2); color: #00a8ff; }
+.broker-badge.alpaca { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+.broker-badge.ibkr { background: rgba(220, 53, 69, 0.2); color: #dc3545; }
+
+/* Closing overlay */
+.position-card.closing {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.position-card.closing::after {
+    content: 'Closing...';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: 8px 16px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentTab = 'live';
+let currentBroker = null;  // Will be set from dropdown or BrokerStore on page load
+let currentRegion = localStorage.getItem('selectedRegion') || 'USA';
+let isPrivacyMode = false;
+let isClosingPosition = false;
+let dashboardRiskStates = {};
+let dashboardRiskPollTimer = null;
+
+function buildDashboardRiskBadges(rs) {
+    if (!rs || !rs.monitoring) {
+        return '<span class="re-badge re-not-monitored">Not Monitored</span>';
+    }
+    let badges = [];
+    
+    badges.push('<span class="re-badge re-active"><span class="re-dot"></span>ACTIVE</span>');
+    
+    if (rs.closing) {
+        badges.push('<span class="re-badge re-closing"><span class="re-dot"></span>CLOSING</span>');
+    }
+    
+    if (rs.stop_loss_active) {
+        const slTitle = rs.stop_loss_price ? `SL @ $${rs.stop_loss_price.toFixed(2)}` : 'Stop Loss';
+        badges.push(`<span class="re-badge re-sl" title="${slTitle}">SL</span>`);
+    }
+    
+    if (rs.profit_target_active) {
+        const ptLabel = rs.tiers_hit && rs.tiers_hit.length > 0 ? `PT${rs.tiers_hit[rs.tiers_hit.length-1]}` : 'PT';
+        const ptClass = rs.tiers_hit && rs.tiers_hit.length > 0 ? 're-pt-hit' : 're-pt';
+        const ptTitle = rs.profit_target_price ? `Target @ $${rs.profit_target_price.toFixed(2)}` : 'Profit Target';
+        badges.push(`<span class="re-badge ${ptClass}" title="${ptTitle}">${ptLabel}</span>`);
+    }
+    
+    if (rs.dynamic_sl_enabled && rs.dynamic_sl_price) {
+        badges.push(`<span class="re-badge re-dsl" title="Dynamic SL @ $${rs.dynamic_sl_price.toFixed(2)}">DSL $${rs.dynamic_sl_price.toFixed(2)}</span>`);
+    }
+    
+    if (rs.trailing_enabled) {
+        if (rs.trailing_activated) {
+            const tsp = rs.trailing_stop_price ? `$${rs.trailing_stop_price.toFixed(2)}` : '...';
+            badges.push(`<span class="re-badge re-trail-active"><span class="re-dot"></span>TRAIL ${tsp}</span>`);
+        } else {
+            badges.push('<span class="re-badge re-trail-ready">Trail</span>');
+        }
+    }
+    
+    if (rs.early_trail_enabled) {
+        if (rs.early_trailing_active) {
+            const steps = rs.early_steps_locked || 0;
+            if (steps > 0) {
+                const esp = rs.early_stop_price ? ` $${rs.early_stop_price.toFixed(2)}` : '';
+                badges.push(`<span class="re-badge re-early-profit"><span class="re-dot"></span>LOCKED x${steps}${esp}</span>`);
+            } else {
+                badges.push('<span class="re-badge re-early-breakeven"><span class="re-dot"></span>BREAKEVEN</span>');
+            }
+        } else {
+            const actPct = rs.early_activation_pct ? `@${rs.early_activation_pct}%` : '';
+            badges.push(`<span class="re-badge re-early-ready">Early ${actPct}</span>`);
+        }
+    }
+    
+    if (rs.giveback_enabled) {
+        if (rs.giveback_guard_active) {
+            const gbPct = rs.giveback_allowed_pct ? `${rs.giveback_allowed_pct}%` : '';
+            badges.push(`<span class="re-badge re-giveback-armed"><span class="re-dot"></span>GIVEBACK ${gbPct}</span>`);
+        } else {
+            badges.push('<span class="re-badge re-giveback-ready">Giveback</span>');
+        }
+    }
+    
+    if (rs.max_pnl_seen > 0) {
+        badges.push(`<span class="re-badge re-peak" title="Peak P&L observed by risk engine">Peak: +${rs.max_pnl_seen.toFixed(1)}%</span>`);
+    }
+    
+    return badges.join('');
+}
+
+function buildDashboardRiskTooltip(rs) {
+    if (!rs) return '';
+    let rows = '';
+    rows += `<div class="ret-row"><span class="ret-label">Entry</span><span class="ret-value">$${rs.entry_price ? rs.entry_price.toFixed(2) : '?'}</span></div>`;
+    if (rs.current_price) rows += `<div class="ret-row"><span class="ret-label">Current</span><span class="ret-value">$${rs.current_price.toFixed(2)}</span></div>`;
+    rows += `<div class="ret-row"><span class="ret-label">P&L</span><span class="ret-value" style="color:${rs.current_pnl_pct >= 0 ? '#30d158' : '#ff3b30'}">${rs.current_pnl_pct >= 0 ? '+' : ''}${rs.current_pnl_pct}%</span></div>`;
+    if (rs.max_pnl_seen > 0) rows += `<div class="ret-row"><span class="ret-label">Peak P&L</span><span class="ret-value" style="color:#30d158">+${rs.max_pnl_seen.toFixed(1)}%</span></div>`;
+    rows += '<div class="ret-divider"></div>';
+    if (rs.stop_loss_price) rows += `<div class="ret-row"><span class="ret-label">Stop Loss</span><span class="ret-value" style="color:#ff3b30">$${rs.stop_loss_price.toFixed(2)}</span></div>`;
+    if (rs.profit_target_price) rows += `<div class="ret-row"><span class="ret-label">Profit Target</span><span class="ret-value" style="color:#30d158">$${rs.profit_target_price.toFixed(2)}</span></div>`;
+    if (rs.dynamic_sl_price) rows += `<div class="ret-row"><span class="ret-label">Dynamic SL</span><span class="ret-value" style="color:#ff9500">$${rs.dynamic_sl_price.toFixed(2)}</span></div>`;
+    if (rs.trailing_stop_price) rows += `<div class="ret-row"><span class="ret-label">Trail Stop</span><span class="ret-value" style="color:#af82ff">$${rs.trailing_stop_price.toFixed(2)}</span></div>`;
+    if (rs.early_stop_price) rows += `<div class="ret-row"><span class="ret-label">Early Stop</span><span class="ret-value" style="color:#06b6d4">$${rs.early_stop_price.toFixed(2)}</span></div>`;
+    if (rs.tiers_hit && rs.tiers_hit.length > 0) rows += `<div class="ret-row"><span class="ret-label">Tiers Hit</span><span class="ret-value">${rs.tiers_hit.map(t => 'PT'+t).join(', ')}</span></div>`;
+    if (rs.highest_price) rows += `<div class="ret-row"><span class="ret-label">Highest</span><span class="ret-value">$${rs.highest_price.toFixed(2)}</span></div>`;
+    return rows;
+}
+
+function computePositionKey(trade) {
+    const broker = (trade.broker || 'Unknown').toUpperCase().replace(/\s+/g, '_');
+    const symbol = (trade.symbol || '').toUpperCase();
+    if (trade.asset_type === 'option' && trade.strike) {
+        const cp = (trade.call_put || 'C').toUpperCase().charAt(0);
+        const expiry = trade.expiry || '';
+        return `${broker}_${symbol}_${trade.strike}_${expiry}_${cp}`;
+    }
+    return `${broker}_${symbol}_stock`;
+}
+
+function matchRiskStateForCard(strip, states) {
+    const tradeId = strip.getAttribute('data-re-trade-id');
+    if (tradeId && states[tradeId]) return states[tradeId];
+    
+    const posKey = strip.getAttribute('data-re-pos-key') || '';
+    if (posKey && states[posKey]) return states[posKey];
+    
+    const posKeyUpper = posKey.toUpperCase();
+    for (const [key, val] of Object.entries(states)) {
+        if (!val || !val.position_key) continue;
+        if (val.position_key.toUpperCase() === posKeyUpper) return val;
+    }
+    
+    return null;
+}
+
+async function fetchDashboardRiskStates() {
+    try {
+        const response = await fetch('/api/risk-status');
+        const data = await response.json();
+        if (!data.success) return;
+        
+        const states = data.risk_states || {};
+        dashboardRiskStates = states;
+        
+        const stateKeys = Object.keys(states);
+        console.log('[RISK-DEBUG] state keys:', stateKeys.slice(0, 10), 'total:', stateKeys.length);
+        document.querySelectorAll('.risk-engine-strip').forEach(strip => {
+            const _tid = strip.getAttribute('data-re-trade-id');
+            const _pk = strip.getAttribute('data-re-pos-key');
+            const rs = matchRiskStateForCard(strip, states);
+            if (!rs) console.log('[RISK-DEBUG] NO MATCH for trade_id=', _tid, 'pos_key=', _pk);
+            
+            const badgesContainer = strip.querySelector('.re-badges');
+            if (!badgesContainer) return;
+            
+            const badgesHTML = buildDashboardRiskBadges(rs);
+            const tooltipHTML = rs && rs.monitoring ? buildDashboardRiskTooltip(rs) : '';
+            
+            if (tooltipHTML) {
+                badgesContainer.innerHTML = `<div class="re-tooltip">${badgesHTML}<div class="re-tooltip-content">${tooltipHTML}</div></div>`;
+            } else {
+                badgesContainer.innerHTML = badgesHTML;
+            }
+        });
+    } catch (err) {
+        console.error('[Dashboard] Risk status fetch failed:', err);
+    }
+}
+
+function switchRegion(region) {
+    currentRegion = region;
+    localStorage.setItem('selectedRegion', region);
+    
+    document.querySelectorAll('.region-brokers').forEach(el => {
+        el.style.display = 'none';
+    });
+    
+    const regionEl = document.getElementById('region-' + region);
+    if (regionEl) {
+        regionEl.style.display = 'block';
+    }
+    
+    if (typeof BrokerStore !== 'undefined') {
+        BrokerStore.selectRegion(region);
+    }
+}
+
+async function refreshBrokerDashboard() {
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Refreshing...';
+    btn.disabled = true;
+    
+    try {
+        if (typeof BrokerStore !== 'undefined') {
+            await BrokerStore.loadBrokerStates();
+            renderRegionBrokers();
+        } else {
+            location.reload();
+        }
+    } catch (err) {
+        console.error('Failed to refresh broker dashboard:', err);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+function renderRegionBrokers() {
+    if (typeof BrokerStore === 'undefined') return;
+    
+    const state = BrokerStore.getState();
+    const regions = { USA: state.byRegion.USA || [], Canada: state.byRegion.Canada || [], UK_EU: state.byRegion.UK_EU || [] };
+    
+    // Track disconnected brokers for alert banner
+    const disconnectedBrokers = [];
+    
+    Object.entries(regions).forEach(([region, brokers]) => {
+        const container = document.getElementById('region-' + region);
+        if (!container) return;
+        
+        if (brokers.length === 0) {
+            const regionLabel = region === 'UK_EU' ? 'UK / EU' : region;
+            container.innerHTML = `
+                <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
+                    No brokers configured for ${regionLabel}
+                </div>`;
+            return;
+        }
+        
+        let html = '<div style="display: flex; flex-wrap: wrap; gap: 12px;">';
+        brokers.forEach(broker => {
+            const isConnected = broker.is_connected;
+            const bgColor = isConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+            const borderColor = isConnected ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)';
+            const dotColor = isConnected ? '#10b981' : '#ef4444';
+            const shadowColor = isConnected ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)';
+            
+            // Track disconnected brokers with reason
+            if (!isConnected) {
+                disconnectedBrokers.push({
+                    name: broker.broker_name,
+                    reason: broker.reason || broker.error_code || 'Connection lost'
+                });
+            }
+            
+            html += `
+                <div class="broker-card" data-broker="${broker.broker_name}" style="padding: 14px 24px; border-radius: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+                    background: ${bgColor}; border: 1px solid ${borderColor}; transition: all 0.2s ease; min-width: 140px;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 8px ${shadowColor};"></span>
+                    <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">${broker.broker_name}</span>
+                    ${broker.is_paper
+                        ? '<span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>'
+                        : ''
+                    }
+                    ${broker.delayed_data
+                        ? '<span style="font-size: 0.65rem; padding: 2px 8px; background: rgba(255, 165, 0, 0.2); border-radius: 4px; color: #ffa500; font-weight: 600;">DELAYED</span>'
+                        : ''
+                    }
+                </div>`;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    });
+    
+    // Show/hide broker alert banner
+    updateBrokerAlertBanner(disconnectedBrokers);
+}
+
+function updateBrokerAlertBanner(disconnectedBrokers) {
+    const banner = document.getElementById('broker-alert-banner');
+    const titleEl = document.getElementById('broker-alert-title');
+    const messageEl = document.getElementById('broker-alert-message');
+    
+    if (!banner || !messageEl) return;
+    
+    // Check if user dismissed the alert (session storage)
+    const dismissedBrokers = JSON.parse(sessionStorage.getItem('dismissedBrokerAlerts') || '[]');
+    const newDisconnected = disconnectedBrokers.filter(b => {
+        const name = typeof b === 'object' ? b.name : b;
+        return !dismissedBrokers.includes(name);
+    });
+    
+    if (newDisconnected.length > 0) {
+        // Build message with broker names and reasons
+        const brokerDetails = newDisconnected.map(b => {
+            if (typeof b === 'object') {
+                return `${b.name}: ${b.reason}`;
+            }
+            return b;
+        });
+        
+        const brokerNames = newDisconnected.map(b => typeof b === 'object' ? b.name : b);
+        
+        if (titleEl) {
+            titleEl.textContent = brokerNames.length === 1 
+                ? `${brokerNames[0]} Disconnected` 
+                : 'Brokers Disconnected';
+        }
+        
+        messageEl.innerHTML = brokerDetails.map(detail => 
+            `<div style="margin-bottom: 4px;">${detail}</div>`
+        ).join('');
+        
+        banner.style.display = 'block';
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+function dismissBrokerAlert() {
+    const banner = document.getElementById('broker-alert-banner');
+    if (banner) {
+        banner.style.display = 'none';
+        // Store dismissed state in session storage
+        if (typeof BrokerStore !== 'undefined') {
+            const state = BrokerStore.getState();
+            const allBrokers = [...(state.byRegion.USA || []), ...(state.byRegion.Canada || []), ...(state.byRegion.UK_EU || [])];
+            const disconnected = allBrokers.filter(b => !b.is_connected).map(b => b.broker_name);
+            sessionStorage.setItem('dismissedBrokerAlerts', JSON.stringify(disconnected));
+        }
+    }
+}
+
+function checkInitialBrokerStatus() {
+    // Check initial server-rendered broker cards for disconnected state
+    const disconnectedBrokers = [];
+    
+    // Check from Jinja-rendered data via inline JSON
+    try {
+        const brokerStates = {{ broker_states | tojson if broker_states else '{"USA":[],"Canada":[],"UK_EU":[]}' | safe }};
+        const allBrokers = [...(brokerStates.USA || []), ...(brokerStates.Canada || []), ...(brokerStates.UK_EU || [])];
+        allBrokers.forEach(broker => {
+            if (!broker.is_connected) {
+                disconnectedBrokers.push({
+                    name: broker.broker_name,
+                    reason: broker.reason || broker.error_code || 'Connection lost'
+                });
+            }
+        });
+    } catch (e) {
+        console.log('[Dashboard] Could not parse initial broker states');
+    }
+    
+    if (disconnectedBrokers.length > 0) {
+        updateBrokerAlertBanner(disconnectedBrokers);
+    }
+}
+
+function onBrokerChange(value) {
+    currentBroker = value;
+    _currentPositionIds = [];
+    _clearElCache();
+    _isFirstLoad = true;
+    _streamingIndicator = null;
+    loadTrades();
+    loadStats();
+}
+
+function togglePrivacy() {
+    isPrivacyMode = !isPrivacyMode;
+    const toggle = document.getElementById('privacy-toggle');
+    const sensitiveElements = document.querySelectorAll('.sensitive-data');
+    
+    if (isPrivacyMode) {
+        toggle.classList.add('active');
+        sensitiveElements.forEach(el => {
+            el.classList.add('hidden');
+            el.textContent = '••••••';
+        });
+    } else {
+        toggle.classList.remove('active');
+        sensitiveElements.forEach(el => {
+            el.classList.remove('hidden');
+            el.textContent = el.getAttribute('data-value') || '$0.00';
+        });
+    }
+}
+
+async function switchTab(tab) {
+    currentTab = tab;
+    _currentPositionIds = [];
+    _clearElCache();
+    _isFirstLoad = true;
+    _streamingIndicator = null;
+    
+    document.querySelectorAll('.tab').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    
+    // Show/hide appropriate containers
+    const tradesContainer = document.getElementById('trades-table-container');
+    const botTradesContainer = document.getElementById('bot-trades-container');
+    const conditionalContainer = document.getElementById('conditional-orders-container');
+    const filledContainer = document.getElementById('filled-orders-container');
+    
+    // Hide all containers first
+    tradesContainer.style.display = 'none';
+    botTradesContainer.style.display = 'none';
+    conditionalContainer.style.display = 'none';
+    filledContainer.style.display = 'none';
+    
+    // Stop conditional orders auto-refresh when leaving the tab
+    stopConditionalOrdersAutoRefresh();
+    
+    if (tab === 'bot-trades') {
+        botTradesContainer.style.display = 'block';
+        await loadBotTrades();
+    } else if (tab === 'conditional') {
+        conditionalContainer.style.display = 'block';
+        await loadConditionalOrders();
+        startConditionalOrdersAutoRefresh();
+    } else if (tab === 'filled') {
+        filledContainer.style.display = 'block';
+        await loadFilledOrders();
+    } else {
+        tradesContainer.style.display = 'block';
+        loadTrades();
+    }
+}
+
+async function loadFilledOrderHistory() {
+    console.log('[loadFilledOrderHistory] Starting...');
+    const container = document.getElementById('trades-table-container');
+    if (!container) {
+        console.error('[loadFilledOrderHistory] Container element not found!');
+        return;
+    }
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading Webull order history...</div></div>';
+    
+    try {
+        // Fetch ONLY Webull order history
+        const response = await fetch('/api/webull/order-history?count=50&status=Filled');
+        const data = await response.json();
+        
+        console.log('[loadFilledOrderHistory] Webull orders:', data.orders?.length || 0);
+        
+        if (data.error) {
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">${data.error}</div>`;
+            return;
+        }
+        
+        const orders = data.orders || [];
+        
+        // Update summary
+        const summaryEl = document.getElementById('summary-text');
+        if (summaryEl) {
+            summaryEl.textContent = `${orders.length} filled order${orders.length !== 1 ? 's' : ''} from Webull`;
+        }
+        
+        if (orders.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">📋</div>
+                    <div style="color: var(--text-secondary); font-size: 1rem;">No filled orders from Webull</div>
+                </div>
+            `;
+            return;
+        }
+        
+        // Build table HTML for Webull orders only
+        let tableHTML = '<table class="data-table"><thead><tr>';
+        tableHTML += '<th>Symbol</th><th>Action</th><th>Qty</th><th>Filled Qty</th><th>Avg Price</th><th>Order Type</th><th>Status</th><th>Time</th>';
+        tableHTML += '</tr></thead><tbody>';
+        
+        orders.forEach(order => {
+            const qty = parseInt(order.quantity) || 0;
+            const filledQty = parseInt(order.filled_quantity) || qty;
+            const avgPrice = parseFloat(order.avg_filled_price) || parseFloat(order.limit_price) || 0;
+            
+            let symbolDisplay = order.symbol;
+            if (order.asset_type === 'option' && order.strike) {
+                symbolDisplay += ` ${order.expiry || ''} $${order.strike} ${order.option_type || ''}`;
+            }
+            
+            const actionBadge = order.action === 'BUY' ? 
+                '<span style="background: rgba(0,255,136,0.2); color: #0f8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">BUY</span>' : 
+                '<span style="background: rgba(255,68,68,0.2); color: #f44; padding: 2px 8px; border-radius: 4px; font-weight: 600;">SELL</span>';
+            
+            const filledTime = order.filled_time ? new Date(order.filled_time).toLocaleString() : (order.created_time ? new Date(order.created_time).toLocaleString() : 'N/A');
+            
+            tableHTML += `<tr>
+                <td><strong>${symbolDisplay}</strong></td>
+                <td>${actionBadge}</td>
+                <td>${qty}</td>
+                <td>${filledQty}</td>
+                <td>$${avgPrice.toFixed(2)}</td>
+                <td>${order.order_type || 'N/A'}</td>
+                <td><span class="badge" style="background: rgba(0,255,136,0.2); color: #0f8;">${order.status || 'Filled'}</span></td>
+                <td style="color: var(--text-secondary); font-size: 0.85rem;">${filledTime}</td>
+            </tr>`;
+        });
+        
+        tableHTML += '</tbody></table>';
+        container.innerHTML = tableHTML;
+        console.log('[loadFilledOrderHistory] Done!');
+        
+    } catch (error) {
+        console.error('[loadFilledOrderHistory] Error:', error);
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load Webull order history</div>';
+    }
+}
+
+async function loadFilledOrders() {
+    console.log('[loadFilledOrders] Loading from broker sync...');
+    const container = document.getElementById('filled-orders-table');
+    if (!container) return;
+    
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading filled orders...</div></div>';
+    
+    try {
+        const broker = document.getElementById('filled-filter-broker')?.value || '';
+        const days = document.getElementById('filled-filter-days')?.value || '7';
+        
+        let url = `/api/filled-orders?days=${days}&limit=100`;
+        if (broker) url += `&broker=${encodeURIComponent(broker)}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.success) {
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">${data.error || 'Failed to load'}</div>`;
+            return;
+        }
+        
+        const orders = data.orders || [];
+        console.log('[loadFilledOrders] Got', orders.length, 'orders');
+        
+        // Update summary
+        const summaryEl = document.getElementById('summary-text');
+        if (summaryEl) {
+            summaryEl.textContent = `${orders.length} filled order${orders.length !== 1 ? 's' : ''} (last ${days} days)`;
+        }
+        
+        if (orders.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">✅</div>
+                    <div style="color: var(--text-secondary); font-size: 1rem;">No filled orders from brokers</div>
+                    <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 8px;">Orders sync every ~2.5 minutes when brokers are connected</div>
+                </div>
+            `;
+            return;
+        }
+        
+        // Build table
+        let tableHTML = '<table class="data-table"><thead><tr>';
+        tableHTML += '<th>Broker</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Total</th><th>Filled At</th>';
+        tableHTML += '</tr></thead><tbody>';
+        
+        orders.forEach(order => {
+            const qty = parseInt(order.quantity) || 0;
+            const price = parseFloat(order.filled_price) || 0;
+            const total = parseFloat(order.total_cost) || (price * qty);
+            
+            let symbolDisplay = order.symbol || '';
+            if (order.asset_type === 'option' && order.strike) {
+                const expiry = order.expiry ? order.expiry.slice(5) : '';
+                symbolDisplay += ` ${expiry} $${order.strike} ${order.option_type || ''}`;
+            }
+            
+            let sideBadge = '';
+            const side = (order.side || '').toUpperCase();
+            if (side === 'BTO' || side === 'BUY') {
+                sideBadge = '<span style="background: rgba(0,255,136,0.2); color: #0f8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">BTO</span>';
+            } else if (side === 'STC' || side === 'SELL') {
+                sideBadge = '<span style="background: rgba(255,68,68,0.2); color: #f44; padding: 2px 8px; border-radius: 4px; font-weight: 600;">STC</span>';
+            } else if (side === 'STO') {
+                sideBadge = '<span style="background: rgba(255,165,0,0.2); color: #ffa500; padding: 2px 8px; border-radius: 4px; font-weight: 600;">STO</span>';
+            } else if (side === 'BTC') {
+                sideBadge = '<span style="background: rgba(100,149,237,0.2); color: #6495ed; padding: 2px 8px; border-radius: 4px; font-weight: 600;">BTC</span>';
+            } else {
+                sideBadge = `<span style="background: var(--bg-tertiary); padding: 2px 8px; border-radius: 4px;">${side || 'N/A'}</span>`;
+            }
+            
+            let filledTime = 'N/A';
+            if (order.filled_at && order.filled_at.trim()) {
+                try {
+                    const dateStr = order.filled_at.includes('Z') || order.filled_at.includes('+') ? order.filled_at : order.filled_at + 'Z';
+                    const parsed = new Date(dateStr);
+                    filledTime = isNaN(parsed.getTime()) ? 'N/A' : parsed.toLocaleString();
+                } catch (e) {
+                    filledTime = 'N/A';
+                }
+            }
+            
+            tableHTML += `<tr>
+                <td><span class="badge" style="background: var(--bg-tertiary);">${order.broker || 'Unknown'}</span></td>
+                <td><strong>${symbolDisplay}</strong></td>
+                <td>${sideBadge}</td>
+                <td>${qty}</td>
+                <td>$${price.toFixed(2)}</td>
+                <td>$${total.toFixed(2)}</td>
+                <td style="color: var(--text-secondary); font-size: 0.85rem;">${filledTime}</td>
+            </tr>`;
+        });
+        
+        tableHTML += '</tbody></table>';
+        container.innerHTML = tableHTML;
+        
+    } catch (error) {
+        console.error('[loadFilledOrders] Error:', error);
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load filled orders</div>';
+    }
+}
+
+let _currentPositionIds = [];
+let _lastTradeData = {};
+let _isFirstLoad = true;
+let _elCache = {};
+
+function _cacheEl(field, pid) {
+    const k = field + '_' + pid;
+    if (!_elCache[k]) {
+        _elCache[k] = document.querySelector(`[data-field="${field}"][data-trade-id="${pid}"]`);
+    }
+    return _elCache[k];
+}
+
+function _clearElCache() {
+    _elCache = {};
+}
+
+function _getOpenDrawerIds() {
+    const ids = [];
+    document.querySelectorAll('.position-drawer').forEach(d => {
+        if (d.style.display === 'block' || d.style.display === 'flex') {
+            const m = (d.id || '').match(/^drawer-(.+)$/);
+            if (m) ids.push(m[1]);
+        }
+    });
+    return ids;
+}
+
+function _restoreDrawers(ids) {
+    ids.forEach(id => {
+        const d = document.getElementById('drawer-' + id);
+        if (d) d.style.display = 'block';
+    });
+}
+
+function _updatePositionCardInPlace(trade) {
+    const pid = trade.id;
+    const pnl = parseFloat(trade.pnl) || 0;
+    const pnlPercent = parseFloat(trade.pnl_percent) || 0;
+    const currentPrice = parseFloat(trade.current_price) || parseFloat(trade.entry_price) || 0;
+    const pnlSign = pnl >= 0 ? '+' : '';
+    const color = pnl >= 0 ? '#22c55e' : '#ef4444';
+
+    const priceEl = _cacheEl('current-price', pid);
+    if (priceEl) {
+        const oldVal = priceEl.textContent.replace(/[^0-9.]/g, '');
+        const newVal = currentPrice.toFixed(2);
+        if (oldVal !== newVal) {
+            priceEl.style.color = color;
+            priceEl.textContent = '$' + newVal;
+        }
+    }
+
+    const pnlEl = _cacheEl('pnl-value', pid);
+    if (pnlEl) {
+        pnlEl.textContent = pnlSign + '$' + Math.abs(pnl).toFixed(2);
+        pnlEl.className = 'pnl-value ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+    }
+
+    const pctEl = _cacheEl('pnl-pct', pid);
+    if (pctEl) {
+        pctEl.textContent = pnlSign + pnlPercent.toFixed(1) + '%';
+        pctEl.className = 'pnl-percent ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+    }
+
+    const card = document.getElementById('position-' + pid);
+    if (card) {
+        card.classList.remove('profit', 'loss');
+        card.classList.add(pnl >= 0 ? 'profit' : 'loss');
+    }
+
+    const bidPrice = parseFloat(trade.bid_price) || (currentPrice * 0.995);
+    const askPrice = parseFloat(trade.ask_price) || (currentPrice * 1.005);
+    const midPrice = (bidPrice + askPrice) / 2;
+    const bidBtn = document.querySelector(`#drawer-${pid} .btn-quote.bid .quote-price`);
+    const midBtn = document.querySelector(`#drawer-${pid} .btn-quote.mid .quote-price`);
+    const askBtn = document.querySelector(`#drawer-${pid} .btn-quote.ask .quote-price`);
+    if (bidBtn) bidBtn.textContent = '$' + bidPrice.toFixed(2);
+    if (midBtn) midBtn.textContent = '$' + midPrice.toFixed(2);
+    if (askBtn) askBtn.textContent = '$' + askPrice.toFixed(2);
+
+    const limitInput = document.getElementById('limit-' + pid);
+    if (limitInput && document.activeElement !== limitInput) {
+        limitInput.value = currentPrice.toFixed(2);
+    }
+
+    const qtyDisplay = trade.remaining_qty !== undefined && trade.remaining_qty !== trade.original_qty ?
+        `${trade.remaining_qty}/${trade.original_qty}` : String(trade.quantity);
+    const qtyEl = _cacheEl('qty-display', pid);
+    if (qtyEl) qtyEl.textContent = qtyDisplay;
+}
+
+function _positionsChanged(newTrades) {
+    const newIds = newTrades.map(t => String(t.id)).sort();
+    const oldIds = _currentPositionIds.slice().sort();
+    if (newIds.length !== oldIds.length) return true;
+    for (let i = 0; i < newIds.length; i++) {
+        if (newIds[i] !== oldIds[i]) return true;
+    }
+    return false;
+}
+
+async function loadTrades() {
+    const container = document.getElementById('trades-table-container');
+    if (!container) return;
+
+    if (_isFirstLoad) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading...</div></div>';
+    }
+    
+    try {
+        const statusMap = { 'live': 'OPEN', 'pending': 'PENDING', 'filled': 'CLOSED' };
+        const statusFilter = statusMap[currentTab] || '';
+        
+        let url = '/api/trades/merged?';
+        if (statusFilter) url += `status=${statusFilter}&`;
+        if (currentBroker) url += `broker=${currentBroker}`;
+        url = url.replace(/[&?]$/, '');
+        
+        const response = await fetch(url);
+        const mergedResponse = await response.json();
+        let filteredTrades = mergedResponse.trades || [];
+        
+        const count = filteredTrades.length;
+        const totalPnl = filteredTrades.reduce((sum, t) => sum + (parseFloat(t.pnl) || 0), 0);
+        
+        let summaryText = '';
+        if (currentTab === 'live') {
+            summaryText = `${count} position${count !== 1 ? 's' : ''} | $${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)} P/L`;
+        } else if (currentTab === 'pending') {
+            summaryText = `${count} pending order${count !== 1 ? 's' : ''}`;
+        } else if (currentTab === 'filled') {
+            summaryText = `${count} filled trade${count !== 1 ? 's' : ''} | $${totalPnl.toFixed(2)} realized`;
+        }
+        const summaryEl = document.getElementById('summary-text');
+        if (summaryEl) summaryEl.textContent = summaryText;
+        
+        if (filteredTrades.length === 0) {
+            _currentPositionIds = [];
+            _clearElCache();
+            container.innerHTML = `
+                <div class="empty-positions">
+                    <div class="empty-icon">📊</div>
+                    <div class="empty-text">No ${currentTab} positions</div>
+                </div>
+            `;
+            _isFirstLoad = false;
+            return;
+        }
+        
+        if (currentTab === 'live') {
+            const needsRebuild = _isFirstLoad || _positionsChanged(filteredTrades);
+
+            if (needsRebuild) {
+                const openDrawers = _getOpenDrawerIds();
+                _clearElCache();
+                container.innerHTML = renderPositionCards(filteredTrades);
+                _currentPositionIds = filteredTrades.map(t => String(t.id));
+                _restoreDrawers(openDrawers);
+                fetchDashboardRiskStates();
+            } else {
+                requestAnimationFrame(() => {
+                    filteredTrades.forEach(t => _updatePositionCardInPlace(t));
+                });
+            }
+        } else {
+            _currentPositionIds = [];
+            _clearElCache();
+            container.innerHTML = renderTradesTable(filteredTrades);
+        }
+        
+        _isFirstLoad = false;
+        
+    } catch (err) {
+        console.error('[loadTrades] Error:', err);
+        if (_isFirstLoad) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div style="color: var(--error);">Error loading trades</div>
+                    <div style="color: var(--text-secondary); margin-top: 8px;">${err.message}</div>
+                </div>
+            `;
+        }
+    }
+}
+
+function renderPositionCards(trades) {
+    let html = '<div class="positions-grid">';
+    
+    trades.forEach(trade => {
+        const pnl = parseFloat(trade.pnl) || 0;
+        const pnlPercent = parseFloat(trade.pnl_percent) || 0;
+        const entryPrice = parseFloat(trade.entry_price) || 0;
+        const currentPrice = parseFloat(trade.current_price) || entryPrice;
+        const bidPrice = parseFloat(trade.bid_price) || (currentPrice * 0.995);
+        const askPrice = parseFloat(trade.ask_price) || (currentPrice * 1.005);
+        const midPrice = (bidPrice + askPrice) / 2;
+        
+        const pnlClass = pnl >= 0 ? 'profit' : 'loss';
+        const pnlSign = pnl >= 0 ? '+' : '';
+        
+        let symbolDisplay = trade.symbol;
+        let optionDetails = '';
+        if (trade.asset_type === 'option') {
+            if (trade.strike) optionDetails += `$${trade.strike}`;
+            if (trade.call_put) optionDetails += ` ${trade.call_put}`;
+            if (trade.expiry) optionDetails += ` ${trade.expiry}`;
+        }
+        
+        const brokerClass = (trade.broker || '').toLowerCase().includes('alpaca') ? 'alpaca' : 
+                           (trade.broker || '').toLowerCase().includes('ibkr') ? 'ibkr' : 'webull';
+        const brokerLabel = (trade.broker || '').toUpperCase().replace('_PAPER', ' Paper').replace('_', ' ') || 'WEBULL';
+        
+        // Build source badge for position card
+        const sourceDisplay = trade.source_display || { name: 'Unknown', color: 'dark', icon: '#', full_name: 'Unknown source' };
+        const channelName = sourceDisplay.name || trade.channel_name || 'Global';
+        
+        const tier1 = parseFloat(trade.profit_target_1_pct) || 20;
+        const tier2 = parseFloat(trade.profit_target_2_pct) || 50;
+        const tier3 = parseFloat(trade.profit_target_3_pct) || 100;
+        const tier4 = parseFloat(trade.profit_target_4_pct) || 0;
+        const stopLoss = parseFloat(trade.stop_loss_pct) || 10;
+        
+        const tier1Price = entryPrice * (1 + tier1/100);
+        const tier2Price = entryPrice * (1 + tier2/100);
+        const tier3Price = entryPrice * (1 + tier3/100);
+        const tier4Price = entryPrice * (1 + tier4/100);
+        const slPrice = entryPrice * (1 - stopLoss/100);
+        
+        const progressPercent = Math.min(Math.max((pnlPercent / tier1) * 100, -100), 150);
+        
+        html += `
+        <div class="position-card ${pnlClass}" id="position-${trade.id}">
+            <div class="position-main">
+                <div class="position-symbol">
+                    <div class="symbol-name">
+                        ${symbolDisplay}
+                        <span class="broker-badge ${brokerClass}">${brokerLabel}</span>
+                        <span class="channel-badge channel-badge--${sourceDisplay.color}" title="${sourceDisplay.full_name}">
+                            <span class="channel-badge__icon">${sourceDisplay.icon}</span>
+                            <span class="channel-badge__name">${sourceDisplay.name}</span>
+                        </span>
+                    </div>
+                    <div class="symbol-details">
+                        ${optionDetails ? `<span>${optionDetails}</span>` : ''}
+                        <span data-field="qty-display" data-trade-id="${trade.id}">${trade.remaining_qty !== undefined && trade.remaining_qty !== trade.original_qty ? 
+                            `${trade.remaining_qty}/${trade.original_qty}` : 
+                            trade.quantity}</span> ${trade.asset_type === 'option' ? 'contracts' : 'shares'}${trade.display_status === 'PARTIAL' ? ' <span style="color:#f59e0b;font-size:10px">(PARTIAL)</span>' : ''}
+                    </div>
+                </div>
+                
+                <div class="position-metrics">
+                    <div class="metric-label">Entry</div>
+                    <div class="metric-value">$${entryPrice.toFixed(2)}</div>
+                </div>
+                
+                <div class="position-metrics">
+                    <div class="metric-label">Current</div>
+                    <div class="metric-value" data-field="current-price" data-trade-id="${trade.id}" style="color: ${pnl >= 0 ? '#22c55e' : '#ef4444'}">$${currentPrice.toFixed(2)}</div>
+                </div>
+                
+                <div class="position-pnl">
+                    <div class="pnl-value ${pnlClass === 'profit' ? 'pnl-positive' : 'pnl-negative'}" data-field="pnl-value" data-trade-id="${trade.id}">${pnlSign}$${Math.abs(pnl).toFixed(2)}</div>
+                    <div class="pnl-percent ${pnlClass === 'profit' ? 'pnl-positive' : 'pnl-negative'}" data-field="pnl-pct" data-trade-id="${trade.id}">${pnlSign}${pnlPercent.toFixed(1)}%</div>
+                </div>
+                
+                <div class="position-actions">
+                    <button class="btn-expand" onclick="toggleDrawer('${trade.id}')" title="Expand risk & close panel">▼</button>
+                </div>
+            </div>
+            
+            <div class="position-drawer" id="drawer-${trade.id}">
+                <div class="drawer-grid">
+                    <div class="risk-panel">
+                        <div class="risk-header">
+                            Risk Settings
+                            <span class="channel-badge channel-badge--${sourceDisplay.color}" title="${sourceDisplay.full_name}">
+                                <span class="channel-badge__icon">${sourceDisplay.icon}</span>
+                                <span class="channel-badge__name">${sourceDisplay.name}</span>
+                            </span>
+                        </div>
+                        
+                        <div class="tier-targets">
+                            <div class="tier-item ${pnlPercent >= tier1 ? 'hit' : ''}">
+                                <div class="tier-label">T1</div>
+                                <div class="tier-value">+${tier1}%</div>
+                                <div class="tier-price">$${tier1Price.toFixed(2)}</div>
+                            </div>
+                            <div class="tier-item ${pnlPercent >= tier2 ? 'hit' : ''}">
+                                <div class="tier-label">T2</div>
+                                <div class="tier-value">+${tier2}%</div>
+                                <div class="tier-price">$${tier2Price.toFixed(2)}</div>
+                            </div>
+                            <div class="tier-item ${pnlPercent >= tier3 ? 'hit' : ''}">
+                                <div class="tier-label">T3</div>
+                                <div class="tier-value">+${tier3}%</div>
+                                <div class="tier-price">$${tier3Price.toFixed(2)}</div>
+                            </div>
+                            ${tier4 > 0 ? `<div class="tier-item ${pnlPercent >= tier4 ? 'hit' : ''}">
+                                <div class="tier-label">T4</div>
+                                <div class="tier-value">+${tier4}%</div>
+                                <div class="tier-price">$${tier4Price.toFixed(2)}</div>
+                            </div>` : ''}
+                        </div>
+                        
+                        <div class="stop-loss-row">
+                            <span class="sl-label">Stop Loss</span>
+                            <span class="sl-value">-${stopLoss}%</span>
+                            <span style="color: var(--text-muted); font-size: 0.75rem;">($${slPrice.toFixed(2)})</span>
+                        </div>
+                        
+                        <div class="progress-section">
+                            <div class="progress-bar">
+                                <div class="progress-fill ${pnlClass}" style="width: ${Math.abs(progressPercent)}%; ${pnlPercent < 0 ? 'margin-left: auto;' : ''}"></div>
+                            </div>
+                            <div class="progress-markers">
+                                <span>-${stopLoss}%</span>
+                                <span>0%</span>
+                                <span>+${tier1}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="close-panel">
+                        <div class="close-header">Close Position</div>
+                        
+                        <div class="quote-buttons">
+                            <button class="btn-quote bid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', ${bidPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                                <span class="quote-label">BID</span>
+                                <span class="quote-price">$${bidPrice.toFixed(2)}</span>
+                            </button>
+                            <button class="btn-quote mid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', ${midPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                                <span class="quote-label">MID</span>
+                                <span class="quote-price">$${midPrice.toFixed(2)}</span>
+                            </button>
+                            <button class="btn-quote ask" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', ${askPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                                <span class="quote-label">ASK</span>
+                                <span class="quote-price">$${askPrice.toFixed(2)}</span>
+                            </button>
+                        </div>
+                        
+                        <div class="close-inputs">
+                            <input type="number" id="qty-${trade.id}" value="${trade.remaining_qty || trade.quantity}" min="1" max="${trade.remaining_qty || trade.quantity}" placeholder="Qty">
+                            <input type="number" id="limit-${trade.id}" value="${currentPrice.toFixed(2)}" step="0.01" placeholder="Limit $">
+                        </div>
+                        
+                        <div class="close-buttons">
+                            <button class="btn-close limit" onclick="closeLimitOrder('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                                LIMIT
+                            </button>
+                            <button class="btn-close market" onclick="closeMarketOrder('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                                MARKET
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="risk-engine-strip" id="re-strip-${trade.id}" 
+                 data-re-trade-id="${trade.id || ''}"
+                 data-re-pos-key="${computePositionKey(trade)}">
+                <span class="re-label">Risk Engine</span>
+                <div class="re-badges">
+                    <span class="re-badge re-loading">Loading...</span>
+                </div>
+            </div>
+        </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+function renderTradesTable(trades) {
+    const isPending = currentTab === 'pending';
+    let html = '<table class="data-table"><thead><tr>';
+    html += '<th>Symbol</th><th>Source</th><th>Broker</th><th>Type</th><th>Qty</th><th>Entry</th><th>Current</th><th>P/L</th><th>Status</th>';
+    if (isPending) html += '<th>Action</th>';
+    html += '</tr></thead><tbody>';
+    
+    trades.forEach(trade => {
+        const pnl = parseFloat(trade.pnl) || 0;
+        const pnlPercent = parseFloat(trade.pnl_percent) || 0;
+        const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        const entryPrice = parseFloat(trade.entry_price) || 0;
+        const currentPrice = parseFloat(trade.current_price) || entryPrice;
+        
+        let symbolDisplay = trade.symbol;
+        if (trade.asset_type === 'option' && trade.strike) {
+            symbolDisplay += ` $${trade.strike}${trade.call_put || ''}`;
+        }
+        
+        // Fix UNKNOWN broker - default to Webull
+        const effectiveBroker = (trade.broker && trade.broker !== 'UNKNOWN') ? trade.broker : 'Webull';
+        const brokerClass = effectiveBroker.toLowerCase().includes('alpaca') ? 'alpaca' : 
+                           effectiveBroker.toLowerCase().includes('ibkr') ? 'ibkr' : 'webull';
+        const brokerLabel = effectiveBroker.toUpperCase().replace('_PAPER', ' Paper').replace('_', ' ');
+        
+        // Build source badge HTML
+        const sourceDisplay = trade.source_display || { name: 'Unknown', color: 'dark', icon: '#', full_name: 'Unknown source' };
+        const sourceBadge = `<span class="channel-badge channel-badge--${sourceDisplay.color}" title="${sourceDisplay.full_name}">
+            <span class="channel-badge__icon">${sourceDisplay.icon}</span>
+            <span class="channel-badge__name">${sourceDisplay.name}</span>
+        </span>`;
+        
+        // Calculate quantity display for partial exits
+        const qtyDisplay = trade.remaining_qty !== undefined && trade.remaining_qty !== trade.original_qty ? 
+            `${trade.remaining_qty}/${trade.original_qty}` : (trade.quantity || 0);
+        const statusDisplay = trade.display_status || trade.status || 'UNKNOWN';
+        const statusClass = statusDisplay === 'PARTIAL' ? 'style="background:#f59e0b;color:#000"' : '';
+        
+        html += `<tr>
+            <td><strong>${symbolDisplay}</strong></td>
+            <td class="source-column">${sourceBadge}</td>
+            <td><span class="broker-badge ${brokerClass}" style="font-size: 0.7rem;">${brokerLabel}</span></td>
+            <td>${trade.asset_type || 'stock'}</td>
+            <td>${qtyDisplay}</td>
+            <td>$${entryPrice.toFixed(2)}</td>
+            <td>$${currentPrice.toFixed(2)}</td>
+            <td class="${pnlClass}"><strong>$${pnl.toFixed(2)}</strong> (${pnlPercent.toFixed(1)}%)</td>
+            <td><span class="badge" ${statusClass}>${statusDisplay}</span></td>`;
+        
+        if (isPending) {
+            const orderId = trade.order_id || trade.id;
+            html += `<td>
+                <button class="btn-cancel" onclick="cancelOrder('${orderId}', '${trade.symbol}', '${effectiveBroker}')">
+                    ✕ Cancel
+                </button>
+            </td>`;
+        }
+        
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    return html;
+}
+
+function toggleDrawer(tradeId) {
+    const drawer = document.getElementById(`drawer-${tradeId}`);
+    const button = drawer?.previousElementSibling?.querySelector('.btn-expand');
+    
+    if (drawer) {
+        drawer.classList.toggle('open');
+        if (button) button.classList.toggle('expanded');
+    }
+}
+
+// ============== POSITION CLOSE FUNCTIONS ==============
+
+// Close at a specific price (BID/MID/ASK buttons from card)
+async function closePosition(tradeId, symbol, maxQuantity, broker, limitPrice, strike, expiry, callPut) {
+    const qtyInput = document.getElementById(`qty-${tradeId}`);
+    const qty = qtyInput ? parseInt(qtyInput.value) : maxQuantity;
+    
+    if (qty <= 0 || qty > maxQuantity) {
+        alert(`Invalid quantity. Must be between 1 and ${maxQuantity}`);
+        return;
+    }
+    
+    await executeClose(tradeId, symbol, qty, broker, limitPrice, 'limit', strike, expiry, callPut);
+}
+
+// Close at limit price from input field
+async function closeLimitOrder(tradeId, symbol, maxQuantity, broker, strike, expiry, callPut) {
+    const qtyInput = document.getElementById(`qty-${tradeId}`);
+    const limitInput = document.getElementById(`limit-${tradeId}`);
+    
+    const qty = qtyInput ? parseInt(qtyInput.value) : maxQuantity;
+    const limitPrice = limitInput ? parseFloat(limitInput.value) : null;
+    
+    if (qty <= 0 || qty > maxQuantity) {
+        alert(`Invalid quantity. Must be between 1 and ${maxQuantity}`);
+        return;
+    }
+    
+    if (!limitPrice || limitPrice <= 0) {
+        alert('Please enter a valid limit price');
+        return;
+    }
+    
+    await executeClose(tradeId, symbol, qty, broker, limitPrice, 'limit', strike, expiry, callPut);
+}
+
+// Close at market price
+async function closeMarketOrder(tradeId, symbol, maxQuantity, broker, strike, expiry, callPut) {
+    const qtyInput = document.getElementById(`qty-${tradeId}`);
+    const qty = qtyInput ? parseInt(qtyInput.value) : maxQuantity;
+    
+    if (qty <= 0 || qty > maxQuantity) {
+        alert(`Invalid quantity. Must be between 1 and ${maxQuantity}`);
+        return;
+    }
+    
+    if (!confirm(`Close ${qty} ${symbol} at MARKET price?\n\nThis will execute immediately at the best available price.`)) {
+        return;
+    }
+    
+    await executeClose(tradeId, symbol, qty, broker, null, 'market', strike, expiry, callPut);
+}
+
+// Core close execution function
+async function executeClose(tradeId, symbol, quantity, broker, limitPrice, orderType, strike, expiry, callPut) {
+    if (isClosingPosition) {
+        console.log('[CLOSE] Blocked: Another close in progress');
+        alert('Please wait, another close operation is in progress');
+        return;
+    }
+    
+    isClosingPosition = true;
+    
+    // Add closing state to card (no DOM manipulation that causes shake)
+    const card = document.getElementById(`position-${tradeId}`);
+    if (card) {
+        card.classList.add('closing');
+    }
+    
+    // Disable buttons in drawer
+    const drawer = document.getElementById(`drawer-${tradeId}`);
+    const buttons = drawer?.querySelectorAll('button');
+    buttons?.forEach(btn => {
+        btn.disabled = true;
+        btn.classList.add('loading');
+    });
+    
+    const effectiveBroker = broker || currentBroker || '';
+    const brokerLower = effectiveBroker.toLowerCase();
+    const isAlpaca = brokerLower.includes('alpaca');
+    const isSchwab = brokerLower.includes('schwab');
+    
+    try {
+        let url, body;
+        if (isAlpaca) {
+            // Alpaca uses symbol-based close with option details for OCC symbol construction
+            url = `/api/alpaca/positions/${encodeURIComponent(symbol)}/close`;
+            body = JSON.stringify({ 
+                quantity: quantity,
+                limit_price: limitPrice,
+                strike: strike || null,
+                expiry: expiry || null,
+                call_put: callPut || null
+            });
+        } else if (isSchwab) {
+            // Schwab uses symbol-based close
+            url = `/api/schwab/positions/${encodeURIComponent(symbol)}/close`;
+            body = JSON.stringify({ 
+                quantity: quantity,
+                limit_price: limitPrice
+            });
+        } else {
+            url = `/api/trades/${tradeId}/close`;
+            body = JSON.stringify({ 
+                quantity: quantity,
+                limit_price: limitPrice,
+                symbol: symbol,
+                broker: effectiveBroker,
+                asset_type: (strike || callPut) ? 'option' : 'stock',
+                strike: strike || null,
+                expiry: expiry || null,
+                call_put: callPut || ''
+            });
+        }
+        
+        const brokerLabel = isAlpaca ? 'ALPACA' : isSchwab ? 'SCHWAB' : brokerLower.includes('ibkr') ? 'IBKR' : brokerLower.includes('tasty') ? 'TASTYTRADE' : effectiveBroker.toUpperCase() || 'WEBULL';
+        console.log(`[CLOSE] ${brokerLabel} ${orderType.toUpperCase()}: ${quantity} ${symbol} @ ${limitPrice ? '$' + limitPrice : 'MKT'}`);
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const priceStr = limitPrice ? `LIMIT @ $${limitPrice}` : 'MARKET';
+            alert(`Close order submitted!\n\n${data.message || `${quantity} ${symbol} @ ${priceStr}`}`);
+            
+            // Delay reload to let broker process
+            setTimeout(() => {
+                loadTrades();
+                loadStats();
+            }, 1000);
+        } else {
+            const errorMsg = data.error || 'Failed to close position';
+            alert(`Close Failed\n\n${errorMsg}`);
+        }
+    } catch (err) {
+        console.error('[CLOSE] Error:', err);
+        alert(`Network Error: ${err.message}`);
+    } finally {
+        isClosingPosition = false;
+        
+        // Remove closing state
+        if (card) {
+            card.classList.remove('closing');
+        }
+        
+        // Re-enable buttons
+        buttons?.forEach(btn => {
+            btn.disabled = false;
+            btn.classList.remove('loading');
+        });
+    }
+}
+
+async function cancelOrder(orderId, symbol, broker) {
+    // Determine broker from trade data or current selection
+    const effectiveBroker = broker || currentBroker || 'webull';
+    const brokerDisplay = effectiveBroker.charAt(0).toUpperCase() + effectiveBroker.slice(1).replace('_paper', ' Paper');
+    
+    if (!confirm(`⚠️ Cancel pending order for ${symbol}?\n\nOrder ID: ${orderId}\nBroker: ${brokerDisplay}\n\nThis will cancel the order.`)) {
+        return;
+    }
+    
+    try {
+        // Use unified cancel endpoint for all brokers
+        const url = `/api/orders/${encodeURIComponent(effectiveBroker)}/${encodeURIComponent(orderId)}/cancel`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            alert(`✅ Order cancelled successfully!\n\nOrder ID: ${orderId}`);
+            loadTrades();
+            loadStats();
+        } else if (result.unsupported) {
+            alert(`⚠️ ${result.error}`);
+        } else {
+            alert(`❌ Failed to cancel order: ${result.error || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Failed to cancel order:', error);
+        alert(`❌ Failed to cancel order: ${error.message}`);
+    }
+}
+
+function refreshPrices() {
+    document.getElementById('summary-text').textContent = 'Refreshing...';
+    fetch('/api/refresh_prices', { method: 'POST' })
+        .then(() => {
+            loadTrades();
+            loadStats();
+        });
+}
+
+async function syncPositions() {
+    const btn = document.getElementById('syncPositionsBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Syncing...';
+    btn.style.opacity = '0.6';
+    
+    try {
+        const broker = document.getElementById('broker-filter').value;
+        const response = await fetch('/api/sync-positions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(broker ? { broker_id: broker } : {})
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const closedCount = data.results.reduce((sum, r) => sum + (r.closed || 0), 0);
+            if (closedCount > 0) {
+                alert(`✅ Sync complete! Closed ${closedCount} stale position(s).`);
+            } else {
+                alert('✅ Sync complete! All positions are up to date.');
+            }
+            loadTrades();
+            loadStats();
+        } else {
+            alert('❌ Sync failed: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Sync error:', error);
+        alert('❌ Sync failed: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        btn.style.opacity = '1';
+    }
+}
+
+async function loadStats() {
+    try {
+        const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
+        const data = await fetch(`/api/stats${brokerParam}`).then(r => r.json());
+        
+        document.getElementById('exec-channels-count').textContent = data.exec_channels || 0;
+        document.getElementById('track-channels-count').textContent = data.track_channels || 0;
+        document.getElementById('open-positions').textContent = data.open_positions || 0;
+        
+        // Position P&L from unrealized profit/loss
+        const pnl = parseFloat(data.unrealized_pnl) || 0;
+        const pnlElement = document.getElementById('today-pnl');
+        pnlElement.textContent = `$${pnl.toFixed(2)}`;
+        pnlElement.className = pnl >= 0 ? 'stat-value pnl-positive' : 'stat-value pnl-negative';
+        
+        document.getElementById('summary-text').textContent = data.summary || 'No data';
+        
+        // Fetch account balance based on selected broker
+        try {
+            let balanceUrl = '/api/webull/balance';
+            const brokerUpper = currentBroker ? currentBroker.toUpperCase() : '';
+            if (brokerUpper.startsWith('WEBULL_OFFICIAL')) {
+                balanceUrl = '/api/webull_official/balance';
+            } else if (brokerUpper.startsWith('ALPACA')) {
+                balanceUrl = '/api/alpaca/balance';
+            } else if (brokerUpper.startsWith('IBKR')) {
+                balanceUrl = '/api/ibkr/balance';
+            } else if (brokerUpper.startsWith('TASTYTRADE')) {
+                const isPaper = brokerUpper === 'TASTYTRADE_PAPER';
+                balanceUrl = `/api/tastytrade/balance?paper=${isPaper}`;
+            } else if (brokerUpper === 'SCHWAB') {
+                balanceUrl = '/api/schwab/balance';
+            } else if (brokerUpper === 'ROBINHOOD') {
+                balanceUrl = '/api/robinhood/balance';
+            } else if (brokerUpper.startsWith('TRADING212')) {
+                balanceUrl = '/api/trading212/balance';
+            }
+            
+            const balance = await fetch(balanceUrl).then(r => r.json());
+            
+            if (balance && balance.status !== 'error') {
+                const buyingPowerValue = parseFloat(balance.buying_power) || 0;
+                const netLiqValue = parseFloat(balance.net_liquidation) || parseFloat(balance.equity) || 0;
+                const cashValue = parseFloat(balance.cash_balance) || parseFloat(balance.cash) || 0;
+                const unrealizedValue = parseFloat(balance.total_profit_loss) || parseFloat(balance.unrealized_pnl) || 0;
+                
+                const bp = document.getElementById('buying-power');
+                bp.textContent = `$${buyingPowerValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                bp.setAttribute('data-value', bp.textContent);
+                
+                const nl = document.getElementById('net-liquidation');
+                nl.textContent = `$${netLiqValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                nl.setAttribute('data-value', nl.textContent);
+                
+                const cb = document.getElementById('cash-balance');
+                cb.textContent = `$${cashValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                cb.setAttribute('data-value', cb.textContent);
+                
+                const upnl = document.getElementById('unrealized-pnl');
+                upnl.textContent = `$${unrealizedValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                upnl.setAttribute('data-value', upnl.textContent);
+                upnl.style.color = unrealizedValue >= 0 ? 'var(--success)' : 'var(--error)';
+                
+                // Settled Cash - CRITICAL for Webull good faith violation prevention
+                const settledCashValue = parseFloat(balance.settled_cash) || 0;
+                const sc = document.getElementById('settled-cash');
+                if (sc) {
+                    sc.textContent = `$${settledCashValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    sc.setAttribute('data-value', sc.textContent);
+                    // Color code: red if negative (warning!), green if positive
+                    sc.style.color = settledCashValue >= 0 ? 'var(--success)' : 'var(--error)';
+                }
+                
+                // Unsettled Cash
+                const unsettledCashValue = parseFloat(balance.unsettled_cash) || 0;
+                const uc = document.getElementById('unsettled-cash');
+                if (uc) {
+                    uc.textContent = `$${unsettledCashValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    uc.setAttribute('data-value', uc.textContent);
+                }
+                
+                // Re-apply privacy mode if active
+                if (isPrivacyMode) {
+                    document.querySelectorAll('.sensitive-data').forEach(el => {
+                        el.textContent = '••••••';
+                    });
+                }
+            }
+        } catch (balanceErr) {
+            console.log('Balance not available yet:', balanceErr);
+        }
+    } catch (err) {
+        console.error('Error loading stats:', err);
+    }
+}
+
+// ============ CONDITIONAL ORDERS TAB FUNCTIONS ============
+let conditionalOrdersRefreshInterval = null;
+let conditionalLivePriceInterval = null;
+let _condOrdersCache = [];
+
+function startConditionalOrdersAutoRefresh() {
+    stopConditionalOrdersAutoRefresh();
+    conditionalLivePriceInterval = setInterval(refreshLivePricesOnly, 1000);
+    conditionalOrdersRefreshInterval = setInterval(refreshConditionalOrderPrices, 5000);
+    console.log('[ConditionalOrders] Auto-refresh started (prices: 1s, full: 5s)');
+}
+
+function stopConditionalOrdersAutoRefresh() {
+    if (conditionalOrdersRefreshInterval) {
+        clearInterval(conditionalOrdersRefreshInterval);
+        conditionalOrdersRefreshInterval = null;
+    }
+    if (conditionalLivePriceInterval) {
+        clearInterval(conditionalLivePriceInterval);
+        conditionalLivePriceInterval = null;
+    }
+}
+
+async function refreshLivePricesOnly() {
+    try {
+        const resp = await fetch('/api/conditional_orders/live_prices');
+        const data = await resp.json();
+        if (!data.success) return;
+        const livePrices = data.prices || {};
+
+        for (const [orderId, live] of Object.entries(livePrices)) {
+            const card = document.querySelector(`[data-order-id="${orderId}"]`);
+            if (!card) continue;
+            const priceEl = card.querySelector('.current-price-value');
+            const timeEl = card.querySelector('.current-price-time');
+            const sourceEl = card.querySelector('.current-price-source');
+
+            if (priceEl && live.price) {
+                const price = parseFloat(live.price);
+                const trigger = parseFloat(live.trigger_price) || 0;
+                const dir = live.direction || 'ABOVE';
+                const met = dir === 'ABOVE' ? price >= trigger : price <= trigger;
+                priceEl.textContent = '$' + price.toFixed(2);
+                priceEl.style.color = met ? '#22c55e' : '#ef4444';
+            }
+
+            if (timeEl) {
+                const now = new Date();
+                timeEl.textContent = now.toLocaleString('en-US', {
+                    timeZone: 'America/New_York',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                });
+            }
+
+            if (sourceEl) {
+                const ds = (live.data_source || '').toLowerCase();
+                const isStream = live.source === 'streaming' || ds.includes('stream');
+                const label = isStream ? 'STREAMING' : ds ? ds.replace(/_/g,' ').toUpperCase() : (live.source || '').toUpperCase();
+                const color = isStream ? '#0f8' : '#f59e0b';
+                const bg = isStream ? 'rgba(0,255,136,0.12)' : 'rgba(245,158,11,0.12)';
+                const dot = isStream ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#0f8;margin-right:3px;box-shadow:0 0 4px #0f8;"></span>' : '';
+                if (label) {
+                    sourceEl.innerHTML = `<span style="font-size:0.55rem;font-weight:600;padding:1px 6px;border-radius:3px;background:${bg};color:${color};">${dot}${label}</span>`;
+                }
+            }
+        }
+    } catch (err) {}
+}
+
+async function refreshConditionalOrderPrices() {
+    try {
+        const resp = await fetch('/api/conditional_orders?active_only=true');
+        const data = await resp.json();
+        const orders = data.orders || [];
+        _condOrdersCache = orders;
+    } catch (err) {
+        console.error('[ConditionalOrders] Price refresh error:', err);
+    }
+}
+
+async function loadConditionalOrders() {
+    console.log('[loadConditionalOrders] Starting...');
+    const container = document.getElementById('conditional-orders-table');
+    if (!container) return;
+    
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading conditional orders...</div></div>';
+    
+    try {
+        const response = await fetch('/api/conditional_orders');
+        const data = await response.json();
+        let orders = data.orders || [];
+        
+        // Filter out India market orders - they have their own page
+        orders = orders.filter(o => {
+            const market = (o.market || 'US').toUpperCase();
+            return market !== 'INDIA' && market !== 'IN';
+        });
+        
+        console.log('[loadConditionalOrders] Orders (excluding India):', orders);
+        
+        // Update summary
+        const summaryEl = document.getElementById('summary-text');
+        if (summaryEl) {
+            const activeCount = orders.filter(o => o.status === 'active_monitoring' || o.status === 'pending').length;
+            summaryEl.textContent = `${activeCount} active conditional order${activeCount !== 1 ? 's' : ''}`;
+        }
+        
+        if (!orders || orders.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">⏳</div>
+                    <div style="color: var(--text-secondary); font-size: 1rem; margin-bottom: 8px;">No conditional orders</div>
+                    <div style="color: var(--text-muted); font-size: 0.875rem;">Send signals like "AAPL over 150 SL 5" to create conditional orders</div>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '<div class="positions-grid">';
+        for (const order of orders) {
+            const statusLower = (order.status || '').toLowerCase();
+            const statusColor = statusLower === 'active_monitoring' || statusLower === 'fallback_monitoring' ? '#22c55e' : 
+                               statusLower === 'pending' ? '#f59e0b' : 
+                               statusLower === 'triggered' ? '#3b82f6' : 
+                               statusLower === 'executing' ? '#f59e0b' :
+                               statusLower === 'executed' ? '#22c55e' :
+                               statusLower === 'error' || statusLower === 'canceled' || statusLower === 'expired' ? '#ef4444' : '#6b7280';
+            const statusIcon = statusLower === 'active_monitoring' || statusLower === 'fallback_monitoring' ? '📡' : 
+                              statusLower === 'pending' ? '⏳' : 
+                              statusLower === 'triggered' ? '⚡' : 
+                              statusLower === 'executing' ? '🔄' :
+                              statusLower === 'executed' ? '✅' :
+                              statusLower === 'error' ? '❌' :
+                              statusLower === 'canceled' || statusLower === 'expired' ? '🚫' : '⏸️';
+            const statusLabel = statusLower === 'active_monitoring' ? 'Monitoring' : 
+                               statusLower === 'fallback_monitoring' ? 'Fallback' :
+                               statusLower.charAt(0).toUpperCase() + statusLower.slice(1).replace(/_/g, ' ');
+            
+            const triggerDirection = order.trigger_type === 'over' ? '↑' : '↓';
+            const triggerText = order.trigger_type === 'over' ? 'Above' : 'Below';
+            const triggerPrice = parseFloat(order.trigger_price) || 0;
+            const adjustedPrice = parseFloat(order.adjusted_trigger_price) || triggerPrice;
+            const currentOffset = triggerPrice > 0 ? ((adjustedPrice - triggerPrice) / triggerPrice * 100) : 0;
+            const offsetSign = currentOffset >= 0 ? '+' : '';
+            
+            const slValue = order.stop_loss_value ? parseFloat(order.stop_loss_value) : null;
+            const slType = order.stop_loss_type || '';
+            const slDisplay = slValue ? (slType === 'percent' ? `${slValue}%` : `$${slValue.toFixed(2)}`) : null;
+            
+            let ptDisplay = null;
+            try {
+                const targets = order.take_profit_targets ? JSON.parse(order.take_profit_targets) : [];
+                if (targets.length > 0) {
+                    const settingsSource = order.settings_source || '';
+                    const isPtFromSignal = settingsSource.includes('pt:signal');
+                    ptDisplay = targets.map(t => {
+                        const val = parseFloat(t);
+                        return isPtFromSignal ? `$${val.toFixed(2)}` : `${parseFloat(val.toFixed(2))}%`;
+                    }).join(', ');
+                }
+            } catch(e) {}
+            
+            const sizeMode = order.size_mode || '';
+            const qtyValue = order.qty_value ? parseFloat(order.qty_value) : null;
+            const calcQty = order.calculated_qty ? parseInt(order.calculated_qty) : null;
+            const unitLabel = order.asset_type === 'option' ? 'contracts' : 'shares';
+            let sizeDisplay = '';
+            if (sizeMode === 'percent_account' && qtyValue) {
+                sizeDisplay = `${qtyValue}% of account`;
+            } else if (sizeMode === 'fixed_qty' && qtyValue) {
+                sizeDisplay = `${parseInt(qtyValue)} ${unitLabel}`;
+            } else if (calcQty) {
+                sizeDisplay = `${calcQty} ${unitLabel}`;
+            }
+            
+            const isActive = statusLower === 'active_monitoring' || statusLower === 'pending' || statusLower === 'tracking' || statusLower === 'fallback_monitoring';
+            
+            let timeRemaining = '';
+            if (order.expires_at) {
+                const expiresAtStr = order.expires_at.includes('Z') || order.expires_at.includes('+') 
+                    ? order.expires_at 
+                    : order.expires_at.replace(' ', 'T') + 'Z';
+                const expiresAt = new Date(expiresAtStr);
+                const now = new Date();
+                const diffMs = expiresAt - now;
+                if (isActive && diffMs > 0) {
+                    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    if (hours > 24) {
+                        const days = Math.floor(hours / 24);
+                        timeRemaining = `${days}d ${hours % 24}h`;
+                    } else if (hours > 0) {
+                        timeRemaining = `${hours}h ${mins}m`;
+                    } else {
+                        timeRemaining = `${mins}m`;
+                    }
+                } else if (statusLower === 'expired') {
+                    timeRemaining = 'Timed out';
+                } else if (!isActive) {
+                    const createdAt = new Date((order.created_at || '').replace(' ', 'T') + 'Z');
+                    const timeoutMs = expiresAt - createdAt;
+                    if (timeoutMs > 0) {
+                        const tMins = Math.round(timeoutMs / (1000 * 60));
+                        timeRemaining = `${tMins}m limit`;
+                    } else {
+                        timeRemaining = 'Had limit';
+                    }
+                } else {
+                    timeRemaining = 'Expired';
+                }
+            }
+            
+            html += `
+                <div class="conditional-order-card" data-order-id="${order.id}" style="background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.9)); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                    <!-- Header Row -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(90deg, ${statusColor}15, transparent); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px;">${order.symbol}</div>
+                            <div style="padding: 4px 10px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">${order.asset_type || 'stock'}</div>
+                            <div style="display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; background: ${statusColor}20; border: 1px solid ${statusColor}40;">
+                                <span style="font-size: 0.9rem;">${statusIcon}</span>
+                                <span style="color: ${statusColor}; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">${statusLabel}</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase;">Order #${order.id}</div>
+                            </div>
+                            ${isActive ? `
+                            <button onclick="cancelConditionalOrder(${order.id})" style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; padding: 6px 14px; font-size: 0.7rem; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all 0.2s;">
+                                Cancel
+                            </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    <!-- Main Data Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; background: rgba(255,255,255,0.03);">
+                        <!-- Trigger -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Trigger</div>
+                            <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-teal);">${triggerDirection} $${triggerPrice.toFixed(2)}</div>
+                            <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 2px;">${triggerText}</div>
+                        </div>
+                        
+                        <!-- Current Price -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Current</div>
+                            <div class="current-price-value" style="font-size: 1.1rem; font-weight: 700; color: ${order.current_price ? (parseFloat(order.current_price) >= triggerPrice ? '#22c55e' : '#ef4444') : 'var(--text-muted)'};">${order.current_price ? '$' + parseFloat(order.current_price).toFixed(2) : '—'}</div>
+                            <div class="current-price-time" style="font-size: 0.6rem; color: var(--text-muted); margin-top: 2px;">${order.price_updated_at ? new Date(order.price_updated_at + (order.price_updated_at.includes('Z') || order.price_updated_at.includes('+') ? '' : 'Z')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true}) : ''}</div>
+                            ${(() => {
+                                const ds = (order.data_source_active || '').toLowerCase();
+                                const isStream = ds.includes('stream');
+                                const label = isStream ? 'STREAMING' : ds ? ds.replace(/_/g,' ').toUpperCase() : '';
+                                const color = isStream ? '#0f8' : '#f59e0b';
+                                const bg = isStream ? 'rgba(0,255,136,0.12)' : 'rgba(245,158,11,0.12)';
+                                const dot = isStream ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#0f8;margin-right:3px;box-shadow:0 0 4px #0f8;"></span>' : '';
+                                return label ? '<div class="current-price-source" style="margin-top:3px;"><span style="font-size:0.55rem;font-weight:600;padding:1px 6px;border-radius:3px;background:' + bg + ';color:' + color + ';">' + dot + label + '</span></div>' : '';
+                            })()}
+                        </div>
+                        
+                        <!-- Adjusted -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Adjusted</div>
+                            <div style="font-size: 1.1rem; font-weight: 700; color: ${currentOffset !== 0 ? '#f59e0b' : 'var(--text-primary)'};">$${adjustedPrice.toFixed(2)}</div>
+                            <div style="font-size: 0.65rem; color: ${currentOffset >= 0 ? '#22c55e' : '#ef4444'}; margin-top: 2px;">${offsetSign}${currentOffset.toFixed(1)}%</div>
+                        </div>
+                        
+                        <!-- Position -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Position</div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">${sizeDisplay || '—'}</div>
+                        </div>
+                        
+                        <!-- Stop Loss -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Stop Loss</div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: ${slDisplay ? '#ef4444' : 'var(--text-muted)'};">${slDisplay || '—'}</div>
+                        </div>
+                        
+                        <!-- Profit Target -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Profit Target</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; color: ${ptDisplay ? '#22c55e' : 'var(--text-muted)'}; line-height: 1.3;">${ptDisplay || '—'}</div>
+                        </div>
+                        
+                        <!-- Timeout -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Timeout</div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: ${timeRemaining === 'Timed out' || timeRemaining === 'Expired' ? '#ef4444' : timeRemaining && timeRemaining.includes('limit') ? '#6b7280' : timeRemaining ? '#f59e0b' : 'var(--text-muted)'};">${timeRemaining || 'No limit'}</div>
+                        </div>
+                        
+                        <!-- Slippage -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Slippage</div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: ${order.slippage_protection_enabled ? '#f59e0b' : 'var(--text-muted)'};">
+                                ${order.slippage_protection_enabled ? (order.slippage_max_pct ? order.slippage_max_pct + '%' : 'On') : 'Off'}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Adjust Offset Row (only for active orders) -->
+                    ${isActive ? `
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(90deg, rgba(34,197,94,0.08), rgba(59,130,246,0.08)); border-top: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Adjust Trigger Offset</span>
+                            <select id="offset-mode-${order.id}" onchange="toggleOffsetMode(${order.id}, this.value, ${order.original_signal_price || triggerPrice})"
+                                style="background: rgba(0,0,0,0.5); color: var(--text-primary); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 4px 8px; font-size: 0.7rem; cursor: pointer;">
+                                <option value="percent">%</option>
+                                <option value="dollar">$</option>
+                            </select>
+                            <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.3); padding: 4px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                                <button onclick="adjustOffset(${order.id}, 'down-big')" style="width: 32px; height: 32px; background: linear-gradient(135deg, #dc2626, #b91c1c); border: none; color: white; border-radius: 6px; font-size: 18px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(220,38,38,0.4);">−</button>
+                                <button onclick="adjustOffset(${order.id}, 'down-small')" style="width: 32px; height: 32px; background: linear-gradient(135deg, #f97316, #ea580c); border: none; color: white; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(249,115,22,0.4);">−.1</button>
+                                <div style="display: flex; align-items: center; background: rgba(0,0,0,0.5); border-radius: 6px; padding: 0 8px; border: 1px solid rgba(255,255,255,0.15); margin: 0 4px;">
+                                    <input type="number" id="offset-${order.id}" step="0.1" value="${currentOffset.toFixed(1)}" 
+                                        style="width: 50px; text-align: center; background: transparent; border: none; color: var(--text-primary); padding: 6px 0; font-size: 1rem; font-weight: 700;"
+                                        onchange="updateOffsetDisplay(${order.id}, this.value)"
+                                        data-base-price="${order.original_signal_price || triggerPrice}"
+                                        data-trigger-type="${order.trigger_type}">
+                                    <span id="offset-unit-${order.id}" style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500;">%</span>
+                                </div>
+                                <button onclick="adjustOffset(${order.id}, 'up-small')" style="width: 32px; height: 32px; background: linear-gradient(135deg, #22c55e, #16a34a); border: none; color: white; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(34,197,94,0.4);">+.1</button>
+                                <button onclick="adjustOffset(${order.id}, 'up-big')" style="width: 32px; height: 32px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 6px; font-size: 18px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(16,185,129,0.4);">+</button>
+                            </div>
+                            <button onclick="applyOffset(${order.id})" style="background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue)); border: none; color: white; padding: 8px 20px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 8px rgba(20,184,166,0.4); margin-left: 8px;">
+                                Apply
+                            </button>
+                        </div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">
+                            New trigger: <span style="color: var(--accent-teal); font-weight: 600;">$<span id="preview-${order.id}">${adjustedPrice.toFixed(2)}</span></span>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        html += '</div>';
+        container.innerHTML = html;
+        
+    } catch (err) {
+        console.error('[loadConditionalOrders] Error:', err);
+        container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Error loading conditional orders: ${err.message}</div>`;
+    }
+}
+
+function updateOffsetDisplay(orderId, value) {
+    const input = document.getElementById(`offset-${orderId}`);
+    if (input) {
+        const v = parseFloat(value);
+        input.value = v.toFixed(1);
+    }
+}
+
+function getOffsetMode(orderId) {
+    const modeSelect = document.getElementById(`offset-mode-${orderId}`);
+    return modeSelect ? modeSelect.value : 'percent';
+}
+
+function getOffsetDeltas(mode) {
+    if (mode === 'dollar') {
+        return { big: 1.00, small: 0.10 };
+    }
+    return { big: 1.0, small: 0.1 };
+}
+
+function toggleOffsetMode(orderId, mode, basePrice) {
+    const input = document.getElementById(`offset-${orderId}`);
+    const unit = document.getElementById(`offset-unit-${orderId}`);
+    if (!input || !unit) return;
+
+    unit.textContent = mode === 'dollar' ? '$' : '%';
+    input.value = '0';
+    input.step = mode === 'dollar' ? '0.10' : '0.1';
+    updateOffsetPreview(orderId, 0);
+}
+
+function adjustOffset(orderId, direction) {
+    const input = document.getElementById(`offset-${orderId}`);
+    if (!input) return;
+    
+    const mode = getOffsetMode(orderId);
+    const deltas = getOffsetDeltas(mode);
+    let delta = 0;
+    if (direction === 'down-big') delta = -deltas.big;
+    else if (direction === 'down-small') delta = -deltas.small;
+    else if (direction === 'up-small') delta = deltas.small;
+    else if (direction === 'up-big') delta = deltas.big;
+    
+    let currentValue = parseFloat(input.value) || 0;
+    let newValue = currentValue + delta;
+
+    if (mode === 'dollar') {
+        newValue = Math.max(-1000, Math.min(1000, newValue));
+        input.value = newValue.toFixed(2);
+    } else {
+        newValue = Math.max(-50, Math.min(50, newValue));
+        input.value = newValue.toFixed(1);
+    }
+    
+    updateOffsetPreview(orderId, newValue);
+}
+
+function updateOffsetPreview(orderId, offsetVal) {
+    const preview = document.getElementById(`preview-${orderId}`);
+    const input = document.getElementById(`offset-${orderId}`);
+    if (!preview || !input) return;
+    
+    const mode = getOffsetMode(orderId);
+    const basePrice = parseFloat(input.dataset.basePrice) || 0;
+    const triggerType = (input.dataset.triggerType || 'over').toLowerCase();
+    const isBullish = ['over', 'above', 'price_above', 'bto'].includes(triggerType);
+    
+    if (basePrice <= 0) return;
+    
+    let newPrice;
+    if (mode === 'dollar') {
+        newPrice = isBullish ? basePrice + offsetVal : basePrice - offsetVal;
+    } else {
+        newPrice = isBullish ? basePrice * (1 + offsetVal / 100) : basePrice * (1 - offsetVal / 100);
+    }
+    preview.textContent = newPrice.toFixed(2);
+}
+
+async function applyOffset(orderId) {
+    const input = document.getElementById(`offset-${orderId}`);
+    if (!input) return;
+    
+    const mode = getOffsetMode(orderId);
+    const offsetValue = parseFloat(input.value);
+    
+    const payload = { offset_mode: mode, offset_value: offsetValue };
+    if (mode === 'percent') {
+        payload.offset_percent = offsetValue;
+    }
+    
+    try {
+        const response = await fetch(`/api/conditional_orders/${orderId}/offset`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            loadConditionalOrders();
+        } else {
+            alert('Failed to update offset: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function cancelConditionalOrder(orderId) {
+    if (!confirm('Cancel this conditional order?')) return;
+    
+    try {
+        const response = await fetch(`/api/conditional_orders/${orderId}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: 'Cancelled by user via Dashboard' })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            loadConditionalOrders();
+        } else {
+            alert('Failed to cancel: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function purgeConditionalOrders() {
+    if (!confirm('Remove all executed, cancelled, and error conditional orders? Active orders will be kept.')) return;
+    
+    try {
+        const response = await fetch('/api/conditional_orders/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keep_active: true })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            alert(`Purged ${result.deleted_count} order(s)`);
+            loadConditionalOrders();
+        } else {
+            alert('Failed to purge: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+// ============ BOT TRADES TAB FUNCTIONS ============
+let botTradesDebounceTimer = null;
+let botFiltersInitialized = false;
+
+function formatBotTime(timestamp) {
+    if (!timestamp) return '-';
+    let ts = timestamp;
+    if (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
+        ts = ts.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(ts);
+    return d.toLocaleString('en-US', { 
+        month: 'short', day: 'numeric', 
+        hour: '2-digit', minute: '2-digit',
+        timeZone: 'America/New_York'
+    });
+}
+
+function formatBotFullTime(timestamp) {
+    if (!timestamp) return '-';
+    let ts = timestamp;
+    if (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
+        ts = ts.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(ts);
+    return d.toLocaleString('en-US', { 
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        timeZone: 'America/New_York'
+    });
+}
+
+async function loadBotTrades() {
+    console.log('[loadBotTrades] Starting...');
+    const container = document.getElementById('bot-trades-table');
+    if (!container) return;
+    
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: #8E8E93;">Loading bot trades...</div></div>';
+    
+    try {
+        const channelId = document.getElementById('bot-filter-channel')?.value || '';
+        const symbol = document.getElementById('bot-filter-symbol')?.value || '';
+        const status = document.getElementById('bot-filter-status')?.value || '';
+        const broker = document.getElementById('bot-filter-broker')?.value || '';
+        
+        let url = '/api/bot-trades?';
+        if (channelId) url += `channel_id=${channelId}&`;
+        if (symbol) url += `symbol=${encodeURIComponent(symbol)}&`;
+        if (status) url += `status=${status}&`;
+        if (broker) url += `broker=${broker}&`;
+        url = url.replace(/[&?]$/, '');
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.success) {
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: #ff3b30;">Error: ${data.error}</div>`;
+            return;
+        }
+        
+        if (!botFiltersInitialized && data.filters) {
+            initBotFilters(data.filters);
+            botFiltersInitialized = true;
+        }
+        
+        const positions = data.positions || [];
+        const summary = data.summary || {};
+        
+        updateBotSummary(summary);
+        
+        if (positions.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">📊</div>
+                    <div style="color: #8E8E93; font-size: 1rem;">No bot trades found</div>
+                    <div style="color: #636366; font-size: 0.875rem; margin-top: 8px;">Trades executed from Discord signals will appear here</div>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = renderBotPositionCards(positions);
+        
+    } catch (err) {
+        console.error('[loadBotTrades] Error:', err);
+        container.innerHTML = `<div style="text-align: center; padding: 40px; color: #ff3b30;">Failed to load bot trades: ${err.message}</div>`;
+    }
+}
+
+function updateBotSummary(summary) {
+    const totalPnl = summary.total_pnl || 0;
+    const avgReturn = summary.avg_return || 0;
+    const pnlColor = totalPnl >= 0 ? '#00ff88' : '#ff3b30';
+    const retColor = avgReturn >= 0 ? '#00ff88' : '#ff3b30';
+    
+    const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+    const es = (id, val, col) => { const e = document.getElementById(id); if (e) { e.textContent = val; e.style.color = col; } };
+    
+    el('botTotalPositions', summary.total_positions || 0);
+    el('botOpenCount', summary.open_positions || 0);
+    el('botClosedCount', summary.closed_positions || 0);
+    es('botTotalPNL', `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}`, pnlColor);
+    es('botWinRate', `${summary.win_rate || 0}% (${summary.wins || 0}W/${summary.losses || 0}L)`, '#ffaa00');
+    es('botAvgReturn', `${avgReturn >= 0 ? '+' : ''}${avgReturn.toFixed(1)}%`, retColor);
+}
+
+function initBotFilters(filters) {
+    const channelSelect = document.getElementById('bot-filter-channel');
+    if (channelSelect && filters.channels) {
+        channelSelect.innerHTML = '<option value="">All Channels</option>';
+        filters.channels.forEach(ch => {
+            const option = document.createElement('option');
+            option.value = ch.discord_channel_id;
+            option.textContent = `#${ch.name} (${ch.trade_count})`;
+            channelSelect.appendChild(option);
+        });
+    }
+    
+    const brokerSelect = document.getElementById('bot-filter-broker');
+    if (brokerSelect && filters.brokers) {
+        brokerSelect.innerHTML = '<option value="">All Brokers</option>';
+        filters.brokers.forEach(b => {
+            const option = document.createElement('option');
+            option.value = b;
+            option.textContent = b;
+            brokerSelect.appendChild(option);
+        });
+    }
+}
+
+function getBotBrokerBadge(broker) {
+    const colors = {
+        'WEBULL': 'linear-gradient(135deg, #ff6b00, #ff9500)',
+        'ALPACA_PAPER': 'linear-gradient(135deg, #00c853, #00e676)',
+        'ALPACA': 'linear-gradient(135deg, #00c853, #00e676)',
+        'ROBINHOOD': 'linear-gradient(135deg, #00c805, #21ce99)',
+        'SCHWAB': 'linear-gradient(135deg, #0070c9, #00a0dc)',
+        'IBKR': 'linear-gradient(135deg, #d41f2c, #ff4444)',
+        'IBKR_PAPER': 'linear-gradient(135deg, #d41f2c, #ff4444)',
+        'TASTYTRADE': 'linear-gradient(135deg, #e91e63, #ff5722)',
+        'TRADING212': 'linear-gradient(135deg, #0052FF, #00A3FF)',
+        'TRADING212_PAPER': 'linear-gradient(135deg, #0052FF, #00A3FF)',
+        'WEBULL_OFFICIAL': 'linear-gradient(135deg, #00a8ff, #0080ff)',
+        'WEBULL_OFFICIAL_LIVE': 'linear-gradient(135deg, #00a8ff, #0080ff)',
+        'WEBULL_OFFICIAL_PAPER': 'linear-gradient(135deg, #00a8ff, #0080ff)'
+    };
+    const bg = colors[broker] || 'linear-gradient(135deg, #555, #777)';
+    return `<span style="background: ${bg}; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${broker}</span>`;
+}
+
+function renderBotPositionCards(positions) {
+    return positions.map((pos, index) => {
+        const pnl = pos.total_pnl || 0;
+        const pnlPct = pos.avg_pnl_percent || 0;
+        const borderColor = pnl > 0 ? '#00ff88' : (pnl < 0 ? '#ff3b30' : '#3A3A3C');
+        const pnlColor = pnl > 0 ? '#00ff88' : (pnl < 0 ? '#ff3b30' : '#ffaa00');
+        const pnlSign = pnl >= 0 ? '+' : '';
+        
+        const statusStyles = {
+            'OPEN': 'background: #00d4ff; color: #000;',
+            'PARTIAL': 'background: #ffaa00; color: #000;',
+            'CLOSED': 'background: #00ff88; color: #000;',
+            'PENDING': 'background: #fbbf24; color: #000;'
+        };
+        const statusStyle = statusStyles[pos.status] || statusStyles['PENDING'];
+        
+        let closuresHtml = '';
+        if (pos.closures && pos.closures.length > 0) {
+            const closureRows = pos.closures.map((c, ci) => {
+                const cPnlColor = c.pnl > 0 ? '#00ff88' : (c.pnl < 0 ? '#ff3b30' : '#ffaa00');
+                const cSign = c.pnl >= 0 ? '+' : '';
+                const reason = c.exit_reason || 'SIGNAL';
+                const reasonColor = reason.includes('PT') ? '#30D158' : 
+                                   (reason.includes('STOP') || reason.includes('SL') ? '#FF453A' : 
+                                   (reason.includes('TRAIL') ? '#FF9F0A' : '#8E8E93'));
+                return `
+                    <div style="display: grid; grid-template-columns: 0.5fr 1fr 1fr 1fr 1fr 1fr; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #2C2C2E; align-items: center; font-size: 14px;">
+                        <div><span style="background: #ff9500; color: #000; padding: 4px 12px; border-radius: 6px; font-weight: 700; font-size: 12px;">STC #${ci + 1}</span></div>
+                        <div style="color: #fff;">Qty: <strong>${c.stc_qty}</strong></div>
+                        <div style="color: #fff;">Exit: <strong>$${c.exit_price.toFixed(2)}</strong></div>
+                        <div style="color: ${cPnlColor}; font-weight: 600;">${cSign}$${c.pnl.toFixed(2)}</div>
+                        <div style="color: ${cPnlColor}; font-weight: 600;">${cSign}${c.pnl_percent.toFixed(1)}%</div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="background: ${reasonColor}20; color: ${reasonColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${reason}</span>
+                            <span style="color: #636366; font-size: 12px;">${formatBotTime(c.closed_at)}</span>
+                        </div>
+                    </div>`;
+            }).join('');
+            
+            closuresHtml = `
+                <div style="padding: 12px 20px; background: #2C2C2E; font-weight: 700; font-size: 13px; color: #8E8E93; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;">
+                    <span>Closures (${pos.closures.length})</span>
+                    <span style="font-size: 11px; color: #636366; font-weight: 400;">Entry: $${pos.entry_price.toFixed(2)}</span>
+                </div>
+                ${closureRows}
+                <div style="background: #3A3A3C; padding: 12px 20px; display: grid; grid-template-columns: 0.5fr 1fr 1fr 1fr 1fr 1fr; gap: 12px; align-items: center; font-weight: 700; font-size: 14px; border-top: 2px solid #00d4ff;">
+                    <div style="color: #00d4ff;">TOTAL</div>
+                    <div></div>
+                    <div></div>
+                    <div style="color: ${pnlColor};">${pnlSign}$${pnl.toFixed(2)}</div>
+                    <div style="color: ${pnlColor};">${pnlSign}${pnlPct.toFixed(1)}%</div>
+                    <div style="color: #fff;">Closed: ${pos.total_closed_qty}/${pos.bto_qty}</div>
+                </div>`;
+        }
+        
+        let detailHtml = `
+            <div style="padding: 16px 20px; background: #2C2C2E; font-weight: 700; font-size: 13px; color: #8E8E93; text-transform: uppercase;">
+                Position Details
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 16px 20px; font-size: 14px;">
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Opened</div>
+                    <div style="color: #fff; font-weight: 600;">${formatBotFullTime(pos.open_time)}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Closed</div>
+                    <div style="color: #fff; font-weight: 600;">${pos.closed_time ? formatBotFullTime(pos.closed_time) : (pos.status === 'OPEN' ? 'Still Open' : '-')}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Duration</div>
+                    <div style="color: #fff; font-weight: 600;">${calcDuration(pos.open_time, pos.closed_time)}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Entry Price</div>
+                    <div style="color: #fff; font-weight: 600;">$${pos.entry_price.toFixed(2)}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Current / Exit</div>
+                    <div style="color: #fff; font-weight: 600;">$${pos.current_price.toFixed(2)}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Asset Type</div>
+                    <div style="color: #fff; font-weight: 600;">${pos.asset_type === 'option' ? 'Options' : 'Stock'}</div>
+                </div>
+                ${pos.stop_loss ? `<div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Stop Loss</div>
+                    <div style="color: #ff3b30; font-weight: 600;">$${parseFloat(pos.stop_loss).toFixed(2)}</div>
+                </div>` : ''}
+                ${pos.profit_target ? `<div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Profit Target</div>
+                    <div style="color: #00ff88; font-weight: 600;">$${parseFloat(pos.profit_target).toFixed(2)}</div>
+                </div>` : ''}
+                ${pos.latency ? `<div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Entry Speed</div>
+                    <div style="font-weight: 600; color: ${pos.latency.entry_total_ms <= 1500 ? '#10B981' : (pos.latency.entry_total_ms <= 3000 ? '#F59E0B' : '#EF4444')};">${pos.latency.entry_total_ms >= 1000 ? (pos.latency.entry_total_ms / 1000).toFixed(1) + 's' : pos.latency.entry_total_ms + 'ms'}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Parse / Broker</div>
+                    <div style="font-weight: 600; color: #fff;">${pos.latency.entry_parse_ms || 0}ms / ${pos.latency.entry_broker_ms || 0}ms</div>
+                </div>
+                ${pos.latency.exit_broker_ms ? `<div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Exit Speed</div>
+                    <div style="font-weight: 600; color: ${pos.latency.exit_broker_ms <= 1500 ? '#10B981' : (pos.latency.exit_broker_ms <= 3000 ? '#F59E0B' : '#EF4444')};">${pos.latency.exit_broker_ms >= 1000 ? (pos.latency.exit_broker_ms / 1000).toFixed(1) + 's' : pos.latency.exit_broker_ms + 'ms'}</div>
+                </div>` : ''}` : ''}
+            </div>`;
+        
+        return `
+            <div style="background: #2C2C2E; border-radius: 12px; margin-bottom: 12px; overflow: hidden; border-left: 4px solid ${borderColor}; transition: all 0.3s ease;">
+                <div onclick="toggleBotDetail(${index})" style="padding: 16px 20px; cursor: pointer; display: grid; grid-template-columns: 2fr 0.8fr 1fr 0.8fr 1.2fr 1fr 0.8fr auto; gap: 12px; align-items: center; transition: background 0.2s;" onmouseover="this.style.background='#3A3A3C'" onmouseout="this.style.background='transparent'">
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Position</div>
+                        <div style="font-size: 15px; font-weight: 600; color: #fff;">${pos.description}</div>
+                        <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+                            <span style="background: rgba(99, 102, 241, 0.2); color: #818cf8; padding: 3px 8px; border-radius: 5px; font-weight: 600; font-size: 11px;">#${pos.channel_name}</span>
+                            ${getBotBrokerBadge(pos.broker)}
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Qty</div>
+                        <div style="font-size: 15px; font-weight: 600; color: #fff;">${pos.bto_qty}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Entry</div>
+                        <div style="font-size: 15px; font-weight: 600; color: #fff;">$${pos.entry_price.toFixed(2)}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Closed</div>
+                        <div style="font-size: 15px; font-weight: 600; color: #fff;">${pos.total_closed_qty} / ${pos.bto_qty}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">P&L</div>
+                        <div style="font-size: 15px; font-weight: 600; color: ${pnlColor};">${pnlSign}$${pnl.toFixed(2)}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Return</div>
+                        <div style="font-size: 15px; font-weight: 600; color: ${pnlColor};">${pnlSign}${pnlPct.toFixed(1)}%</div>
+                    </div>
+                    <div>
+                        <span style="${statusStyle} padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 11px; text-transform: uppercase;">${pos.status}</span>
+                    </div>
+                    <div>
+                        <span id="bot-expand-${index}" style="font-size: 18px; color: #8E8E93; transition: transform 0.3s; display: inline-block;">&#9654;</span>
+                    </div>
+                </div>
+                
+                <div id="bot-detail-${index}" style="display: none; background: #1C1C1E; border-top: 1px solid #3A3A3C;">
+                    ${detailHtml}
+                    ${closuresHtml}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function calcDuration(openTime, closeTime) {
+    if (!openTime) return '-';
+    let t1 = openTime;
+    if (!t1.endsWith('Z') && !t1.includes('+') && !t1.includes('-', 10)) t1 = t1.replace(' ', 'T') + 'Z';
+    const start = new Date(t1);
+    
+    let end;
+    if (closeTime) {
+        let t2 = closeTime;
+        if (!t2.endsWith('Z') && !t2.includes('+') && !t2.includes('-', 10)) t2 = t2.replace(' ', 'T') + 'Z';
+        end = new Date(t2);
+    } else {
+        end = new Date();
+    }
+    
+    const diffMs = end - start;
+    const mins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(mins / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${mins % 60}m`;
+    return `${mins}m`;
+}
+
+function toggleBotDetail(index) {
+    const detail = document.getElementById(`bot-detail-${index}`);
+    const icon = document.getElementById(`bot-expand-${index}`);
+    if (!detail) return;
+    
+    const isExpanded = detail.style.display !== 'none';
+    detail.style.display = isExpanded ? 'none' : 'block';
+    if (icon) icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
+function debounceBotSearch() {
+    if (botTradesDebounceTimer) clearTimeout(botTradesDebounceTimer);
+    botTradesDebounceTimer = setTimeout(() => {
+        loadBotTrades();
+    }, 400);
+}
+
+function resetBotFilters() {
+    document.getElementById('bot-filter-channel').value = '';
+    document.getElementById('bot-filter-symbol').value = '';
+    document.getElementById('bot-filter-status').value = '';
+    document.getElementById('bot-filter-broker').value = '';
+    loadBotTrades();
+}
+
+// Multi-broker selector rendering - delegates to region-based render
+function renderMultiBrokerSelector() {
+    renderRegionBrokers();
+}
+
+function selectBroker(brokerKey) {
+    currentBroker = brokerKey;
+    _currentPositionIds = [];
+    _clearElCache();
+    _isFirstLoad = true;
+    _streamingIndicator = null;
+    document.getElementById('broker-filter').value = brokerKey;
+    BrokerStore.setSelected(brokerKey);
+    renderMultiBrokerSelector();
+    loadTrades();
+    loadStats();
+}
+
+// Load initial data with startup delay
+// ========== TRADING PAUSE/RESUME ==========
+async function loadTradingPauseState() {
+    try {
+        const resp = await fetch('/api/trading/status');
+        const data = await resp.json();
+        updatePauseUI(data.paused, data.paused_at);
+    } catch(e) { console.error('Error loading trading pause state:', e); }
+}
+
+function updatePauseUI(paused, pausedAt) {
+    const bar = document.getElementById('trading-pause-bar');
+    const icon = document.getElementById('trading-pause-icon');
+    const label = document.getElementById('trading-pause-label');
+    const detail = document.getElementById('trading-pause-detail');
+    const btn = document.getElementById('trading-pause-btn');
+    if (!bar) return;
+
+    if (paused) {
+        bar.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.06))';
+        bar.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+        icon.textContent = '⏸️';
+        label.style.color = '#ef4444';
+        label.textContent = 'Trading Paused';
+        const since = pausedAt ? ' since ' + new Date(pausedAt).toLocaleTimeString() : '';
+        detail.textContent = 'New signals will NOT be executed' + since;
+        btn.textContent = 'RESUME TRADING';
+        btn.style.background = 'linear-gradient(135deg, #22c55e, #16a34a)';
+        btn.style.boxShadow = '0 2px 8px rgba(34, 197, 94, 0.3)';
+    } else {
+        bar.style.background = 'linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.04))';
+        bar.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+        icon.textContent = '▶️';
+        label.style.color = '#22c55e';
+        label.textContent = 'Trading Active';
+        detail.textContent = 'Bot is executing signals from Discord channels';
+        btn.textContent = 'PAUSE TRADING';
+        btn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+        btn.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
+    }
+}
+
+async function toggleTradingPause() {
+    const btn = document.getElementById('trading-pause-btn');
+    const isPaused = btn.textContent.includes('RESUME');
+    if (!isPaused && !confirm('Pause all trading? Existing positions and risk monitoring will continue — only NEW signal execution will stop.')) return;
+
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    try {
+        const resp = await fetch('/api/trading/pause', { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+            updatePauseUI(data.paused, data.paused ? new Date().toISOString() : null);
+        }
+    } catch(e) { console.error('Error toggling pause:', e); }
+    btn.disabled = false;
+    btn.style.opacity = '1';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadTradingPauseState();
+
+    // Initialize region selector from saved preference
+    const regionSelector = document.getElementById('region-selector');
+    if (regionSelector && currentRegion) {
+        regionSelector.value = currentRegion;
+        switchRegion(currentRegion);
+    }
+    
+    // Check for disconnected brokers from initial server-rendered data
+    checkInitialBrokerStatus();
+    
+    // Initialize BrokerStore and sync with selector
+    const brokerFilter = document.getElementById('broker-filter');
+    
+    if (typeof BrokerStore !== 'undefined') {
+        const _brokerToDropdown = {
+            'WEBULL': 'Webull',
+            'ALPACA': 'ALPACA',
+            'ALPACA_PAPER': 'ALPACA_PAPER',
+            'IBKR': 'IBKR',
+            'IBKR_PAPER': 'IBKR_PAPER',
+            'TASTYTRADE': 'TASTYTRADE_LIVE',
+            'TASTYTRADE_LIVE': 'TASTYTRADE_LIVE',
+            'TASTYTRADE_PAPER': 'TASTYTRADE_PAPER',
+            'SCHWAB': 'SCHWAB',
+            'ROBINHOOD': 'ROBINHOOD',
+            'QUESTRADE': 'QUESTRADE',
+            'TRADING212': 'TRADING212',
+            'TRADING212_PAPER': 'TRADING212_PAPER'
+        };
+        function toDropdownValue(apiName) {
+            return _brokerToDropdown[apiName] || apiName;
+        }
+        const savedBroker = BrokerStore.getSelected();
+        if (savedBroker) {
+            const ddVal = toDropdownValue(savedBroker);
+            currentBroker = ddVal;
+            if (brokerFilter) brokerFilter.value = ddVal;
+        }
+        let _autoSelectedBroker = !!savedBroker;
+        BrokerStore.onUpdate((event) => {
+            renderMultiBrokerSelector();
+            renderRegionBrokers();
+            if (!_autoSelectedBroker) {
+                const allBrokers = BrokerStore.getState ? BrokerStore.getState().brokers : [];
+                const connected = BrokerStore.getConnectedBrokers();
+                let pick = null;
+                if (connected && connected.length > 0) {
+                    const live = connected.filter(b => !b.is_paper);
+                    pick = live.length > 0 ? live[0] : connected[0];
+                } else if (allBrokers.length > 0) {
+                    const liveCfg = allBrokers.filter(b => !b.is_paper);
+                    pick = liveCfg.length > 0 ? liveCfg[0] : allBrokers[0];
+                }
+                if (pick) {
+                    const ddVal = toDropdownValue(pick.broker_name);
+                    currentBroker = ddVal;
+                    if (brokerFilter) brokerFilter.value = ddVal;
+                    BrokerStore.setSelected(ddVal);
+                    _autoSelectedBroker = true;
+                    loadStats();
+                }
+            }
+        });
+        BrokerStore.init();
+        renderMultiBrokerSelector();
+    }
+    
+    if (!currentBroker && brokerFilter && brokerFilter.value) {
+        currentBroker = brokerFilter.value;
+    }
+    
+    setTimeout(() => {
+        console.log('Loading trades and stats...');
+        loadTrades();
+        loadStats();
+        
+        setInterval(() => {
+            loadTrades();
+            loadStats();
+        }, 10000);
+
+        setInterval(streamingQuotePoll, 1000);
+    }, 3000);
+});
+
+let _lastStreamingStatus = {};
+let _streamingIndicator = null;
+
+async function streamingQuotePoll() {
+    if (currentTab !== 'live') return;
+    try {
+        const resp = await fetch('/api/streaming/quotes');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const quotes = data.quotes || {};
+        const status = data.streaming_status || {};
+
+        if (!_streamingIndicator) _streamingIndicator = document.getElementById('streaming-indicator');
+        if (_streamingIndicator) {
+            const broker = (currentBroker || '').toUpperCase();
+            const showWebull = status.webull && (!broker || broker.includes('WEBULL'));
+            const showSchwab = status.schwab && (!broker || broker === 'SCHWAB');
+            const showIbkr = status.ibkr && (!broker || broker.includes('IBKR'));
+            const anyRelevant = showWebull || showSchwab || showIbkr;
+            _streamingIndicator.style.display = anyRelevant ? 'inline' : 'none';
+            if (anyRelevant) {
+                if (broker) {
+                    const label = broker.replace('_PAPER', ' Paper').replace('_', ' ');
+                    _streamingIndicator.textContent = '\u26A1 LIVE \u2022 ' + label;
+                } else {
+                    const parts = [];
+                    if (showWebull) parts.push('Webull');
+                    if (showSchwab) parts.push('Schwab');
+                    if (showIbkr) parts.push('IBKR');
+                    _streamingIndicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
+                }
+            }
+        }
+
+        requestAnimationFrame(() => {
+            for (const [pid, q] of Object.entries(quotes)) {
+                const priceEl = _cacheEl('current-price', pid);
+                if (!priceEl) continue;
+
+                const last = parseFloat(q.last) || 0;
+                if (last <= 0) continue;
+
+                const isStream = q.source === 'stream';
+                const pnl = parseFloat(q.unrealized_pnl) || 0;
+                const pnlPct = parseFloat(q.pnl_pct) || 0;
+                const pnlSign = pnl >= 0 ? '+' : '';
+                const color = pnl >= 0 ? '#22c55e' : '#ef4444';
+
+                const newPrice = last.toFixed(2);
+                const oldPrice = priceEl.textContent.replace(/[^0-9.]/g, '');
+                if (oldPrice !== newPrice) {
+                    priceEl.style.color = color;
+                    priceEl.textContent = '$' + newPrice;
+                    if (isStream) {
+                        priceEl.style.textShadow = `0 0 6px ${color}60`;
+                        setTimeout(() => { priceEl.style.textShadow = 'none'; }, 800);
+                    }
+                }
+
+                const pnlEl = _cacheEl('pnl-value', pid);
+                if (pnlEl) {
+                    pnlEl.textContent = pnlSign + '$' + Math.abs(pnl).toFixed(2);
+                    pnlEl.className = 'pnl-value ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                }
+                const pctEl = _cacheEl('pnl-pct', pid);
+                if (pctEl) {
+                    pctEl.textContent = pnlSign + pnlPct.toFixed(1) + '%';
+                    pctEl.className = 'pnl-percent ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                }
+
+                const card = document.getElementById('position-' + pid);
+                if (card) {
+                    card.classList.remove('profit', 'loss');
+                    card.classList.add(pnl >= 0 ? 'profit' : 'loss');
+                }
+            }
+        });
+
+        _lastStreamingStatus = status;
+    } catch (e) {
+    }
+}
+
+let _pnlDismissed = {};
+
+async function unlockDailyPnl(brokerName) {
+    if (!confirm('Unlock ' + brokerName + ' for trading? The lock may re-engage if the limit is still exceeded.')) return;
+    try {
+        const resp = await fetch('/api/daily-pnl-unlock', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({broker_name: brokerName})
+        });
+        const data = await resp.json();
+        if (data.success) {
+            delete _pnlDismissed[brokerName];
+            pollDailyPnlStatus();
+        } else {
+            alert(data.message || 'Failed to unlock');
+        }
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function pollDailyPnlStatus() {
+    try {
+        const resp = await fetch('/api/daily-pnl-status');
+        const data = await resp.json();
+        const container = document.getElementById('daily-pnl-banners');
+        if (!container) return;
+
+        if (!data.enabled || !data.brokers || data.brokers.length === 0) {
+            container.style.display = 'none';
+            container.innerHTML = '';
+            return;
+        }
+
+        const banners = [];
+        const limits = data.limits || {};
+        
+        for (const b of data.brokers) {
+            const key = b.broker_name;
+            if (_pnlDismissed[key] && !b.locked) {
+                delete _pnlDismissed[key];
+            }
+            if (_pnlDismissed[key]) continue;
+
+            const pnl = b.daily_pnl || 0;
+            const pnlPct = b.daily_pnl_pct || 0;
+            const pnlSign = pnl >= 0 ? '+' : '';
+            const pnlStr = pnlSign + '$' + Math.abs(pnl).toFixed(2);
+            const pctStr = pnlSign + pnlPct.toFixed(1) + '%';
+            
+            if (b.locked) {
+                const isProfit = b.lock_type === 'profit';
+                const isTrades = b.lock_type === 'trades';
+                let gradient, border, shadow, titleColor, msgColor, icon, title, msg, limitInfo;
+                if (isTrades) {
+                    gradient = 'linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(249, 115, 22, 0.06))';
+                    border = 'rgba(249, 115, 22, 0.4)';
+                    shadow = 'rgba(249, 115, 22, 0.15)';
+                    titleColor = '#f97316';
+                    msgColor = '#fdba74';
+                    icon = '🔢';
+                    title = key + ' — Daily Trade Limit Reached';
+                    const tradeCount = b.daily_trade_count || 0;
+                    const tradeLimit = b.daily_trade_limit || 0;
+                    msg = 'Trading paused — ' + tradeCount + '/' + tradeLimit + ' trades used today (' + pnlStr + ' / ' + pctStr + ')';
+                    limitInfo = ' | Limit: ' + tradeLimit + ' trades/day';
+                } else if (isProfit) {
+                    gradient = 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.06))';
+                    border = 'rgba(16, 185, 129, 0.4)';
+                    shadow = 'rgba(16, 185, 129, 0.15)';
+                    titleColor = '#10b981';
+                    msgColor = '#6ee7b7';
+                    icon = '✅';
+                    title = key + ' — Daily Profit Target Reached';
+                    msg = 'Trading paused — gains locked in (' + pnlStr + ' / ' + pctStr + ')';
+                    limitInfo = (limits.profit_dollar > 0 ? ' | Target: $' + limits.profit_dollar.toFixed(0) : '') + (limits.profit_pct > 0 ? ' / ' + limits.profit_pct.toFixed(1) + '%' : '');
+                } else {
+                    gradient = 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.06))';
+                    border = 'rgba(239, 68, 68, 0.4)';
+                    shadow = 'rgba(239, 68, 68, 0.15)';
+                    titleColor = '#ef4444';
+                    msgColor = '#fca5a5';
+                    icon = '⛔';
+                    title = key + ' — Daily Loss Limit Reached';
+                    msg = 'Trading paused until next session (' + pnlStr + ' / ' + pctStr + ')';
+                    limitInfo = (limits.loss_dollar > 0 ? ' | Limit: $' + limits.loss_dollar.toFixed(0) : '') + (limits.loss_pct > 0 ? ' / ' + limits.loss_pct.toFixed(1) + '%' : '');
+                }
+                
+                banners.push(`
+                    <div style="padding: 14px 18px; background: ${gradient}; border: 1px solid ${border}; 
+                        border-radius: 12px; box-shadow: 0 4px 12px ${shadow}; animation: pnlBannerSlide 0.4s ease-out;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 1.4rem;">${icon}</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: ${titleColor}; font-size: 0.95rem; margin-bottom: 3px; letter-spacing: 0.3px;">
+                                    ${title}
+                                </div>
+                                <div style="color: ${msgColor}; font-size: 0.825rem;">
+                                    ${msg}${limitInfo}
+                                </div>
+                            </div>
+                            <div style="text-align: right; min-width: 90px;">
+                                <div style="font-size: 1.1rem; font-weight: 700; color: ${titleColor}; font-family: 'JetBrains Mono', monospace;">
+                                    ${pnlStr}
+                                </div>
+                                <div style="font-size: 0.75rem; color: ${msgColor}; opacity: 0.8;">
+                                    ${pctStr}
+                                </div>
+                            </div>
+                            <button onclick="unlockDailyPnl('${key}')" 
+                                style="background: rgba(255,255,255,0.1); border: 1px solid ${border}; color: ${titleColor}; cursor: pointer; font-size: 0.75rem; padding: 4px 10px; border-radius: 6px; font-weight: 600;"
+                                title="Unlock this broker for trading">🔓 Unlock</button>
+                            <button onclick="_pnlDismissed['${key}']=true; pollDailyPnlStatus();" 
+                                style="background: none; border: none; color: ${titleColor}; cursor: pointer; font-size: 1.2rem; padding: 4px; opacity: 0.6;"
+                                title="Dismiss (will re-appear if still locked)">×</button>
+                        </div>
+                    </div>
+                `);
+            } else if (b.warning && b.warning !== 'none') {
+                const isWarnProfit = b.warning === 'profit';
+                const warnTitle = isWarnProfit 
+                    ? key + ' — Approaching Profit Target'
+                    : key + ' — Approaching Loss Limit';
+                const warnMsg = isWarnProfit
+                    ? 'P&L: ' + pnlStr + ' / ' + pctStr + ' — nearing profit target'
+                    : 'P&L: ' + pnlStr + ' / ' + pctStr + ' — nearing loss limit';
+                    
+                banners.push(`
+                    <div style="padding: 12px 16px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.05)); 
+                        border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 10px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.2rem;">⚠️</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #f59e0b; font-size: 0.875rem; margin-bottom: 2px;">
+                                    ${warnTitle}
+                                </div>
+                                <div style="color: #fcd34d; font-size: 0.8rem; opacity: 0.85;">
+                                    ${warnMsg}
+                                </div>
+                            </div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: #f59e0b; font-family: 'JetBrains Mono', monospace;">
+                                ${pnlStr}
+                            </div>
+                        </div>
+                    </div>
+                `);
+            }
+        }
+        
+        if (banners.length > 0) {
+            container.innerHTML = banners.join('');
+            container.style.display = 'flex';
+        } else {
+            container.style.display = 'none';
+            container.innerHTML = '';
+        }
+    } catch (e) {
+    }
+}
+
+if (!document.getElementById('pnl-banner-keyframes')) {
+    const style = document.createElement('style');
+    style.id = 'pnl-banner-keyframes';
+    style.textContent = `
+        @keyframes pnlBannerSlide {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+pollDailyPnlStatus();
+setInterval(pollDailyPnlStatus, 15000);
+
+let _unprotectedDismissed = false;
+let _unprotectedExpanded = false;
+
+function dismissUnprotectedBanner() {
+    _unprotectedDismissed = true;
+    const banner = document.getElementById('unprotected-trades-banner');
+    if (banner) {
+        banner.style.transition = 'opacity 0.3s, transform 0.3s';
+        banner.style.opacity = '0';
+        banner.style.transform = 'translateY(-8px)';
+        setTimeout(() => { banner.style.display = 'none'; }, 300);
+    }
+}
+
+function toggleUnprotectedDetails() {
+    _unprotectedExpanded = !_unprotectedExpanded;
+    const details = document.getElementById('unprotected-details');
+    const icon = document.getElementById('unprotected-expand-icon');
+    if (details) {
+        details.style.display = _unprotectedExpanded ? 'block' : 'none';
+    }
+    if (icon) {
+        icon.style.transform = _unprotectedExpanded ? 'rotate(180deg)' : 'rotate(0)';
+    }
+}
+
+function _escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function renderUnprotectedTradeRow(t) {
+    const missingTags = t.missing.map(m => {
+        if (m === 'risk_disabled') return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;font-size:0.7rem;font-weight:700;background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);">RISK OFF</span>';
+        if (m === 'stop_loss') return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;font-size:0.7rem;font-weight:700;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.25);">NO STOP LOSS</span>';
+        if (m === 'profit_target') return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;font-size:0.7rem;font-weight:700;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.25);">NO PROFIT TARGET</span>';
+        return '';
+    }).join(' ');
+
+    const isOption = t.asset_type === 'option';
+    let symbolDisplay = _escHtml(String(t.symbol || ''));
+    if (isOption && t.strike) {
+        symbolDisplay += ` $${_escHtml(String(t.strike))} ${_escHtml((t.call_put || '').toUpperCase())}`;
+        if (t.expiry) symbolDisplay += ` ${_escHtml(String(t.expiry))}`;
+    }
+
+    const safeBroker = _escHtml(String(t.broker || ''));
+    const safeChannel = _escHtml(String(t.channel_name || ''));
+    const statusColor = t.status === 'OPEN' ? '#f87171' : '#fbbf24';
+    const statusLabel = t.status === 'OPEN' ? 'LIVE' : 'PENDING';
+
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;
+        border-bottom:1px solid rgba(239,68,68,0.08);transition:background 0.15s;"
+        onmouseenter="this.style.background='rgba(239,68,68,0.06)'" onmouseleave="this.style.background='transparent'">
+        <div style="display:flex;align-items:center;gap:14px;flex:1;min-width:0;">
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-weight:700;font-size:0.88rem;color:#e2e8f0;letter-spacing:0.3px;">${symbolDisplay}</span>
+                    <span style="font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:4px;
+                        background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;">${statusLabel}</span>
+                </div>
+                <div style="font-size:0.72rem;color:#94a3b8;">
+                    ${safeBroker} &middot; ${safeChannel} &middot; ${t.quantity} ${isOption ? 'contracts' : 'shares'} @ $${(t.executed_price || 0).toFixed(2)}
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            ${missingTags}
+        </div>
+    </div>`;
+}
+
+async function checkUnprotectedTrades() {
+    if (_unprotectedDismissed) return;
+    try {
+        const resp = await fetch('/api/unprotected-trades');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const banner = document.getElementById('unprotected-trades-banner');
+        const countBadge = document.getElementById('unprotected-count-badge');
+        const subtitle = document.getElementById('unprotected-subtitle');
+        const listContainer = document.getElementById('unprotected-trades-list');
+        if (!banner) return;
+
+        if (data.count === 0) {
+            banner.style.display = 'none';
+            return;
+        }
+
+        const trades = data.unprotected;
+        const riskOffCount = trades.filter(t => t.missing.includes('risk_disabled')).length;
+        const noSlCount = trades.filter(t => t.missing.includes('stop_loss')).length;
+        const noPtCount = trades.filter(t => t.missing.includes('profit_target')).length;
+        const openCount = trades.filter(t => t.status === 'OPEN').length;
+        const pendingCount = trades.filter(t => t.status === 'PENDING').length;
+
+        countBadge.textContent = data.count;
+
+        const parts = [];
+        if (openCount) parts.push(`${openCount} live`);
+        if (pendingCount) parts.push(`${pendingCount} pending`);
+        let subtitleText = parts.join(', ') + ` position${data.count > 1 ? 's' : ''} without full risk protection`;
+        const details = [];
+        if (riskOffCount) details.push(`${riskOffCount} risk disabled`);
+        if (noSlCount) details.push(`${noSlCount} missing SL`);
+        if (noPtCount) details.push(`${noPtCount} missing PT`);
+        if (details.length) subtitleText += ' \u2014 ' + details.join(', ');
+        subtitle.textContent = subtitleText;
+
+        listContainer.innerHTML = trades.map(renderUnprotectedTradeRow).join('');
+
+        banner.style.display = 'block';
+        banner.style.opacity = '1';
+        banner.style.transform = 'translateY(0)';
+
+    } catch (err) {
+        console.error('[Unprotected] Check failed:', err);
+    }
+}
+
+checkUnprotectedTrades();
+setInterval(checkUnprotectedTrades, 30000);
+</script>
+{% endblock %}

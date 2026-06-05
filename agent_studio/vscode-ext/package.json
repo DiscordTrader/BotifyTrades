@@ -1,0 +1,47 @@
+{
+    "name": "agent-studio",
+    "displayName": "Agent Studio",
+    "description": "AI-Powered Software Development Pipeline for BotifyTrades",
+    "version": "1.0.0",
+    "publisher": "botifytrades",
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": ["Other"],
+    "activationEvents": [],
+    "main": "./extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "agentStudio.open",
+                "title": "Open Dashboard",
+                "category": "Agent Studio"
+            },
+            {
+                "command": "agentStudio.startServer",
+                "title": "Start Server",
+                "category": "Agent Studio"
+            },
+            {
+                "command": "agentStudio.stopServer",
+                "title": "Stop Server",
+                "category": "Agent Studio"
+            }
+        ],
+        "configuration": {
+            "title": "Agent Studio",
+            "properties": {
+                "agentStudio.port": {
+                    "type": "number",
+                    "default": 5100,
+                    "description": "Port for the Agent Studio backend server"
+                },
+                "agentStudio.pythonPath": {
+                    "type": "string",
+                    "default": "python",
+                    "description": "Path to Python executable"
+                }
+            }
+        }
+    }
+}

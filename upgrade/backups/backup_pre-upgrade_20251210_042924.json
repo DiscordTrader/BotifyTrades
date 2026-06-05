@@ -1,0 +1,8 @@
+{
+  "created_at": "2025-12-10T04:29:24.085968",
+  "db_path": "bot_data.db",
+  "backup_path": "upgrade/backups/backup_pre-upgrade_20251210_042924.db",
+  "tag": "pre-upgrade",
+  "version": "2.1.26",
+  "size_bytes": 667648
+}

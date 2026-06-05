@@ -1,0 +1,201 @@
+/* 
+ * Channel Source Badge Styles
+ * Professional Webull/Thinkorswim-inspired design
+ */
+
+/* Base badge styles */
+.channel-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: default;
+    transition: all 0.2s ease;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.channel-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.channel-badge__icon {
+    font-size: 11px;
+    opacity: 0.9;
+    flex-shrink: 0;
+}
+
+.channel-badge__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Execute channel - Blue glow */
+.channel-badge--blue {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.25) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    color: #93c5fd;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.channel-badge--blue:hover {
+    border-color: rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: #bfdbfe;
+}
+
+/* Track-only channel - Purple */
+.channel-badge--purple {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(124, 58, 237, 0.25) 100%);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    color: #c4b5fd;
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.channel-badge--purple:hover {
+    border-color: rgba(139, 92, 246, 0.6);
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: #ddd6fe;
+}
+
+/* Risk exit - Orange/amber */
+.channel-badge--orange {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.25) 100%);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #fcd34d;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.channel-badge--orange:hover {
+    border-color: rgba(245, 158, 11, 0.6);
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: #fde68a;
+}
+
+/* Channel source - Green */
+.channel-badge--green {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #6ee7b7;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.channel-badge--green:hover {
+    border-color: rgba(16, 185, 129, 0.6);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: #a7f3d0;
+}
+
+/* Manual/GUI - Gray */
+.channel-badge--gray {
+    background: linear-gradient(135deg, rgba(75, 85, 99, 0.2) 0%, rgba(55, 65, 81, 0.3) 100%);
+    border: 1px solid rgba(107, 114, 128, 0.4);
+    color: #9ca3af;
+    box-shadow: 0 0 8px rgba(75, 85, 99, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.channel-badge--gray:hover {
+    border-color: rgba(107, 114, 128, 0.6);
+    box-shadow: 0 0 15px rgba(75, 85, 99, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    color: #d1d5db;
+}
+
+/* Manual Trade (auto-detected from broker) - Teal */
+.channel-badge--teal {
+    background: linear-gradient(135deg, rgba(20, 184, 166, 0.15) 0%, rgba(13, 148, 136, 0.25) 100%);
+    border: 1px solid rgba(20, 184, 166, 0.4);
+    color: #5eead4;
+    box-shadow: 0 0 12px rgba(20, 184, 166, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.channel-badge--teal:hover {
+    border-color: rgba(20, 184, 166, 0.6);
+    box-shadow: 0 0 20px rgba(20, 184, 166, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: #99f6e4;
+}
+
+/* Unknown/Pre-tracking - Dark */
+.channel-badge--dark {
+    background: linear-gradient(135deg, rgba(31, 41, 55, 0.5) 0%, rgba(17, 24, 39, 0.7) 100%);
+    border: 1px solid rgba(55, 65, 81, 0.5);
+    color: #6b7280;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.channel-badge--dark:hover {
+    border-color: rgba(75, 85, 99, 0.6);
+    color: #9ca3af;
+}
+
+/* Compact variant for tight spaces */
+.channel-badge--compact {
+    padding: 2px 6px;
+    font-size: 10px;
+    gap: 3px;
+    max-width: 120px;
+}
+
+.channel-badge--compact .channel-badge__icon {
+    font-size: 9px;
+}
+
+/* Source column header styling */
+th.source-column,
+td.source-column {
+    min-width: 140px;
+    max-width: 180px;
+}
+
+/* Source cell - center the badge */
+td.source-column {
+    text-align: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .channel-badge {
+        max-width: 100px;
+        padding: 3px 6px;
+        font-size: 10px;
+    }
+    
+    .channel-badge__icon {
+        display: none;
+    }
+}
+
+/* Legend component for explaining badge colors */
+.channel-badge-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(17, 24, 39, 0.5);
+    border-radius: 8px;
+    border: 1px solid rgba(55, 65, 81, 0.5);
+    margin-bottom: 16px;
+}
+
+.channel-badge-legend__title {
+    width: 100%;
+    font-size: 11px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.channel-badge-legend__item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #9ca3af;
+}

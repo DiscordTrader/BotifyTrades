@@ -1,0 +1,674 @@
+{% extends "base.html" %}
+
+{% block title %}Leaderboard - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+
+
+<!-- Top Performer Banner -->
+<div class="alert info" style="margin-bottom: 32px;">
+    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+        <div style="font-size: 2.5rem;">👑</div>
+        <div>
+            <div style="font-weight: 700; font-size: 1.125rem; margin-bottom: 4px;">
+                Top Performer: <span id="top-performer-name">Loading...</span>
+                <span id="top-performer-score" style="margin-left: 12px; background: linear-gradient(135deg, #00d4ff, #7c3aed); padding: 2px 10px; border-radius: 12px; font-size: 0.875rem;"></span>
+            </div>
+            <div style="font-size: 0.9375rem; opacity: 0.8;">
+                <span id="top-performer-stats">Win Rate: 0% • Total P/L: $0.00 • Trades: 0</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Analytics Overview -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label" id="stat-label-1">Total Channels</div>
+        <div class="stat-value info" id="stat-value-1">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Total Trades</div>
+        <div class="stat-value" id="stat-value-2">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Avg Win Rate</div>
+        <div class="stat-value success" id="stat-value-3">0%</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Total P/L</div>
+        <div class="stat-value" id="stat-value-4">$0.00</div>
+    </div>
+</div>
+
+<!-- Leaderboard Section -->
+<div class="table-container">
+    <div class="table-header">
+        <!-- Main View Tabs (Channel vs User) -->
+        <div class="tabs" style="width: auto; margin: 0;">
+            <button class="tab active" onclick="switchView('channels', event)">📊 Channels</button>
+            <button class="tab" onclick="switchView('users', event)">👥 Users</button>
+        </div>
+        
+        <!-- Time Period Filter -->
+        <div class="tabs" style="width: auto; margin: 0; flex-wrap: wrap; gap: 4px;">
+            <button class="tab period-tab active" onclick="filterPeriod('all', event)">All Time</button>
+            <button class="tab period-tab" onclick="filterPeriod('year', event)">Yearly</button>
+            <button class="tab period-tab" onclick="filterPeriod('month', event)">30 Days</button>
+            <button class="tab period-tab" onclick="filterPeriod('week', event)">7 Days</button>
+            <button class="tab period-tab" onclick="filterPeriod('today', event)">Today</button>
+            <button class="tab period-tab" onclick="showCustomDatePicker(event)">📅 Custom</button>
+        </div>
+    </div>
+    
+    <!-- Custom Date Range Picker -->
+    <div id="custom-date-picker" style="display: none; padding: 16px; background: var(--card-bg); border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border-color);">
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+            <div>
+                <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px;">Start Date (Close Date)</label>
+                <input type="date" id="start-date" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary);">
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px;">End Date (Close Date)</label>
+                <input type="date" id="end-date" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary);">
+            </div>
+            <button onclick="applyCustomDateRange()" style="margin-top: 18px;" class="btn btn-primary">Apply Filter</button>
+            <button onclick="hideCustomDatePicker()" style="margin-top: 18px;" class="btn btn-secondary">Cancel</button>
+        </div>
+        <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-muted);">
+            Filters trades by their <strong>close date</strong> (when the position was closed)
+        </div>
+    </div>
+    
+    <div id="leaderboard-table">
+        <div style="text-align: center; padding: 60px 20px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary);">Loading rankings...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Charts -->
+<div class="card-grid" style="margin-top: 32px;">
+    <div class="card">
+        <h4 class="card-header" id="top-performers-title">📈 Top Performers</h4>
+        <div id="top-performers">
+            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                Loading...
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h4 class="card-header" id="bottom-performers-title">📉 Bottom Performers</h4>
+        <div id="bottom-performers">
+            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                Loading...
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentView = 'channels';  // 'channels' or 'users'
+let currentPeriod = 'all';
+let customStartDate = null;
+let customEndDate = null;
+let currentSort = { column: 'score', direction: 'desc' };
+let leaderboardData = { channels: [], users: [] };
+function formatCurrency(amount) {
+    return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function switchView(view, event) {
+    currentView = view;
+    
+    // Update view tabs
+    event.target.parentElement.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Update stat labels based on view
+    if (view === 'channels') {
+        document.getElementById('stat-label-1').textContent = 'Total Channels';
+        document.getElementById('top-performers-title').textContent = '📈 Top Performing Channels';
+        document.getElementById('bottom-performers-title').textContent = '📉 Bottom Performing Channels';
+    } else {
+        document.getElementById('stat-label-1').textContent = 'Total Users';
+        document.getElementById('top-performers-title').textContent = '📈 Top Performing Users';
+        document.getElementById('bottom-performers-title').textContent = '📉 Bottom Performing Users';
+    }
+    
+    loadLeaderboard();
+}
+
+function filterPeriod(period, event) {
+    currentPeriod = period;
+    customStartDate = null;
+    customEndDate = null;
+    
+    // Hide custom date picker
+    document.getElementById('custom-date-picker').style.display = 'none';
+    
+    // Update period tabs
+    document.querySelectorAll('.period-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    if (event && event.target) {
+        event.target.classList.add('active');
+    } else {
+        document.querySelectorAll('.period-tab').forEach(tab => {
+            if (tab.getAttribute('onclick') && tab.getAttribute('onclick').includes(`'${period}'`)) {
+                tab.classList.add('active');
+            }
+        });
+    }
+    
+    loadLeaderboard();
+}
+
+function showCustomDatePicker(event) {
+    // Update period tabs
+    document.querySelectorAll('.period-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    if (event && event.target) {
+        event.target.classList.add('active');
+    }
+    
+    // Show custom date picker
+    document.getElementById('custom-date-picker').style.display = 'block';
+    
+    // Set default dates (last 30 days)
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    document.getElementById('end-date').value = today.toISOString().split('T')[0];
+    document.getElementById('start-date').value = thirtyDaysAgo.toISOString().split('T')[0];
+}
+
+function hideCustomDatePicker() {
+    document.getElementById('custom-date-picker').style.display = 'none';
+    // Reset to All Time
+    filterPeriod('all', null);
+}
+
+function applyCustomDateRange() {
+    customStartDate = document.getElementById('start-date').value;
+    customEndDate = document.getElementById('end-date').value;
+    
+    if (!customStartDate || !customEndDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    currentPeriod = 'custom';
+    loadLeaderboard();
+}
+
+function sortLeaderboard(column) {
+    if (currentSort.column === column) {
+        currentSort.direction = currentSort.direction === 'desc' ? 'asc' : 'desc';
+    } else {
+        currentSort.column = column;
+        currentSort.direction = 'desc';
+    }
+    
+    if (currentView === 'channels') {
+        renderChannelLeaderboard({ channels: leaderboardData.channels });
+    } else {
+        renderUserLeaderboard({ users: leaderboardData.users });
+    }
+}
+
+function getSortArrow(column) {
+    if (currentSort.column !== column) return '';
+    return currentSort.direction === 'desc' ? ' ▼' : ' ▲';
+}
+
+function getSortableHeader(column, label) {
+    const isActive = currentSort.column === column;
+    const arrow = getSortArrow(column);
+    const style = isActive ? 'color: var(--primary); cursor: pointer;' : 'cursor: pointer;';
+    return `<th onclick="sortLeaderboard('${column}')" style="${style}">${label}${arrow}</th>`;
+}
+
+function loadLeaderboard() {
+    const container = document.getElementById('leaderboard-table');
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading...</div></div>';
+    
+    const endpoint = currentView === 'channels' ? '/api/leaderboard' : '/api/leaderboard/users';
+    
+    // Build query params
+    let url = `${endpoint}?period=${currentPeriod}&market=US`;
+    if (currentPeriod === 'custom' && customStartDate && customEndDate) {
+        url += `&start_date=${customStartDate}&end_date=${customEndDate}`;
+    }
+    
+    fetch(url)
+        .then(res => res.json())
+        .then(data => {
+            if (currentView === 'channels') {
+                renderChannelLeaderboard(data);
+            } else {
+                renderUserLeaderboard(data);
+            }
+        })
+        .catch(err => {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div style="color: var(--error); font-size: 1rem;">Error loading leaderboard</div>
+                    <div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 8px;">${err.message}</div>
+                </div>
+            `;
+        });
+}
+
+function formatScore(score) {
+    return score.toFixed(1);
+}
+
+function formatHoldTime(days) {
+    if (!days || days <= 0) return '<span style="color: #555; font-size: 11px;">—</span>';
+    let text, color;
+    if (days < 0.003) { text = '< 1m'; color = '#E040FB'; }
+    else if (days < 0.042) { text = Math.round(days * 1440) + 'm'; color = '#E040FB'; }
+    else if (days < 1) {
+        const h = Math.floor(days * 24), m = Math.round((days * 24 - h) * 60);
+        text = h + 'h' + (m > 0 ? ' ' + m + 'm' : ''); color = '#00d4ff';
+    } else if (days < 7) {
+        const d = Math.floor(days), h = Math.round((days - d) * 24);
+        text = d + 'd' + (h > 0 ? ' ' + h + 'h' : ''); color = '#FF9F0A';
+    } else { text = Math.round(days) + 'd'; color = '#30D158'; }
+    return `<span style="background: ${color}20; color: ${color}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${text}</span>`;
+}
+
+function formatDirectionBreakdown(breakdown) {
+    if (!breakdown || Object.keys(breakdown).length === 0) return '<span style="color:#555;font-size:11px;">—</span>';
+    const order = ['stocks', 'calls', 'puts'];
+    const icons = { stocks: '📈', calls: '🟢', puts: '🔴' };
+    const colors = { stocks: '#00d4ff', calls: '#30D158', puts: '#FF453A' };
+    let html = '<div style="display:flex;gap:4px;flex-wrap:wrap;">';
+    for (const dir of order) {
+        const d = breakdown[dir];
+        if (!d || !d.trades) continue;
+        const c = colors[dir];
+        html += `<span style="background:${c}15;color:${c};padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;white-space:nowrap;" title="${dir}: ${d.wins}W/${d.losses}L $${d.pnl.toFixed(2)}">${icons[dir]}${d.win_rate}%</span>`;
+    }
+    html += '</div>';
+    return html;
+}
+
+function getScoreClass(score) {
+    if (score >= 70) return 'pnl-positive';
+    if (score >= 40) return '';
+    return 'pnl-negative';
+}
+
+function renderChannelLeaderboard(data) {
+    const container = document.getElementById('leaderboard-table');
+    
+    if (!data.channels || data.channels.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">🏆</div>
+                <div style="color: var(--text-secondary); font-size: 1rem;">No channel data available for this period</div>
+            </div>
+        `;
+        document.getElementById('stat-value-1').textContent = '0';
+        document.getElementById('stat-value-2').textContent = '0';
+        document.getElementById('stat-value-3').textContent = '0%';
+        document.getElementById('stat-value-4').textContent = formatCurrency(0);
+        document.getElementById('top-performer-name').textContent = 'N/A';
+        document.getElementById('top-performer-score').textContent = '';
+        document.getElementById('top-performer-stats').textContent = 'No data available';
+        return;
+    }
+    
+    // Store data for sorting
+    leaderboardData.channels = [...data.channels];
+    
+    // Sort channels
+    const sortedChannels = [...data.channels].sort((a, b) => {
+        let aVal, bVal;
+        switch (currentSort.column) {
+            case 'win_rate': aVal = a.win_rate || 0; bVal = b.win_rate || 0; break;
+            case 'profit_factor': aVal = a.profit_factor || 0; bVal = b.profit_factor || 0; break;
+            case 'wins': aVal = a.wins || 0; bVal = b.wins || 0; break;
+            case 'losses': aVal = a.losses || 0; bVal = b.losses || 0; break;
+            case 'total_trades': aVal = a.total_trades || 0; bVal = b.total_trades || 0; break;
+            case 'total_pnl': aVal = a.total_pnl || 0; bVal = b.total_pnl || 0; break;
+            case 'avg_return': aVal = a.avg_return || 0; bVal = b.avg_return || 0; break;
+            case 'avg_holding_days': aVal = a.avg_holding_days || 0; bVal = b.avg_holding_days || 0; break;
+            default: aVal = a.score || 0; bVal = b.score || 0;
+        }
+        return currentSort.direction === 'desc' ? bVal - aVal : aVal - bVal;
+    });
+    
+    // Update stats (use original unsorted for stats)
+    document.getElementById('stat-value-1').textContent = data.total_channels || data.channels.length;
+    document.getElementById('stat-value-2').textContent = data.total_trades || 0;
+    document.getElementById('stat-value-3').textContent = `${(data.avg_win_rate || 0).toFixed(1)}%`;
+    
+    const totalPnl = parseFloat(data.total_pnl) || 0;
+    const pnlElement = document.getElementById('stat-value-4');
+    pnlElement.textContent = `$${totalPnl.toFixed(2)}`;
+    pnlElement.className = totalPnl >= 0 ? 'stat-value pnl-positive' : 'stat-value pnl-negative';
+    
+    // Update top performer banner (use first in sorted list)
+    if (sortedChannels.length > 0) {
+        const top = sortedChannels[0];
+        document.getElementById('top-performer-name').textContent = top.channel_name || 'N/A';
+        document.getElementById('top-performer-score').textContent = `Score: ${formatScore(top.score || 0)}`;
+        document.getElementById('top-performer-stats').textContent = 
+            `Win Rate: ${(top.win_rate || 0).toFixed(1)}% • Total P/L: $${(top.total_pnl || 0).toFixed(2)} • Trades: ${top.total_trades || 0} • PF: ${(top.profit_factor || 0).toFixed(2)}`;
+    }
+    
+    // Build table with sortable headers
+    let tableHTML = '<table class="data-table"><thead><tr>';
+    tableHTML += '<th>Rank</th><th>Channel</th>';
+    tableHTML += getSortableHeader('score', 'Score');
+    tableHTML += getSortableHeader('win_rate', 'Win Rate');
+    tableHTML += getSortableHeader('profit_factor', 'PF');
+    tableHTML += getSortableHeader('wins', 'Wins');
+    tableHTML += getSortableHeader('losses', 'Losses');
+    tableHTML += getSortableHeader('total_trades', 'Trades');
+    tableHTML += getSortableHeader('total_pnl', 'Total P/L');
+    tableHTML += getSortableHeader('avg_return', 'Avg %');
+    tableHTML += getSortableHeader('avg_holding_days', 'Avg Hold');
+    tableHTML += '<th>Win% by Type</th>';
+    tableHTML += '<th style="text-align: center;">Action</th>';
+    tableHTML += '</tr></thead><tbody>';
+
+    sortedChannels.forEach((channel, index) => {
+        const rank = index + 1;
+        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+        const pnlClass = channel.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        const winRate = (channel.win_rate || 0).toFixed(1);
+        const score = channel.score || 0;
+        const scoreClass = getScoreClass(score);
+        const channelName = channel.channel_name || 'Unknown';
+
+        tableHTML += `<tr>
+            <td><strong style="font-size: 1.125rem;">${medal}</strong></td>
+            <td><strong>${channelName}</strong></td>
+            <td class="${scoreClass}"><strong>${formatScore(score)}</strong></td>
+            <td><strong>${winRate}%</strong></td>
+            <td>${(channel.profit_factor || 0).toFixed(2)}</td>
+            <td class="pnl-positive">${channel.wins || 0}</td>
+            <td class="pnl-negative">${channel.losses || 0}</td>
+            <td>${channel.total_trades || 0}</td>
+            <td class="${pnlClass}">$${(channel.total_pnl || 0).toFixed(2)}</td>
+            <td class="${pnlClass}">${(channel.avg_return || 0).toFixed(1)}%</td>
+            <td>${formatHoldTime(channel.avg_holding_days)}</td>
+            <td>${formatDirectionBreakdown(channel.direction_breakdown)}</td>
+            <td style="text-align: center;">
+                <button onclick="openSimulation('channel', '${channelName.replace(/'/g, "\\'")}')" class="sim-btn" title="Run Simulation">
+                    🎯
+                </button>
+            </td>
+        </tr>`;
+    });
+    
+    tableHTML += '</tbody></table>';
+    container.innerHTML = tableHTML;
+    
+    // Update top/bottom performers
+    updateChannelPerformers(sortedChannels);
+}
+
+function renderUserLeaderboard(data) {
+    const container = document.getElementById('leaderboard-table');
+    
+    if (!data.users || data.users.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">👥</div>
+                <div style="color: var(--text-secondary); font-size: 1rem;">No user data available for this period</div>
+            </div>
+        `;
+        document.getElementById('stat-value-1').textContent = '0';
+        document.getElementById('stat-value-2').textContent = '0';
+        document.getElementById('stat-value-3').textContent = '0%';
+        document.getElementById('stat-value-4').textContent = formatCurrency(0);
+        document.getElementById('top-performer-name').textContent = 'N/A';
+        document.getElementById('top-performer-score').textContent = '';
+        document.getElementById('top-performer-stats').textContent = 'No data available';
+        return;
+    }
+    
+    // Store data for sorting
+    leaderboardData.users = [...data.users];
+    
+    // Sort users
+    const sortedUsers = [...data.users].sort((a, b) => {
+        let aVal, bVal;
+        switch (currentSort.column) {
+            case 'win_rate': aVal = a.win_rate || 0; bVal = b.win_rate || 0; break;
+            case 'profit_factor': aVal = a.profit_factor || 0; bVal = b.profit_factor || 0; break;
+            case 'wins': aVal = a.wins || 0; bVal = b.wins || 0; break;
+            case 'losses': aVal = a.losses || 0; bVal = b.losses || 0; break;
+            case 'total_trades': aVal = a.total_trades || 0; bVal = b.total_trades || 0; break;
+            case 'total_pnl': aVal = a.total_pnl || 0; bVal = b.total_pnl || 0; break;
+            case 'avg_pnl_percent': aVal = a.avg_pnl_percent || 0; bVal = b.avg_pnl_percent || 0; break;
+            case 'avg_holding_days': aVal = a.avg_holding_days || 0; bVal = b.avg_holding_days || 0; break;
+            default: aVal = a.score || 0; bVal = b.score || 0;
+        }
+        return currentSort.direction === 'desc' ? bVal - aVal : aVal - bVal;
+    });
+    
+    // Update stats
+    document.getElementById('stat-value-1').textContent = data.total_users || data.users.length;
+    document.getElementById('stat-value-2').textContent = data.total_trades || 0;
+    document.getElementById('stat-value-3').textContent = `${(data.avg_win_rate || 0).toFixed(1)}%`;
+    
+    const totalPnl = parseFloat(data.total_pnl) || 0;
+    const pnlElement = document.getElementById('stat-value-4');
+    pnlElement.textContent = `$${totalPnl.toFixed(2)}`;
+    pnlElement.className = totalPnl >= 0 ? 'stat-value pnl-positive' : 'stat-value pnl-negative';
+    
+    // Update top performer banner (use first in sorted list)
+    if (sortedUsers.length > 0) {
+        const top = sortedUsers[0];
+        document.getElementById('top-performer-name').textContent = top.author_name || 'Unknown';
+        document.getElementById('top-performer-score').textContent = `Score: ${formatScore(top.score || 0)}`;
+        document.getElementById('top-performer-stats').textContent = 
+            `Win Rate: ${(top.win_rate || 0).toFixed(1)}% • Total P/L: $${(top.total_pnl || 0).toFixed(2)} • Trades: ${top.total_trades || 0} • PF: ${(top.profit_factor || 0).toFixed(2)}`;
+    }
+    
+    // Build table with sortable headers
+    let tableHTML = '<table class="data-table"><thead><tr>';
+    tableHTML += '<th>Rank</th><th>User</th>';
+    tableHTML += getSortableHeader('score', 'Score');
+    tableHTML += getSortableHeader('win_rate', 'Win Rate');
+    tableHTML += getSortableHeader('profit_factor', 'PF');
+    tableHTML += getSortableHeader('wins', 'Wins');
+    tableHTML += getSortableHeader('losses', 'Losses');
+    tableHTML += getSortableHeader('total_trades', 'Trades');
+    tableHTML += getSortableHeader('total_pnl', 'Total P/L');
+    tableHTML += getSortableHeader('avg_pnl_percent', 'Avg %');
+    tableHTML += getSortableHeader('avg_holding_days', 'Avg Hold');
+    tableHTML += '<th>Win% by Type</th>';
+    tableHTML += '<th style="text-align: center;">Action</th>';
+    tableHTML += '</tr></thead><tbody>';
+
+    sortedUsers.forEach((user, index) => {
+        const rank = index + 1;
+        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+        const pnlClass = user.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        const winRate = (user.win_rate || 0).toFixed(1);
+        const score = user.score || 0;
+        const scoreClass = getScoreClass(score);
+        const userName = user.author_name || 'Unknown';
+
+        tableHTML += `<tr>
+            <td><strong style="font-size: 1.125rem;">${medal}</strong></td>
+            <td><strong>${userName}</strong></td>
+            <td class="${scoreClass}"><strong>${formatScore(score)}</strong></td>
+            <td><strong>${winRate}%</strong></td>
+            <td>${(user.profit_factor || 0).toFixed(2)}</td>
+            <td class="pnl-positive">${user.wins || 0}</td>
+            <td class="pnl-negative">${user.losses || 0}</td>
+            <td>${user.total_trades || 0}</td>
+            <td class="${pnlClass}">$${(user.total_pnl || 0).toFixed(2)}</td>
+            <td class="${pnlClass}">${(user.avg_pnl_percent || 0).toFixed(1)}%</td>
+            <td>${formatHoldTime(user.avg_holding_days)}</td>
+            <td>${formatDirectionBreakdown(user.direction_breakdown)}</td>
+            <td style="text-align: center;">
+                <button onclick="openSimulation('user', '${userName.replace(/'/g, "\\'")}')" class="sim-btn" title="Run Simulation">
+                    🎯
+                </button>
+            </td>
+        </tr>`;
+    });
+    
+    tableHTML += '</tbody></table>';
+    container.innerHTML = tableHTML;
+    
+    // Update top/bottom performers
+    updateUserPerformers(sortedUsers);
+}
+
+function updateChannelPerformers(channels) {
+    if (!channels || channels.length === 0) return;
+    
+    // Top 3 performers
+    const topContainer = document.getElementById('top-performers');
+    const top3 = channels.slice(0, 3);
+    
+    let topHTML = '';
+    top3.forEach((channel, index) => {
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉';
+        const pnlClass = channel.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        topHTML += `
+            <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="font-size: 1.5rem;">${medal}</div>
+                    <div>
+                        <div style="font-weight: 600; margin-bottom: 4px;">${channel.channel_name}</div>
+                        <div style="font-size: 0.8125rem; color: var(--text-muted);">${channel.total_trades} trades • Score: ${formatScore(channel.score || 0)}</div>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="${pnlClass}" style="font-size: 1.125rem; font-weight: 700;">$${channel.total_pnl.toFixed(2)}</div>
+                    <div style="font-size: 0.8125rem; color: var(--success);">${channel.win_rate.toFixed(1)}% win rate</div>
+                </div>
+            </div>
+        `;
+    });
+    topContainer.innerHTML = topHTML || '<div style="padding: 20px; text-align: center; color: var(--text-muted);">No data</div>';
+    
+    // Bottom 3 performers
+    const bottomContainer = document.getElementById('bottom-performers');
+    const bottom3 = channels.slice(-3).reverse();
+    
+    let bottomHTML = '';
+    bottom3.forEach((channel) => {
+        const pnlClass = channel.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        bottomHTML += `
+            <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">${channel.channel_name}</div>
+                    <div style="font-size: 0.8125rem; color: var(--text-muted);">${channel.total_trades} trades • Score: ${formatScore(channel.score || 0)}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="${pnlClass}" style="font-size: 1.125rem; font-weight: 700;">$${channel.total_pnl.toFixed(2)}</div>
+                    <div style="font-size: 0.8125rem; color: var(--error);">${channel.win_rate.toFixed(1)}% win rate</div>
+                </div>
+            </div>
+        `;
+    });
+    bottomContainer.innerHTML = bottomHTML || '<div style="padding: 20px; text-align: center; color: var(--text-muted);">No data</div>';
+}
+
+function updateUserPerformers(users) {
+    if (!users || users.length === 0) return;
+    
+    // Top 3 performers
+    const topContainer = document.getElementById('top-performers');
+    const top3 = users.slice(0, 3);
+    
+    let topHTML = '';
+    top3.forEach((user, index) => {
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉';
+        const pnlClass = user.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        topHTML += `
+            <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="font-size: 1.5rem;">${medal}</div>
+                    <div>
+                        <div style="font-weight: 600; margin-bottom: 4px;">${user.author_name}</div>
+                        <div style="font-size: 0.8125rem; color: var(--text-muted);">${user.total_trades} trades • Score: ${formatScore(user.score || 0)}</div>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="${pnlClass}" style="font-size: 1.125rem; font-weight: 700;">$${user.total_pnl.toFixed(2)}</div>
+                    <div style="font-size: 0.8125rem; color: var(--success);">${user.win_rate.toFixed(1)}% win rate</div>
+                </div>
+            </div>
+        `;
+    });
+    topContainer.innerHTML = topHTML || '<div style="padding: 20px; text-align: center; color: var(--text-muted);">No data</div>';
+    
+    // Bottom 3 performers
+    const bottomContainer = document.getElementById('bottom-performers');
+    const bottom3 = users.slice(-3).reverse();
+    
+    let bottomHTML = '';
+    bottom3.forEach((user) => {
+        const pnlClass = user.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        bottomHTML += `
+            <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">${user.author_name}</div>
+                    <div style="font-size: 0.8125rem; color: var(--text-muted);">${user.total_trades} trades • Score: ${formatScore(user.score || 0)}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="${pnlClass}" style="font-size: 1.125rem; font-weight: 700;">$${user.total_pnl.toFixed(2)}</div>
+                    <div style="font-size: 0.8125rem; color: var(--error);">${user.win_rate.toFixed(1)}% win rate</div>
+                </div>
+            </div>
+        `;
+    });
+    bottomContainer.innerHTML = bottomHTML || '<div style="padding: 20px; text-align: center; color: var(--text-muted);">No data</div>';
+}
+
+// Open simulation page for user or channel
+function openSimulation(entityType, entityId) {
+    window.location.href = `/simulation?type=${entityType}&id=${encodeURIComponent(entityId)}`;
+}
+
+// Load initial data
+document.addEventListener('DOMContentLoaded', () => {
+    loadLeaderboard();
+    
+    // Refresh every 60 seconds
+    setInterval(loadLeaderboard, 60000);
+});
+</script>
+
+<style>
+.sim-btn {
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: white;
+}
+
+.sim-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+}
+</style>
+{% endblock %}

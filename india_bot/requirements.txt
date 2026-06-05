@@ -1,0 +1,33 @@
+# India Bot Dependencies
+# Trading Bot for Indian Markets (NSE/BSE/MCX)
+
+# Web Framework
+flask>=2.3.0
+
+# Indian Broker SDKs
+upstox-python-sdk>=2.19.0
+# kiteconnect>=5.0.0  # For Zerodha
+dhanhq>=2.0.0
+
+# HTTP Clients
+requests>=2.31.0
+httpx>=0.25.0
+aiohttp>=3.9.0
+
+# Async Support
+asyncio-throttle>=1.0.0
+
+# Data Processing
+pandas>=2.0.0
+
+# Security
+cryptography>=41.0.0
+
+# Utilities
+python-dateutil>=2.8.0
+
+# Database
+# SQLite is built-in
+
+# Optional: OpenAI for AI analysis
+# openai>=1.0.0

@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BotifyTrades - Multi-Broker Smart Routing</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #1a1a2e;
+    --secondary: #16213e;
+    --accent: #0f3460;
+    --highlight: #e94560;
+    --gold: #f5a623;
+    --green: #27ae60;
+    --blue: #3498db;
+    --purple: #9b59b6;
+    --teal: #1abc9c;
+    --light: #f8f9fc;
+    --text: #2c3e50;
+    --muted: #7f8c8d;
+    --card-bg: #ffffff;
+    --gradient-1: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    --gradient-2: linear-gradient(135deg, #e94560 0%, #f5a623 100%);
+    --gradient-3: linear-gradient(135deg, #3498db 0%, #1abc9c 100%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--light);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  .slide {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ─── SLIDE 1: HERO ─── */
+  .slide-hero {
+    background: var(--gradient-1);
+    color: white;
+    text-align: center;
+  }
+  .slide-hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -30%;
+    width: 800px;
+    height: 800px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(233,69,96,0.15) 0%, transparent 70%);
+  }
+  .slide-hero::after {
+    content: '';
+    position: absolute;
+    bottom: -40%;
+    left: -20%;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(52,152,219,0.12) 0%, transparent 70%);
+  }
+  .hero-badge {
+    display: inline-block;
+    padding: 8px 24px;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    backdrop-filter: blur(4px);
+    background: rgba(255,255,255,0.05);
+  }
+  .hero-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 24px;
+    position: relative;
+    z-index: 1;
+  }
+  .hero-title span { color: var(--highlight); }
+  .hero-subtitle {
+    font-size: 20px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.7);
+    max-width: 640px;
+    position: relative;
+    z-index: 1;
+  }
+  .hero-line {
+    width: 80px;
+    height: 3px;
+    background: var(--gradient-2);
+    border-radius: 2px;
+    margin: 40px auto 0;
+  }
+
+  /* ─── SLIDE 2: THE CONCEPT ─── */
+  .slide-concept { background: #ffffff; }
+  .section-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--highlight);
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 40px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .section-desc {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 680px;
+    text-align: center;
+    margin-bottom: 56px;
+    line-height: 1.7;
+  }
+
+  .two-roles {
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr;
+    gap: 0;
+    align-items: center;
+    max-width: 900px;
+    width: 100%;
+  }
+  .role-card {
+    background: var(--light);
+    border-radius: 20px;
+    padding: 48px 36px;
+    text-align: center;
+    position: relative;
+    border: 1px solid rgba(0,0,0,0.06);
+  }
+  .role-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+    font-size: 32px;
+  }
+  .role-icon.watcher {
+    background: linear-gradient(135deg, #3498db22, #1abc9c22);
+    color: var(--blue);
+  }
+  .role-icon.executor {
+    background: linear-gradient(135deg, #e9456022, #f5a62322);
+    color: var(--highlight);
+  }
+  .role-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 12px;
+  }
+  .role-desc {
+    font-size: 15px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .roles-connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .connector-line {
+    width: 2px;
+    height: 20px;
+    background: rgba(0,0,0,0.1);
+  }
+  .connector-dot {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--gradient-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  /* ─── SLIDE 3: DIAGRAM ─── */
+  .slide-diagram {
+    background: var(--gradient-1);
+    color: white;
+  }
+  .diagram-container {
+    max-width: 960px;
+    width: 100%;
+  }
+  .diagram-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+  .broker-node {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 14px;
+    padding: 18px 24px;
+    text-align: center;
+    min-width: 140px;
+    backdrop-filter: blur(8px);
+  }
+  .broker-node.active {
+    border-color: var(--teal);
+    background: rgba(26,188,156,0.12);
+  }
+  .broker-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .broker-role {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    opacity: 0.6;
+  }
+  .broker-role.watching { color: var(--teal); opacity: 1; }
+  .broker-role.executing { color: var(--highlight); opacity: 1; }
+
+  .flow-hub {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(233,69,96,0.2), rgba(245,166,35,0.2));
+    border: 2px solid rgba(233,69,96,0.4);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 20px auto;
+    position: relative;
+  }
+  .hub-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .hub-sublabel {
+    font-size: 10px;
+    opacity: 0.6;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .flow-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: rgba(255,255,255,0.4);
+  }
+  .arrow-line {
+    width: 2px;
+    height: 32px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(255,255,255,0.3));
+  }
+  .arrow-label {
+    font-size: 11px;
+    padding: 4px 12px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 20px;
+    margin: 6px 0;
+    letter-spacing: 0.5px;
+  }
+  .arrow-head {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid rgba(255,255,255,0.3);
+  }
+
+  .execution-node {
+    background: linear-gradient(135deg, rgba(233,69,96,0.15), rgba(233,69,96,0.25));
+    border: 1px solid rgba(233,69,96,0.5);
+    border-radius: 14px;
+    padding: 20px 32px;
+    text-align: center;
+    display: inline-block;
+  }
+
+  /* ─── SLIDE 4: EXAMPLE ─── */
+  .slide-example { background: #fafbfe; }
+
+  .example-flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    max-width: 1000px;
+    width: 100%;
+  }
+  .step-card {
+    flex: 1;
+    padding: 32px 24px;
+    text-align: center;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .step-num {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: white;
+    margin-bottom: 20px;
+  }
+  .step-num.s1 { background: var(--blue); }
+  .step-num.s2 { background: var(--teal); }
+  .step-num.s3 { background: var(--gold); }
+  .step-num.s4 { background: var(--highlight); }
+  .step-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--primary);
+    margin-bottom: 10px;
+  }
+  .step-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .step-broker {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 14px;
+  }
+  .step-broker.webull { background: #3498db18; color: var(--blue); }
+  .step-broker.t212 { background: #e9456018; color: var(--highlight); }
+
+  .step-connector {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    color: rgba(0,0,0,0.15);
+    font-size: 24px;
+    align-self: center;
+    margin-top: -10px;
+  }
+
+  /* ─── SLIDE 5: FAILOVER ─── */
+  .slide-failover { background: #ffffff; }
+
+  .failover-chain {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    max-width: 940px;
+    width: 100%;
+    margin-bottom: 40px;
+  }
+  .failover-node {
+    flex: 1;
+    text-align: center;
+    padding: 28px 16px;
+    border-radius: 16px;
+    position: relative;
+  }
+  .failover-node.active-source {
+    background: linear-gradient(135deg, #27ae6010, #1abc9c10);
+    border: 1px solid rgba(39,174,96,0.2);
+  }
+  .failover-node.standby {
+    background: var(--light);
+    border: 1px solid rgba(0,0,0,0.06);
+  }
+  .failover-node.last-resort {
+    background: linear-gradient(135deg, #e9456008, #f5a62308);
+    border: 1px solid rgba(233,69,96,0.15);
+  }
+  .failover-status {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .failover-status.primary { background: #27ae6020; color: var(--green); }
+  .failover-status.backup { background: #3498db15; color: var(--blue); }
+  .failover-status.emergency { background: #e9456015; color: var(--highlight); }
+
+  .failover-broker {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--primary);
+    margin-bottom: 6px;
+  }
+  .failover-speed {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .failover-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    color: rgba(0,0,0,0.15);
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .failover-callout {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: linear-gradient(135deg, #27ae6008, #1abc9c08);
+    border: 1px solid rgba(39,174,96,0.15);
+    border-radius: 14px;
+    padding: 20px 28px;
+    max-width: 640px;
+  }
+  .callout-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: #27ae6015;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    color: var(--green);
+  }
+  .callout-text {
+    font-size: 15px;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* ─── SLIDE 6: BENEFITS ─── */
+  .slide-benefits {
+    background: var(--gradient-1);
+    color: white;
+  }
+  .benefits-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+    max-width: 960px;
+    width: 100%;
+  }
+  .benefit-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 18px;
+    padding: 36px 28px;
+    text-align: center;
+    backdrop-filter: blur(4px);
+  }
+  .benefit-icon-wrap {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 24px;
+  }
+  .benefit-icon-wrap.speed { background: rgba(26,188,156,0.15); color: var(--teal); }
+  .benefit-icon-wrap.reliability { background: rgba(52,152,219,0.15); color: var(--blue); }
+  .benefit-icon-wrap.cost { background: rgba(245,166,35,0.15); color: var(--gold); }
+
+  .benefit-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    margin-bottom: 10px;
+  }
+  .benefit-desc {
+    font-size: 14px;
+    line-height: 1.7;
+    color: rgba(255,255,255,0.6);
+  }
+
+  /* ─── SLIDE 7: CLOSING ─── */
+  .slide-closing {
+    background: var(--gradient-1);
+    color: white;
+    text-align: center;
+  }
+  .slide-closing::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(233,69,96,0.08) 0%, transparent 70%);
+  }
+  .closing-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 44px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    position: relative;
+    z-index: 1;
+  }
+  .closing-desc {
+    font-size: 18px;
+    color: rgba(255,255,255,0.6);
+    max-width: 560px;
+    position: relative;
+    z-index: 1;
+    line-height: 1.7;
+  }
+  .closing-badge {
+    display: inline-block;
+    margin-top: 36px;
+    padding: 12px 32px;
+    border-radius: 50px;
+    background: var(--gradient-2);
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .slide-divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(0,0,0,0.04);
+  }
+
+  /* ─── Scroll nav dots ─── */
+  .nav-dots {
+    position: fixed;
+    right: 28px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 100;
+  }
+  .nav-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.15);
+    cursor: pointer;
+    transition: all 0.3s;
+    border: none;
+  }
+  .nav-dot:hover, .nav-dot.active { background: var(--highlight); transform: scale(1.3); }
+  .nav-dot.light { background: rgba(255,255,255,0.3); }
+  .nav-dot.light:hover, .nav-dot.light.active { background: white; }
+
+  @media (max-width: 768px) {
+    .slide { padding: 40px 24px; }
+    .hero-title { font-size: 32px; }
+    .section-title { font-size: 28px; }
+    .two-roles { grid-template-columns: 1fr; gap: 20px; }
+    .roles-connector { flex-direction: row; }
+    .example-flow { flex-direction: column; }
+    .failover-chain { flex-direction: column; }
+    .benefits-grid { grid-template-columns: 1fr; }
+    .nav-dots { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav-dots">
+  <button class="nav-dot light" onclick="scrollTo(0)" title="Welcome"></button>
+  <button class="nav-dot" onclick="scrollTo(1)" title="Two Roles"></button>
+  <button class="nav-dot light" onclick="scrollTo(2)" title="How It Works"></button>
+  <button class="nav-dot" onclick="scrollTo(3)" title="Example"></button>
+  <button class="nav-dot" onclick="scrollTo(4)" title="Failover"></button>
+  <button class="nav-dot light" onclick="scrollTo(5)" title="Benefits"></button>
+  <button class="nav-dot light" onclick="scrollTo(6)" title="Get Started"></button>
+</nav>
+
+<!-- ─── SLIDE 1: HERO ─── -->
+<section class="slide slide-hero" id="slide-0">
+  <div class="hero-badge">BotifyTrades Platform</div>
+  <h1 class="hero-title">Multi-Broker<br><span>Smart Routing</span></h1>
+  <p class="hero-subtitle">Your connected brokers work as one intelligent network, delivering faster triggers and more reliable trade execution.</p>
+  <div class="hero-line"></div>
+</section>
+
+<!-- ─── SLIDE 2: THE TWO ROLES ─── -->
+<section class="slide slide-concept" id="slide-1">
+  <div class="section-label">The Core Idea</div>
+  <h2 class="section-title">Every Broker Plays Two Roles</h2>
+  <p class="section-desc">When you connect multiple brokers, the bot assigns each one the role it does best. One watches prices. Another executes trades. They don't have to be the same.</p>
+
+  <div class="two-roles">
+    <div class="role-card">
+      <div class="role-icon watcher">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <div class="role-title">Price Watcher</div>
+      <div class="role-desc">Provides a fast, real-time price stream that monitors your conditional orders and active trades continuously.</div>
+    </div>
+
+    <div class="roles-connector">
+      <div class="connector-line"></div>
+      <div class="connector-dot">+</div>
+      <div class="connector-line"></div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-icon executor">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      </div>
+      <div class="role-title">Trade Executor</div>
+      <div class="role-desc">Receives and places the actual buy or sell order on your chosen broker account when a signal or trigger fires.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SLIDE 3: ARCHITECTURE DIAGRAM ─── -->
+<section class="slide slide-diagram" id="slide-2">
+  <div class="section-label" style="color:rgba(255,255,255,0.5)">Architecture</div>
+  <h2 class="section-title" style="color:white">How Your Brokers Connect</h2>
+  <p class="section-desc" style="color:rgba(255,255,255,0.5); margin-bottom:40px;">All price feeds flow into one shared intelligence hub. When a trigger fires, the order routes to your chosen broker.</p>
+
+  <div class="diagram-container">
+    <div class="diagram-row">
+      <div class="broker-node active">
+        <div class="broker-name">Webull</div>
+        <div class="broker-role watching">Watching Prices</div>
+      </div>
+      <div class="broker-node active">
+        <div class="broker-name">Schwab</div>
+        <div class="broker-role watching">Watching Prices</div>
+      </div>
+      <div class="broker-node">
+        <div class="broker-name">IBKR</div>
+        <div class="broker-role watching">Watching Prices</div>
+      </div>
+      <div class="broker-node">
+        <div class="broker-name">TastyTrade</div>
+        <div class="broker-role watching">Watching Prices</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-label">Live price streams merge</div>
+      <div class="arrow-head"></div>
+    </div>
+
+    <div style="text-align:center">
+      <div class="flow-hub">
+        <div class="hub-label">Smart Price<br>Hub</div>
+        <div class="hub-sublabel">Best source wins</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-label">Price target hit &rarr; trigger fires</div>
+      <div class="arrow-head"></div>
+    </div>
+
+    <div style="text-align:center">
+      <div class="execution-node">
+        <div class="broker-name" style="font-size:17px;">Trading212</div>
+        <div class="broker-role executing" style="font-size:12px;">Executes Your Order</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SLIDE 4: EXAMPLE ─── -->
+<section class="slide slide-example" id="slide-3">
+  <div class="section-label">Real-World Scenario</div>
+  <h2 class="section-title">AAPL Conditional Buy at $185</h2>
+  <p class="section-desc">You set a conditional order on Trading212. Here's what happens behind the scenes when the price is reached.</p>
+
+  <div class="example-flow">
+    <div class="step-card">
+      <div class="step-num s1">1</div>
+      <div class="step-title">Best Feed Selected</div>
+      <div class="step-desc">The bot detects Webull has the fastest live stream for AAPL and begins watching the price.</div>
+      <div class="step-broker webull">Webull Streaming</div>
+    </div>
+    <div class="step-connector">&rarr;</div>
+    <div class="step-card">
+      <div class="step-num s2">2</div>
+      <div class="step-title">Price Monitored</div>
+      <div class="step-desc">Webull's feed is checked multiple times per second, watching for AAPL to reach $185.</div>
+      <div class="step-broker webull">Webull Streaming</div>
+    </div>
+    <div class="step-connector">&rarr;</div>
+    <div class="step-card">
+      <div class="step-num s3">3</div>
+      <div class="step-title">Trigger Fires</div>
+      <div class="step-desc">AAPL hits $185 on Webull's feed. The bot instantly sends the buy command.</div>
+      <div class="step-broker webull">Trigger Detected</div>
+    </div>
+    <div class="step-connector">&rarr;</div>
+    <div class="step-card">
+      <div class="step-num s4">4</div>
+      <div class="step-title">Order Executed</div>
+      <div class="step-desc">The buy order is placed on your Trading212 account. Trade confirmed.</div>
+      <div class="step-broker t212">Trading212</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SLIDE 5: FAILOVER ─── -->
+<section class="slide slide-failover" id="slide-4">
+  <div class="section-label">Built-In Safety</div>
+  <h2 class="section-title">Automatic Failover Protection</h2>
+  <p class="section-desc">If one broker's data goes down, the bot switches to the next best source instantly. Your orders stay protected.</p>
+
+  <div class="failover-chain">
+    <div class="failover-node active-source">
+      <div class="failover-status primary">Primary</div>
+      <div class="failover-broker">Webull</div>
+      <div class="failover-speed">Fastest stream</div>
+    </div>
+    <div class="failover-arrow">&rarr;</div>
+    <div class="failover-node standby">
+      <div class="failover-status backup">Backup 1</div>
+      <div class="failover-broker">Schwab</div>
+      <div class="failover-speed">Fast stream</div>
+    </div>
+    <div class="failover-arrow">&rarr;</div>
+    <div class="failover-node standby">
+      <div class="failover-status backup">Backup 2</div>
+      <div class="failover-broker">IBKR</div>
+      <div class="failover-speed">Reliable stream</div>
+    </div>
+    <div class="failover-arrow">&rarr;</div>
+    <div class="failover-node standby">
+      <div class="failover-status backup">Backup 3</div>
+      <div class="failover-broker">TastyTrade</div>
+      <div class="failover-speed">Reliable stream</div>
+    </div>
+    <div class="failover-arrow">&rarr;</div>
+    <div class="failover-node last-resort">
+      <div class="failover-status emergency">Last Resort</div>
+      <div class="failover-broker">Direct Check</div>
+      <div class="failover-speed">Broker API query</div>
+    </div>
+  </div>
+
+  <div class="failover-callout">
+    <div class="callout-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    </div>
+    <div class="callout-text">Failover happens in milliseconds. You never need to intervene &mdash; the bot handles everything automatically.</div>
+  </div>
+</section>
+
+<!-- ─── SLIDE 6: BENEFITS ─── -->
+<section class="slide slide-benefits" id="slide-5">
+  <div class="section-label" style="color:rgba(255,255,255,0.5)">Why It Matters</div>
+  <h2 class="section-title" style="color:white; margin-bottom:48px;">Three Key Advantages</h2>
+
+  <div class="benefits-grid">
+    <div class="benefit-card">
+      <div class="benefit-icon-wrap speed">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+      <div class="benefit-title">Faster Triggers</div>
+      <div class="benefit-desc">Conditional orders fire the instant the price is hit, using the fastest available data feed across all your brokers.</div>
+    </div>
+    <div class="benefit-card">
+      <div class="benefit-icon-wrap reliability">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="benefit-title">More Reliable</div>
+      <div class="benefit-desc">If one broker's data goes offline, the bot seamlessly switches to another. No missed triggers, no manual fixes.</div>
+    </div>
+    <div class="benefit-card">
+      <div class="benefit-icon-wrap cost">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      </div>
+      <div class="benefit-title">Zero Extra Cost</div>
+      <div class="benefit-desc">Smart routing works automatically using your existing broker connections. No extra subscriptions or data fees required.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SLIDE 7: CLOSING ─── -->
+<section class="slide slide-closing" id="slide-6">
+  <h2 class="closing-title">Connect More Brokers,<br>Get Smarter Routing</h2>
+  <p class="closing-desc">The more brokers you connect, the more resilient and faster your trading becomes. Just link your accounts and the bot handles the rest.</p>
+  <div class="closing-badge">Fully Automatic &mdash; Zero Setup Required</div>
+</section>
+
+<script>
+  function scrollTo(index) {
+    document.getElementById('slide-' + index).scrollIntoView({ behavior: 'smooth' });
+  }
+
+  const slides = document.querySelectorAll('.slide');
+  const dots = document.querySelectorAll('.nav-dot');
+  const darkSlides = new Set([0, 2, 5, 6]);
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const index = Array.from(slides).indexOf(entry.target);
+        dots.forEach((dot, i) => {
+          dot.classList.remove('active', 'light');
+          if (darkSlides.has(i)) dot.classList.add('light');
+          if (i === index) dot.classList.add('active');
+        });
+      }
+    });
+  }, { threshold: 0.5 });
+
+  slides.forEach(slide => observer.observe(slide));
+</script>
+
+</body>
+</html>

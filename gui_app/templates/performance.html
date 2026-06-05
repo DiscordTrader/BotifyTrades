@@ -1,0 +1,834 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - BotifyTrades{% endblock %}
+
+{% block content %}
+<style>
+:root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #0f1419;
+    --bg-card: #141a23;
+    --bg-elevated: #1a222d;
+    --border-color: #1e2a38;
+    --text-primary: #ffffff;
+    --text-secondary: #8899a6;
+    --text-muted: #536471;
+    --accent-green: #00c853;
+    --accent-red: #ff5252;
+    --accent-blue: #00d4ff;
+    --accent-gold: #ffc107;
+    --accent-purple: #b388ff;
+    --cal-cell-green: rgba(0, 200, 83, 0.12);
+    --cal-cell-red: rgba(255, 82, 82, 0.12);
+}
+* { box-sizing: border-box; }
+.dash-container { background: var(--bg-primary); min-height: 100vh; padding: 0; }
+.dash-topbar { background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+.dash-topbar-title { font-size: 1.2rem; font-weight: 700; color: var(--text-primary); }
+.dash-topbar-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.tb-select { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 7px 14px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; }
+.tb-select:focus { outline: none; border-color: var(--accent-blue); }
+.tb-btn { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-secondary); padding: 7px 14px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 5px; }
+.tb-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+.tb-btn.active { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+.dash-content { max-width: 1440px; margin: 0 auto; padding: 20px 24px; }
+
+.stats-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px 20px; overflow: hidden; min-width: 0; }
+.stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+.stat-primary { font-size: 1.8rem; font-weight: 700; color: var(--accent-blue); line-height: 1.2; }
+.stat-primary.green { color: var(--accent-green); }
+.stat-primary.red { color: var(--accent-red); }
+.stat-sub { font-size: 0.78rem; color: var(--text-secondary); margin-top: 4px; }
+.stat-bar-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.stat-bar { flex: 1; height: 6px; border-radius: 3px; overflow: hidden; display: flex; }
+.stat-bar-green { background: var(--accent-green); height: 100%; }
+.stat-bar-red { background: var(--accent-red); height: 100%; }
+.stat-bar-labels { display: flex; justify-content: space-between; font-size: 0.72rem; margin-top: 4px; }
+.stat-bar-labels .green { color: var(--accent-green); }
+.stat-bar-labels .red { color: var(--accent-red); }
+.stat-donut-wrap { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.stat-donut-canvas { width: 48px !important; height: 48px !important; max-width: 48px; max-height: 48px; flex-shrink: 0; }
+.stat-donut-legend { font-size: 0.72rem; color: var(--text-secondary); }
+.stat-donut-legend span { font-weight: 600; }
+
+.main-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; margin-bottom: 24px; }
+.cal-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
+.cal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border-color); }
+.cal-nav { display: flex; align-items: center; gap: 12px; }
+.cal-nav-btn { background: var(--bg-elevated); border: 1px solid var(--border-color); color: var(--text-secondary); width: 30px; height: 30px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; transition: all 0.15s; }
+.cal-nav-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+.cal-month-label { font-size: 1rem; font-weight: 600; color: var(--text-primary); }
+.cal-today-btn { background: var(--bg-elevated); border: 1px solid var(--border-color); color: var(--text-secondary); padding: 5px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+.cal-today-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+.cal-stats { display: flex; gap: 14px; align-items: center; font-size: 0.78rem; color: var(--text-secondary); }
+.cal-stats .val { background: var(--bg-elevated); padding: 3px 10px; border-radius: 4px; font-weight: 600; color: var(--text-primary); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-day-header { padding: 10px 4px; text-align: center; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color); }
+.cal-cell { min-height: 80px; border: 1px solid var(--border-color); border-top: none; border-left: none; padding: 6px 8px; position: relative; transition: background 0.15s; }
+.cal-cell:nth-child(7n+1) { border-left: none; }
+.cal-cell.has-trades { cursor: pointer; }
+.cal-cell.has-trades:hover { background: var(--bg-elevated); }
+.cal-cell.positive { background: var(--cal-cell-green); }
+.cal-cell.negative { background: var(--cal-cell-red); }
+.cal-cell.today { box-shadow: inset 0 0 0 2px var(--accent-blue); }
+.cal-date { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; }
+.cal-date.today-num { background: var(--accent-blue); color: var(--bg-primary); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+.cal-cell-pnl { font-size: 0.95rem; font-weight: 700; color: var(--accent-green); }
+.cal-cell-pnl.neg { color: var(--accent-red); }
+.cal-cell-info { font-size: 0.62rem; color: var(--text-muted); margin-top: 2px; }
+.cal-cell-wr { font-size: 0.6rem; color: var(--text-secondary); }
+.cal-cell.other-month .cal-date { opacity: 0.3; }
+
+.right-panel { display: flex; flex-direction: column; gap: 16px; }
+.week-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px 18px; }
+.week-label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
+.week-pnl { font-size: 1.3rem; font-weight: 700; }
+.week-pnl.positive { color: var(--accent-green); }
+.week-pnl.negative { color: var(--accent-red); }
+.week-pnl.neutral { color: var(--text-muted); }
+.week-sub { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+.week-sub .badge { display: inline-block; background: rgba(0,200,83,0.15); color: var(--accent-green); padding: 1px 8px; border-radius: 10px; font-weight: 600; margin-left: 4px; }
+
+.chart-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; flex: 1; }
+.chart-sec-header { padding: 14px 18px; border-bottom: 1px solid var(--border-color); font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+.chart-sec-body { padding: 12px; height: 220px; position: relative; }
+
+.bottom-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+.bottom-tabs { display: flex; border-bottom: 1px solid var(--border-color); }
+.bottom-tab { padding: 12px 20px; font-size: 0.85rem; font-weight: 500; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.bottom-tab:hover { color: var(--text-primary); }
+.bottom-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+.trades-table { width: 100%; border-collapse: collapse; }
+.trades-table th { padding: 10px 16px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); text-align: left; font-weight: 500; background: var(--bg-elevated); }
+.trades-table td { padding: 10px 16px; font-size: 0.82rem; color: var(--text-primary); border-bottom: 1px solid var(--border-color); }
+.trades-table tr:hover td { background: var(--bg-elevated); }
+.pnl-pos { color: var(--accent-green); font-weight: 600; }
+.pnl-neg { color: var(--accent-red); font-weight: 600; }
+.trades-pagination { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px; }
+.pg-btn { background: var(--bg-elevated); border: 1px solid var(--border-color); color: var(--text-secondary); padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
+.pg-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+.pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pg-btn.active { background: var(--accent-blue); color: var(--bg-primary); border-color: var(--accent-blue); }
+.pg-info { font-size: 0.75rem; color: var(--text-muted); }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 0.85rem; }
+
+.loading-skeleton { background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-card) 50%, var(--bg-elevated) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; height: 24px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.skel-row { display: flex; gap: 16px; margin-bottom: 12px; }
+.skel-box { flex: 1; height: 80px; }
+
+@media (max-width: 1200px) {
+    .stats-row { grid-template-columns: repeat(3, 1fr); }
+    .main-grid { grid-template-columns: 1fr; }
+    .right-panel { flex-direction: row; flex-wrap: wrap; }
+    .week-card { flex: 1; min-width: 140px; }
+    .chart-section { min-width: 100%; }
+}
+@media (max-width: 768px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .dash-topbar { flex-direction: column; gap: 10px; align-items: stretch; }
+    .dash-content { padding: 16px; }
+    .cal-cell { min-height: 60px; padding: 4px; }
+    .cal-cell-pnl { font-size: 0.75rem; }
+}
+@media (max-width: 480px) {
+    .stats-row { grid-template-columns: 1fr; }
+}
+
+/* ── Symbol Performance Tab ── */
+.sym-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-elevated);
+}
+.sym-sort-pills { display: flex; gap: 4px; }
+.sym-sort-btn {
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.sym-sort-btn:hover { color: var(--text-primary); border-color: var(--accent-blue); }
+.sym-sort-btn.active { background: rgba(0,212,255,0.1); color: var(--accent-blue); border-color: rgba(0,212,255,0.25); }
+.sym-count { font-size: 0.72rem; color: var(--text-muted); }
+.sym-table { width: 100%; border-collapse: collapse; }
+.sym-table th {
+    padding: 10px 16px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    text-align: left;
+    font-weight: 500;
+    background: var(--bg-elevated);
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+    white-space: nowrap;
+}
+.sym-table th:hover { color: var(--text-primary); }
+.sym-table th.sorted { color: var(--accent-blue); }
+.sym-table td {
+    padding: 11px 16px;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+.sym-table tr:hover td { background: var(--bg-elevated); }
+.sym-table .sym-name { font-weight: 700; letter-spacing: -0.2px; }
+.sym-table .sym-badge {
+    display: inline-block;
+    font-size: 0.58rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.3px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.sym-badge-best { background: rgba(0,200,83,0.12); color: var(--accent-green); }
+.sym-badge-worst { background: rgba(255,82,82,0.12); color: var(--accent-red); }
+.sym-wr-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+}
+.sym-wr-track {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+}
+.sym-wr-fill { height: 100%; border-radius: 2px; }
+.sym-wr-pct { font-size: 0.78rem; font-weight: 700; min-width: 38px; text-align: right; }
+</style>
+
+<div class="dash-container">
+    <div class="dash-topbar">
+        <div class="dash-topbar-title">Dashboard</div>
+        <div class="dash-topbar-controls">
+            <select id="brokerFilter" class="tb-select">
+                <option value="">All Brokers</option>
+                <option value="WEBULL">Webull</option>
+                <option value="ALPACA">Alpaca Live</option>
+                <option value="ALPACA_PAPER">Alpaca Paper</option>
+                <option value="SCHWAB">Schwab</option>
+                <option value="ROBINHOOD">Robinhood</option>
+                <option value="TASTYTRADE_LIVE">Tastytrade Live</option>
+                <option value="TASTYTRADE_PAPER">Tastytrade Paper</option>
+                <option value="IBKR_LIVE">IBKR Live</option>
+                <option value="IBKR_PAPER">IBKR Paper</option>
+                <option value="TRADING212">Trading 212</option>
+            </select>
+            <button class="tb-btn" id="dateRangeBtn">Date range</button>
+            <div id="customDateRow" style="display:none;align-items:center;gap:8px;">
+                <input type="date" id="startDate" class="tb-select">
+                <span style="color:var(--text-muted)">to</span>
+                <input type="date" id="endDate" class="tb-select">
+                <button class="tb-btn" id="applyDateBtn" style="background:var(--accent-blue);color:var(--bg-primary);border-color:var(--accent-blue);">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dash-content">
+        <div id="loadingSkeleton">
+            <div class="skel-row"><div class="loading-skeleton skel-box"></div><div class="loading-skeleton skel-box"></div><div class="loading-skeleton skel-box"></div><div class="loading-skeleton skel-box"></div><div class="loading-skeleton skel-box"></div></div>
+            <div class="loading-skeleton" style="height:400px;margin-top:16px"></div>
+        </div>
+
+        <div id="dashboardContent" style="display:none;">
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-label">Realized P&L</div>
+                    <div id="statBalance" class="stat-primary">$0</div>
+                    <div id="statPnlSub" class="stat-sub">0 closed trades</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg win/loss trade</div>
+                    <div id="statAvgRatio" class="stat-primary">0.00</div>
+                    <div class="stat-bar-row"><div class="stat-bar"><div id="statBarGreen" class="stat-bar-green" style="width:50%"></div><div id="statBarRed" class="stat-bar-red" style="width:50%"></div></div></div>
+                    <div class="stat-bar-labels"><span id="statAvgWinLabel" class="green">$0</span><span id="statAvgLossLabel" class="red">$0</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Profit factor</div>
+                    <div id="statPF" class="stat-primary">0.00</div>
+                    <div style="margin-top:6px;"><canvas id="pfDonut" width="52" height="52" style="width:52px;height:52px;"></canvas></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Average drawdown</div>
+                    <div id="statDD" class="stat-primary">$0</div>
+                    <div id="statDDSub" class="stat-sub">Current: $0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Trade win %</div>
+                    <div id="statWinPct" class="stat-primary green">0%</div>
+                    <div class="stat-donut-wrap">
+                        <canvas id="winDonut" class="stat-donut-canvas" width="48" height="48"></canvas>
+                        <div id="winDonutLegend" class="stat-donut-legend"></div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Hold Time</div>
+                    <div id="statHoldTime" class="stat-primary">—</div>
+                    <div id="statHoldSub" class="stat-sub">avg per trade</div>
+                </div>
+            </div>
+
+            <!-- Direction Breakdown (Stocks / Calls / Puts) -->
+            <div id="directionBreakdownRow" style="display:none; margin-bottom:24px;">
+                <div style="display:flex; gap:12px; flex-wrap:wrap;" id="directionCards"></div>
+            </div>
+
+            <div class="main-grid">
+                <div class="cal-section">
+                    <div class="cal-header">
+                        <div class="cal-nav">
+                            <button class="cal-nav-btn" id="calPrev">&#8249;</button>
+                            <span class="cal-month-label" id="calMonthLabel">March 2026</span>
+                            <button class="cal-nav-btn" id="calNext">&#8250;</button>
+                            <button class="cal-today-btn" id="calToday">This month</button>
+                        </div>
+                        <div class="cal-stats">
+                            <span>Monthly stats:</span>
+                            <span class="val" id="calMonthlyPnl">$0</span>
+                            <span class="val" id="calTradingDays">0 days</span>
+                        </div>
+                    </div>
+                    <div class="cal-grid" id="calGrid"></div>
+                </div>
+
+                <div class="right-panel">
+                    <div id="weekCards"></div>
+                    <div class="chart-section">
+                        <div class="chart-sec-header">Daily net cumulative P&L</div>
+                        <div class="chart-sec-body"><canvas id="cumChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bottom-section">
+                <div class="bottom-tabs">
+                    <div class="bottom-tab active" data-tab="recent">Recent trades</div>
+                    <div class="bottom-tab" data-tab="open">Open positions</div>
+                    <div class="bottom-tab" data-tab="symbols">Symbol performance</div>
+                </div>
+                <div id="tradesContent">
+                    <table class="trades-table">
+                        <thead>
+                            <tr>
+                                <th>Close Date</th>
+                                <th>Symbol</th>
+                                <th>Direction</th>
+                                <th>Entry</th>
+                                <th>Exit</th>
+                                <th>Qty</th>
+                                <th>Net P&L</th>
+                                <th>P&L %</th>
+                                <th>Broker</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradesBody">
+                            <tr><td colspan="9" class="empty-state">No trades found</td></tr>
+                        </tbody>
+                    </table>
+                    <div class="trades-pagination" id="tradesPagination"></div>
+                </div>
+                <div id="symbolsContent" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const CC = {green:'#00c853',red:'#ff5252',blue:'#00d4ff',gold:'#ffc107',grid:'rgba(255,255,255,0.05)',text:'#8899a6',bg:'#141a23'};
+
+let calYear, calMonth;
+let cumChart = null;
+let pfDonutChart = null, winDonutChart = null;
+let journalPage = 1;
+let journalPerPage = 20;
+let currentTab = 'recent';
+let cachedPerf = null;
+
+(function() {
+    const now = new Date();
+    calYear = now.getFullYear();
+    calMonth = now.getMonth() + 1;
+})();
+
+function fmt$(v) { let n=parseFloat(v)||0; return (n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtK(v) { let n=parseFloat(v)||0; if(Math.abs(n)>=1000) return (n<0?'-':'')+'$'+(Math.abs(n)/1000).toFixed(2)+'K'; return fmt$(n); }
+function pnlCls(v) { return parseFloat(v)>=0?'pnl-pos':'pnl-neg'; }
+
+function destroyChart(c) { if(c){c.destroy();} return null; }
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboard();
+
+    document.getElementById('brokerFilter').addEventListener('change', () => { journalPage=1; loadDashboard(); });
+
+    document.getElementById('dateRangeBtn').addEventListener('click', function() {
+        let row = document.getElementById('customDateRow');
+        let showing = row.style.display === 'flex';
+        row.style.display = showing ? 'none' : 'flex';
+        this.classList.toggle('active', !showing);
+    });
+
+    document.getElementById('applyDateBtn').addEventListener('click', () => { journalPage=1; loadDashboard(); });
+
+    document.getElementById('calPrev').addEventListener('click', () => { calMonth--; if(calMonth<1){calMonth=12;calYear--;} loadCalendar(); });
+    document.getElementById('calNext').addEventListener('click', () => { calMonth++; if(calMonth>12){calMonth=1;calYear++;} loadCalendar(); });
+    document.getElementById('calToday').addEventListener('click', () => { const now=new Date(); calYear=now.getFullYear(); calMonth=now.getMonth()+1; loadCalendar(); });
+
+    document.querySelectorAll('.bottom-tab').forEach(t => {
+        t.addEventListener('click', function() {
+            document.querySelectorAll('.bottom-tab').forEach(x=>x.classList.remove('active'));
+            this.classList.add('active');
+            currentTab = this.dataset.tab;
+            journalPage = 1;
+            if (currentTab === 'symbols') {
+                document.getElementById('tradesContent').style.display = 'none';
+                document.getElementById('symbolsContent').style.display = 'block';
+                renderSymbolTable();
+            } else {
+                document.getElementById('tradesContent').style.display = 'block';
+                document.getElementById('symbolsContent').style.display = 'none';
+                loadJournal();
+            }
+        });
+    });
+});
+
+function buildParams(extra) {
+    let p = new URLSearchParams();
+    let broker = document.getElementById('brokerFilter').value;
+    if(broker) p.set('broker', broker);
+    let sd = document.getElementById('startDate').value;
+    let ed = document.getElementById('endDate').value;
+    if(sd) p.set('start_date', sd);
+    if(ed) p.set('end_date', ed);
+    if(extra) { for(let k in extra) p.set(k, extra[k]); }
+    return p;
+}
+
+async function loadDashboard() {
+    document.getElementById('loadingSkeleton').style.display = 'block';
+    document.getElementById('dashboardContent').style.display = 'none';
+    try {
+        let statusFilter = currentTab === 'open' ? 'OPEN' : 'CLOSED';
+        let p = buildParams({section:'all', period:'all', bucket:'daily', page:journalPage, per_page:journalPerPage, cal_year:calYear, cal_month:calMonth, status:statusFilter});
+        let resp = await fetch('/api/performance-v2?'+p.toString(), {credentials:'same-origin'});
+        if(!resp.ok) throw new Error('API error '+resp.status);
+        let data = await resp.json();
+        if(!data.success) throw new Error(data.error||'Unknown');
+        cachedPerf = data;
+        renderStats(data.performance);
+        renderSymbolPerformance(data.edge);
+        renderCalendar(data.calendar);
+        renderWeeks(data.calendar);
+        renderCumChart(data.calendar);
+        renderJournalData(data.journal);
+        document.getElementById('loadingSkeleton').style.display = 'none';
+        document.getElementById('dashboardContent').style.display = 'block';
+    } catch(e) {
+        console.error('Load error:', e);
+        document.getElementById('loadingSkeleton').innerHTML = '<div class="empty-state">Failed to load: '+e.message+'</div>';
+    }
+}
+
+async function loadCalendar() {
+    try {
+        let p = buildParams({section:'calendar', period:'all', cal_year:calYear, cal_month:calMonth});
+        let resp = await fetch('/api/performance-v2?'+p.toString(), {credentials:'same-origin'});
+        let data = await resp.json();
+        if(data.success && data.calendar) {
+            renderCalendar(data.calendar);
+            renderWeeks(data.calendar);
+            renderCumChart(data.calendar);
+        }
+    } catch(e) { console.error('Calendar load error:', e); }
+}
+
+async function loadJournal() {
+    try {
+        let statusFilter = currentTab === 'open' ? 'OPEN' : 'CLOSED';
+        let p = buildParams({section:'journal', period:'all', page:journalPage, per_page:journalPerPage, status:statusFilter});
+        let resp = await fetch('/api/performance-v2?'+p.toString(), {credentials:'same-origin'});
+        let data = await resp.json();
+        if(data.success && data.journal) {
+            renderJournalData(data.journal);
+        }
+    } catch(e) { console.error('Journal load error:', e); }
+}
+
+function renderStats(p) {
+    if(!p) return;
+    let balEl = document.getElementById('statBalance');
+    balEl.textContent = fmtK(p.total_pnl);
+    balEl.className = 'stat-primary ' + (p.total_pnl>=0?'green':'red');
+    document.getElementById('statPnlSub').textContent = p.total_closed + ' closed trades';
+
+    let avgWin = Math.abs(parseFloat(p.avg_win)||0);
+    let avgLoss = Math.abs(parseFloat(p.avg_loss)||0);
+    let ratio = avgLoss > 0 ? (avgWin/avgLoss).toFixed(2) : (avgWin > 0 ? avgWin.toFixed(2) : '0.00');
+    document.getElementById('statAvgRatio').textContent = ratio;
+    let totalAvg = avgWin + avgLoss;
+    let greenPct = totalAvg > 0 ? (avgWin/totalAvg*100) : 50;
+    document.getElementById('statBarGreen').style.width = greenPct + '%';
+    document.getElementById('statBarRed').style.width = (100-greenPct) + '%';
+    document.getElementById('statAvgWinLabel').textContent = fmtK(avgWin);
+    document.getElementById('statAvgLossLabel').textContent = '-' + fmtK(avgLoss);
+
+    let pf = parseFloat(p.profit_factor)||0;
+    document.getElementById('statPF').textContent = pf.toFixed(2);
+    renderPFDonut(p.gross_profit||0, p.gross_loss||0);
+
+    let dd = parseFloat(p.max_drawdown)||0;
+    let ddEl = document.getElementById('statDD');
+    ddEl.textContent = fmt$(dd);
+    ddEl.className = 'stat-primary' + (dd > 0 ? ' red' : '');
+    document.getElementById('statDDSub').textContent = 'Max drawdown: ' + fmt$(dd);
+
+    let wr = parseFloat(p.win_rate)||0;
+    let wrEl = document.getElementById('statWinPct');
+    wrEl.textContent = wr.toFixed(2) + '%';
+    wrEl.className = 'stat-primary ' + (wr>=50?'green':'red');
+    renderWinDonut(p.wins||0, p.losses||0, p.breakeven||0);
+
+    let holdDays = parseFloat(p.avg_hold_days)||0;
+    let holdEl = document.getElementById('statHoldTime');
+    if (holdDays <= 0) { holdEl.textContent = '—'; }
+    else if (holdDays < 0.042) { holdEl.textContent = Math.round(holdDays * 1440) + 'm'; holdEl.className = 'stat-primary'; holdEl.style.color = '#E040FB'; }
+    else if (holdDays < 1) { let hh = Math.floor(holdDays*24), mm = Math.round((holdDays*24-hh)*60); holdEl.textContent = hh + 'h' + (mm>0?' '+mm+'m':''); holdEl.className = 'stat-primary'; holdEl.style.color = '#00d4ff'; }
+    else if (holdDays < 7) { let dd = Math.floor(holdDays), hh = Math.round((holdDays-dd)*24); holdEl.textContent = dd + 'd' + (hh>0?' '+hh+'h':''); holdEl.className = 'stat-primary'; holdEl.style.color = '#FF9F0A'; }
+    else { holdEl.textContent = Math.round(holdDays) + 'd'; holdEl.className = 'stat-primary'; holdEl.style.color = '#30D158'; }
+    let styleLabel = holdDays < 0.042 ? 'Scalper' : (holdDays < 1 ? 'Day Trader' : (holdDays < 14 ? 'Swing' : 'Position'));
+    document.getElementById('statHoldSub').textContent = styleLabel + ' style';
+
+    // Direction breakdown (Stocks / Calls / Puts)
+    const db = p.direction_breakdown;
+    const dirRow = document.getElementById('directionBreakdownRow');
+    const dirCards = document.getElementById('directionCards');
+    if (db && Object.keys(db).length > 0) {
+        dirRow.style.display = 'block';
+        const order = ['stocks', 'calls', 'puts'];
+        const labels = { stocks: 'Stocks', calls: 'Calls', puts: 'Puts' };
+        const icons = { stocks: '📈', calls: '🟢', puts: '🔴' };
+        const colors = { stocks: '#00d4ff', calls: '#30D158', puts: '#FF453A' };
+        let html = '';
+        for (const dir of order) {
+            const d = db[dir];
+            if (!d || !d.trades) continue;
+            const c = colors[dir];
+            const pnlCls = d.pnl >= 0 ? '#30D158' : '#FF453A';
+            html += `<div style="flex:1;min-width:160px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:10px;padding:14px 18px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <span style="font-size:1.1rem;">${icons[dir]}</span>
+                    <span style="font-weight:700;font-size:0.875rem;color:var(--text-primary);">${labels[dir]}</span>
+                    <span style="margin-left:auto;font-size:0.75rem;color:var(--text-muted);">${d.trades} trades</span>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:12px;">
+                    <span style="font-size:1.25rem;font-weight:700;color:${c};">${d.win_rate}%</span>
+                    <span style="font-size:0.75rem;color:var(--text-muted);">WR</span>
+                    <span style="margin-left:auto;font-size:0.8125rem;font-weight:600;color:${pnlCls};">$${d.pnl.toFixed(2)}</span>
+                </div>
+                <div style="margin-top:6px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;">
+                    <div style="height:100%;width:${d.win_rate}%;background:${c};border-radius:2px;"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.6875rem;color:var(--text-muted);">
+                    <span>${d.wins}W / ${d.losses}L</span>
+                </div>
+            </div>`;
+        }
+        dirCards.innerHTML = html;
+    } else {
+        dirRow.style.display = 'none';
+    }
+}
+
+let _symbolData = [];
+let _symbolSort = 'trades';
+let _symbolSortDir = 'desc';
+
+function renderSymbolPerformance(edge) {
+    if (edge && edge.by_symbol) _symbolData = edge.by_symbol;
+}
+
+function sortSymbolsBy(field) {
+    if (_symbolSort === field) _symbolSortDir = _symbolSortDir === 'desc' ? 'asc' : 'desc';
+    else { _symbolSort = field; _symbolSortDir = 'desc'; }
+    renderSymbolTable();
+}
+
+function _fmtHold(d) {
+    if (!d || d <= 0) return '—';
+    if (d < 0.042) return Math.round(d * 1440) + 'm';
+    if (d < 1) { let h = Math.floor(d*24), m = Math.round((d*24-h)*60); return h+'h'+(m>0?' '+m+'m':''); }
+    if (d < 7) { let dd = Math.floor(d), h = Math.round((d-dd)*24); return dd+'d'+(h>0?' '+h+'h':''); }
+    return Math.round(d) + 'd';
+}
+
+function renderSymbolTable() {
+    const container = document.getElementById('symbolsContent');
+    if (!_symbolData.length) {
+        container.innerHTML = '<div class="empty-state">No symbol data available</div>';
+        return;
+    }
+
+    let sorted = [..._symbolData];
+    const dir = _symbolSortDir === 'desc' ? -1 : 1;
+    if (_symbolSort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name) * dir);
+    else sorted.sort((a, b) => (a[_symbolSort] - b[_symbolSort]) * dir);
+
+    let bestPnl = -Infinity, worstPnl = Infinity, bestSym = '', worstSym = '';
+    sorted.forEach(s => {
+        if (s.pnl > bestPnl) { bestPnl = s.pnl; bestSym = s.name; }
+        if (s.pnl < worstPnl) { worstPnl = s.pnl; worstSym = s.name; }
+    });
+
+    const thCls = (f) => _symbolSort === f ? ' class="sorted"' : '';
+    const arrow = (f) => _symbolSort === f ? (_symbolSortDir === 'desc' ? ' ▾' : ' ▴') : '';
+
+    let html = `<table class="sym-table">
+        <thead><tr>
+            <th${thCls('name')} onclick="sortSymbolsBy('name')">Symbol${arrow('name')}</th>
+            <th${thCls('trades')} onclick="sortSymbolsBy('trades')">Trades${arrow('trades')}</th>
+            <th${thCls('win_rate')} onclick="sortSymbolsBy('win_rate')" style="min-width:160px">Win Rate${arrow('win_rate')}</th>
+            <th${thCls('pnl')} onclick="sortSymbolsBy('pnl')">Net P&L${arrow('pnl')}</th>
+            <th${thCls('avg_pnl')} onclick="sortSymbolsBy('avg_pnl')">Avg P&L${arrow('avg_pnl')}</th>
+            <th${thCls('avg_hold')} onclick="sortSymbolsBy('avg_hold')">Avg Hold${arrow('avg_hold')}</th>
+        </tr></thead><tbody>`;
+
+    sorted.forEach(s => {
+        const pnlCl = s.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+        const avgCl = s.avg_pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+        const wrColor = s.win_rate >= 60 ? 'var(--accent-green)' : (s.win_rate >= 40 ? 'var(--accent-gold)' : 'var(--accent-red)');
+        let badge = '';
+        if (s.name === bestSym && bestPnl > 0) badge = '<span class="sym-badge sym-badge-best">BEST</span>';
+        else if (s.name === worstSym && worstPnl < 0) badge = '<span class="sym-badge sym-badge-worst">WORST</span>';
+
+        html += `<tr>
+            <td><span class="sym-name">${s.name}</span>${badge}</td>
+            <td>${s.trades}</td>
+            <td><div class="sym-wr-bar"><div class="sym-wr-track"><div class="sym-wr-fill" style="width:${Math.min(s.win_rate,100)}%;background:${wrColor}"></div></div><span class="sym-wr-pct" style="color:${wrColor}">${s.win_rate}%</span></div></td>
+            <td class="${pnlCl}">${fmt$(s.pnl)}</td>
+            <td class="${avgCl}">${fmt$(s.avg_pnl)}</td>
+            <td style="color:var(--text-secondary)">${_fmtHold(s.avg_hold)}</td>
+        </tr>`;
+    });
+
+    html += '</tbody></table>';
+    html += `<div style="padding:10px 16px;font-size:0.72rem;color:var(--text-muted);border-top:1px solid var(--border-color);">${sorted.length} symbol${sorted.length !== 1 ? 's' : ''} traded</div>`;
+    container.innerHTML = html;
+}
+
+function renderPFDonut(gp, gl) {
+    pfDonutChart = destroyChart(pfDonutChart);
+    let ctx = document.getElementById('pfDonut').getContext('2d');
+    gp = parseFloat(gp)||0; gl = parseFloat(gl)||0;
+    if(gp===0 && gl===0) { gp=1; gl=1; }
+    pfDonutChart = new Chart(ctx, {
+        type:'doughnut',
+        data:{datasets:[{data:[gp,gl],backgroundColor:[CC.green,CC.red],borderWidth:0,cutout:'70%'}]},
+        options:{responsive:false,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},events:[]}
+    });
+}
+
+function renderWinDonut(w, l, be) {
+    winDonutChart = destroyChart(winDonutChart);
+    let ctx = document.getElementById('winDonut').getContext('2d');
+    if(w===0 && l===0 && be===0) { w=1; }
+    winDonutChart = new Chart(ctx, {
+        type:'doughnut',
+        data:{labels:['Wins','Losses','BE'],datasets:[{data:[w,l,be],backgroundColor:[CC.green,CC.red,'#555'],borderWidth:0,cutout:'65%'}]},
+        options:{responsive:false,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},events:[]}
+    });
+    document.getElementById('winDonutLegend').innerHTML = '<span style="color:'+CC.green+'">'+w+'</span> / <span style="color:'+CC.red+'">'+l+'</span>' + (be>0?' / <span>'+be+'</span>':'');
+}
+
+function renderCalendar(cal) {
+    if(!cal) return;
+    document.getElementById('calMonthLabel').textContent = MONTHS[cal.month-1]+' '+cal.year;
+    let pnlEl = document.getElementById('calMonthlyPnl');
+    pnlEl.textContent = fmtK(cal.monthly_pnl);
+    pnlEl.style.color = cal.monthly_pnl >= 0 ? CC.green : CC.red;
+    document.getElementById('calTradingDays').textContent = cal.trading_days + ' days';
+
+    const today = new Date();
+    const todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+
+    let firstDay = new Date(cal.year, cal.month-1, 1);
+    let daysInMonth = new Date(cal.year, cal.month, 0).getDate();
+    let startDow = firstDay.getDay();
+
+    let html = '';
+    ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => {
+        html += '<div class="cal-day-header">'+d+'</div>';
+    });
+
+    let prevMonth = cal.month - 1;
+    let prevYear = cal.year;
+    if(prevMonth < 1) { prevMonth = 12; prevYear--; }
+    let daysInPrev = new Date(prevYear, prevMonth, 0).getDate();
+
+    for(let i = 0; i < startDow; i++) {
+        let d = daysInPrev - startDow + i + 1;
+        html += '<div class="cal-cell other-month"><div class="cal-date">'+d+'</div></div>';
+    }
+
+    for(let d = 1; d <= daysInMonth; d++) {
+        let dateStr = cal.year+'-'+String(cal.month).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+        let dayData = cal.days[dateStr];
+        let classes = 'cal-cell';
+        let isToday = dateStr === todayStr;
+        if(isToday) classes += ' today';
+        if(dayData) {
+            classes += ' has-trades';
+            classes += dayData.pnl >= 0 ? ' positive' : ' negative';
+        }
+        html += '<div class="'+classes+'">';
+        if(isToday) {
+            html += '<div class="cal-date today-num">'+d+'</div>';
+        } else {
+            html += '<div class="cal-date">'+d+'</div>';
+        }
+        if(dayData) {
+            html += '<div class="cal-cell-pnl'+(dayData.pnl<0?' neg':'')+'">'+fmtK(dayData.pnl)+'</div>';
+            html += '<div class="cal-cell-info">'+dayData.trades+' trade'+(dayData.trades!==1?'s':'')+'</div>';
+            html += '<div class="cal-cell-wr">'+dayData.win_rate+'%</div>';
+        }
+        html += '</div>';
+    }
+
+    let totalCells = startDow + daysInMonth;
+    let remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+    for(let i = 1; i <= remaining; i++) {
+        html += '<div class="cal-cell other-month"><div class="cal-date">'+i+'</div></div>';
+    }
+
+    document.getElementById('calGrid').innerHTML = html;
+}
+
+function renderWeeks(cal) {
+    if(!cal || !cal.weeks) return;
+    let weekMap = {};
+    (cal.weeks||[]).forEach(w => { weekMap[w.week] = w; });
+    let maxWeek = Math.max(5, ...Object.keys(weekMap).map(Number));
+    let html = '';
+    for(let wn = 1; wn <= maxWeek; wn++) {
+        let w = weekMap[wn];
+        if(w) {
+            let cls = w.pnl > 0 ? 'positive' : w.pnl < 0 ? 'negative' : 'neutral';
+            html += '<div class="week-card">';
+            html += '<div class="week-label">Week '+wn+'</div>';
+            html += '<div class="week-pnl '+cls+'">'+fmtK(w.pnl)+'</div>';
+            html += '<div class="week-sub">'+w.days+' day'+(w.days!==1?'s':'');
+            if(w.trades > 0) {
+                html += '<span class="badge">'+w.trades+' trades</span>';
+            }
+            html += '</div></div>';
+        } else {
+            html += '<div class="week-card">';
+            html += '<div class="week-label">Week '+wn+'</div>';
+            html += '<div class="week-pnl neutral">$0</div>';
+            html += '<div class="week-sub">0 days</div></div>';
+        }
+    }
+    document.getElementById('weekCards').innerHTML = html;
+}
+
+function renderCumChart(cal) {
+    cumChart = destroyChart(cumChart);
+    if(!cal || !cal.cumulative_daily || cal.cumulative_daily.length === 0) return;
+    let labels = cal.cumulative_daily.map(x => {
+        let parts = x.date.split('-');
+        return parts[1]+'/'+parts[2];
+    });
+    let data = cal.cumulative_daily.map(x => parseFloat(x.cumulative)||0);
+    let ctx = document.getElementById('cumChart').getContext('2d');
+    let last = data[data.length-1]||0;
+    let lineColor = last >= 0 ? CC.green : CC.red;
+    let gradient = ctx.createLinearGradient(0,0,0,200);
+    gradient.addColorStop(0, last>=0?'rgba(0,200,83,0.3)':'rgba(255,82,82,0.3)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+    Chart.defaults.color = CC.text;
+    Chart.defaults.borderColor = CC.grid;
+    cumChart = new Chart(ctx, {
+        type:'line',
+        data:{labels, datasets:[{data, borderColor:lineColor, backgroundColor:gradient, fill:true, tension:0.3, pointRadius:0, pointHoverRadius:4, pointHoverBackgroundColor:lineColor, borderWidth:2}]},
+        options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a222d',borderColor:'#1e2a38',borderWidth:1,padding:8,displayColors:false,callbacks:{label:c=>fmt$(c.raw)}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:6,font:{size:9}}},y:{grid:{color:CC.grid},ticks:{callback:v=>'$'+v.toLocaleString(),font:{size:9}}}}}
+    });
+}
+
+function renderJournalData(journal) {
+    if(!journal || !journal.trades) {
+        document.getElementById('tradesBody').innerHTML = '<tr><td colspan="9" class="empty-state">No trades found</td></tr>';
+        document.getElementById('tradesPagination').innerHTML = '';
+        return;
+    }
+    let trades = journal.trades;
+    let html = '';
+    trades.forEach(t => {
+        let sym = t.symbol || '';
+        if(t.strike) sym += ' $'+t.strike;
+        if(t.call_put) sym += ' '+t.call_put;
+        if(t.expiry) sym += ' '+t.expiry;
+        let displayDate = t.status === 'OPEN' ? (t.entry_date||'') : (t.closed_date||t.entry_date||'');
+        let dateShort = displayDate ? displayDate.substring(0,10) : '-';
+
+        html += '<tr>';
+        html += '<td>'+dateShort+'</td>';
+        html += '<td style="font-weight:600">'+sym+'</td>';
+        html += '<td>'+(t.direction||'-')+'</td>';
+        html += '<td>'+fmt$(t.entry_price)+'</td>';
+        html += '<td>'+(t.exit_price?fmt$(t.exit_price):'-')+'</td>';
+        html += '<td>'+(t.entry_qty||'-')+'</td>';
+        html += '<td class="'+pnlCls(t.pnl)+'">'+fmt$(t.pnl)+'</td>';
+        html += '<td class="'+pnlCls(t.pnl_pct)+'">'+(t.pnl_pct!=null?(parseFloat(t.pnl_pct)||0).toFixed(1)+'%':'-')+'</td>';
+        html += '<td>'+(t.broker||'-')+'</td>';
+        html += '</tr>';
+    });
+    if(!html) html = '<tr><td colspan="9" class="empty-state">No trades found</td></tr>';
+    document.getElementById('tradesBody').innerHTML = html;
+
+    let pg = journal.pagination;
+    if(pg && pg.total_pages > 1) {
+        let ph = '';
+        ph += '<button class="pg-btn" onclick="gotoPage('+(pg.page-1)+')" '+(pg.page<=1?'disabled':'')+'>Prev</button>';
+        for(let i=1;i<=pg.total_pages;i++) {
+            if(pg.total_pages>7 && Math.abs(i-pg.page)>2 && i!==1 && i!==pg.total_pages) {
+                if(i===2||i===pg.total_pages-1) ph+='<span class="pg-info">...</span>';
+                continue;
+            }
+            ph += '<button class="pg-btn'+(i===pg.page?' active':'')+'" onclick="gotoPage('+i+')">'+i+'</button>';
+        }
+        ph += '<button class="pg-btn" onclick="gotoPage('+(pg.page+1)+')" '+(pg.page>=pg.total_pages?'disabled':'')+'>Next</button>';
+        ph += '<span class="pg-info">'+pg.total_trades+' trades</span>';
+        document.getElementById('tradesPagination').innerHTML = ph;
+    } else {
+        document.getElementById('tradesPagination').innerHTML = '';
+    }
+}
+
+function gotoPage(p) {
+    journalPage = p;
+    loadJournal();
+}
+</script>
+{% endblock %}

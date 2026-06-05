@@ -1,0 +1,412 @@
+name: Build User (Public Release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 3.2.1)'
+        required: true
+        type: string
+  repository_dispatch:
+    types: [user_release_ready]
+
+env:
+  VERSION: ${{ github.event.inputs.version || github.event.client_payload.version }}
+
+jobs:
+  set-build-type:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set BUILD_TYPE to USER
+        run: |
+          sed -i "s/^BUILD_TYPE = .*/BUILD_TYPE = 'USER'  # Set by release.sh/" src/selfbot_webull.py
+          echo "BUILD_TYPE set to USER:"
+          cat src/selfbot_webull.py | grep BUILD_TYPE
+      
+      - name: Update version
+        run: |
+          BUILD_DATE=$(date +%Y-%m-%d)
+          sed -i "s/APP_VERSION = \"[^\"]*\"/APP_VERSION = \"${{ env.VERSION }}\"/" upgrade/version.py
+          sed -i "s/BUILD_DATE = \"[^\"]*\"/BUILD_DATE = \"$BUILD_DATE\"/" upgrade/version.py
+      
+      - name: Upload modified source
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-user
+          path: .
+          retention-days: 1
+
+  build-windows:
+    needs: set-build-type
+    runs-on: windows-latest
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        shell: powershell
+        run: |
+          $bytes = [Convert]::FromBase64String("${{ secrets.PYARMOR_LICENSE }}")
+          [IO.File]::WriteAllBytes("pyarmor-regfile.zip", $bytes)
+          pyarmor reg pyarmor-regfile.zip
+          Remove-Item pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate source code
+        shell: powershell
+        run: |
+          chcp 65001
+          $env:PYTHONIOENCODING = "utf-8"
+          pyarmor gen --output obfuscated src/
+          
+          # Debug: Show what PyArmor created
+          Write-Host "=== PyArmor output structure ==="
+          Get-ChildItem -Path obfuscated -Recurse | Select-Object FullName
+      
+      - name: Build with PyInstaller
+        shell: powershell
+        run: |
+          Copy-Item -Path src -Destination src_backup -Recurse
+          Copy-Item -Path obfuscated/src/* -Destination src/ -Recurse -Force
+          
+          # Critical: Copy PyArmor runtime module to src/ directory
+          Get-ChildItem -Path obfuscated -Directory -Filter "pyarmor_runtime_*" | ForEach-Object {
+            Write-Host "Copying PyArmor runtime: $($_.Name)"
+            Copy-Item -Path $_.FullName -Destination "src/$($_.Name)" -Recurse -Force
+          }
+          
+          # Debug: Verify runtime is in place
+          Write-Host "=== src/ directory structure ==="
+          Get-ChildItem -Path src -Directory -Filter "pyarmor_runtime_*"
+          
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          Remove-Item -Path src -Recurse -Force
+          Move-Item -Path src_backup -Destination src
+          Rename-Item -Path dist/DiscordTradingBot.exe -NewName BotifyTrades-Windows.exe
+      
+      - name: Upload Windows User
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Windows-v${{ env.VERSION }}
+          path: dist/BotifyTrades-Windows.exe
+          retention-days: 90
+
+  build-linux:
+    needs: set-build-type
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        run: |
+          echo "${{ secrets.PYARMOR_LICENSE }}" | base64 -d > pyarmor-regfile.zip
+          pyarmor reg pyarmor-regfile.zip
+          rm pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate and Build
+        run: |
+          pyarmor gen --output obfuscated src/
+          
+          # Debug: Show what PyArmor created
+          echo "=== PyArmor output structure ==="
+          find obfuscated -type d -name "pyarmor_runtime_*"
+          
+          cp -r src src_backup
+          cp -r obfuscated/src/* src/
+          
+          # Critical: Copy PyArmor runtime module to src/ directory
+          for runtime_dir in obfuscated/pyarmor_runtime_*; do
+            if [ -d "$runtime_dir" ]; then
+              runtime_name=$(basename "$runtime_dir")
+              echo "Copying PyArmor runtime: $runtime_name"
+              cp -r "$runtime_dir" "src/$runtime_name"
+            fi
+          done
+          
+          # Debug: Verify runtime is in place
+          echo "=== src/ directory pyarmor runtimes ==="
+          ls -la src/pyarmor_runtime_* 2>/dev/null || echo "No runtime found in src/"
+          
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          rm -rf src && mv src_backup src
+          mv dist/DiscordTradingBot dist/BotifyTrades-Linux
+      
+      - name: Upload Linux User
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Linux-v${{ env.VERSION }}
+          path: dist/BotifyTrades-Linux
+          retention-days: 90
+
+  build-macos-intel:
+    needs: set-build-type
+    runs-on: macos-15-intel  # Intel x86_64 runner (replaces retired macos-13, available until Aug 2027)
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        run: |
+          echo "${{ secrets.PYARMOR_LICENSE }}" | base64 -d > pyarmor-regfile.zip
+          pyarmor reg pyarmor-regfile.zip
+          rm pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate and Build
+        run: |
+          pyarmor gen --output obfuscated src/
+          
+          # Debug: Show what PyArmor created
+          echo "=== PyArmor output structure ==="
+          find obfuscated -type d -name "pyarmor_runtime_*"
+          
+          cp -r src src_backup
+          cp -r obfuscated/src/* src/
+          
+          # Critical: Copy PyArmor runtime module to src/ directory
+          for runtime_dir in obfuscated/pyarmor_runtime_*; do
+            if [ -d "$runtime_dir" ]; then
+              runtime_name=$(basename "$runtime_dir")
+              echo "Copying PyArmor runtime: $runtime_name"
+              cp -r "$runtime_dir" "src/$runtime_name"
+            fi
+          done
+          
+          # Debug: Verify runtime is in place
+          echo "=== src/ directory pyarmor runtimes ==="
+          ls -la src/pyarmor_runtime_* 2>/dev/null || echo "No runtime found in src/"
+          
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          rm -rf src && mv src_backup src
+          mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Intel
+      
+      - name: Fix permissions and sign
+        run: |
+          # Set executable permission
+          chmod +x dist/BotifyTrades-macOS-Intel
+          
+          # Verify it's a proper executable
+          file dist/BotifyTrades-macOS-Intel
+          
+          # Ad-hoc code sign (required for macOS to recognize as executable)
+          codesign --force --deep --sign - dist/BotifyTrades-macOS-Intel
+          
+          # Remove quarantine attribute
+          xattr -cr dist/BotifyTrades-macOS-Intel
+          
+          echo "=== Final executable check ==="
+          ls -la dist/BotifyTrades-macOS-Intel
+          file dist/BotifyTrades-macOS-Intel
+      
+      - name: Create tar.gz archive (preserves permissions)
+        run: |
+          cd dist
+          tar -czvf BotifyTrades-macOS-Intel.tar.gz BotifyTrades-macOS-Intel
+          echo "=== Archive created ==="
+          ls -la BotifyTrades-macOS-Intel.tar.gz
+      
+      - name: Upload macOS Intel User
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-macOS-Intel-v${{ env.VERSION }}
+          path: dist/BotifyTrades-macOS-Intel.tar.gz
+          retention-days: 90
+
+  build-macos-silicon:
+    needs: set-build-type
+    runs-on: macos-14
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        run: |
+          echo "${{ secrets.PYARMOR_LICENSE }}" | base64 -d > pyarmor-regfile.zip
+          pyarmor reg pyarmor-regfile.zip
+          rm pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate and Build
+        run: |
+          pyarmor gen --output obfuscated src/
+          
+          # Debug: Show what PyArmor created
+          echo "=== PyArmor output structure ==="
+          find obfuscated -type d -name "pyarmor_runtime_*"
+          
+          cp -r src src_backup
+          cp -r obfuscated/src/* src/
+          
+          # Critical: Copy PyArmor runtime module to src/ directory
+          for runtime_dir in obfuscated/pyarmor_runtime_*; do
+            if [ -d "$runtime_dir" ]; then
+              runtime_name=$(basename "$runtime_dir")
+              echo "Copying PyArmor runtime: $runtime_name"
+              cp -r "$runtime_dir" "src/$runtime_name"
+            fi
+          done
+          
+          # Debug: Verify runtime is in place
+          echo "=== src/ directory pyarmor runtimes ==="
+          ls -la src/pyarmor_runtime_* 2>/dev/null || echo "No runtime found in src/"
+          
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          rm -rf src && mv src_backup src
+          mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Silicon
+      
+      - name: Fix permissions and sign
+        run: |
+          # Set executable permission
+          chmod +x dist/BotifyTrades-macOS-Silicon
+          
+          # Verify it's a proper executable
+          file dist/BotifyTrades-macOS-Silicon
+          
+          # Ad-hoc code sign (required for macOS to recognize as executable)
+          codesign --force --deep --sign - dist/BotifyTrades-macOS-Silicon
+          
+          # Remove quarantine attribute
+          xattr -cr dist/BotifyTrades-macOS-Silicon
+          
+          echo "=== Final executable check ==="
+          ls -la dist/BotifyTrades-macOS-Silicon
+          file dist/BotifyTrades-macOS-Silicon
+      
+      - name: Create tar.gz archive (preserves permissions)
+        run: |
+          cd dist
+          tar -czvf BotifyTrades-macOS-Silicon.tar.gz BotifyTrades-macOS-Silicon
+          echo "=== Archive created ==="
+          ls -la BotifyTrades-macOS-Silicon.tar.gz
+      
+      - name: Upload macOS Silicon User
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-macOS-Silicon-v${{ env.VERSION }}
+          path: dist/BotifyTrades-macOS-Silicon.tar.gz
+          retention-days: 90
+
+  publish-to-public-repo:
+    needs: [build-windows, build-linux, build-macos-intel, build-macos-silicon]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: releases
+          pattern: BotifyTrades-*
+      
+      - name: Create Release on Public Repo
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: DiscordTrader/BotifyTrades
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          tag_name: v${{ env.VERSION }}
+          name: BotifyTrades v${{ env.VERSION }}
+          body: |
+            ## BotifyTrades v${{ env.VERSION }}
+            
+            ### Downloads
+            - **Windows**: BotifyTrades-Windows.exe
+            - **Linux**: BotifyTrades-Linux
+            - **macOS (Intel)**: BotifyTrades-macOS-Intel.tar.gz (for Intel-based Macs)
+            - **macOS (Apple Silicon)**: BotifyTrades-macOS-Silicon.tar.gz (for M1/M2/M3 Macs)
+            
+            ### Installation
+            
+            **Windows/Linux:**
+            1. Download the appropriate file for your OS
+            2. Run the executable
+            3. Follow the setup wizard
+            
+            **macOS:**
+            1. Download the .tar.gz file for your Mac (Intel or Apple Silicon)
+            2. Double-click to extract, or run: `tar -xzf BotifyTrades-macOS-*.tar.gz`
+            3. Run the extracted executable
+            4. If blocked, go to System Settings > Privacy & Security and click "Open Anyway"
+            
+            ### Requirements
+            - Valid license key
+            - Discord account
+          files: |
+            releases/**/*
+          draft: false
+          prerelease: false
+
+  cleanup:
+    needs: [publish-to-public-repo]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Delete source artifact
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: source-user

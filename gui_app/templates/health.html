@@ -1,0 +1,2079 @@
+{% extends "base.html" %}
+
+{% block title %}System Health - BotifyTrades{% endblock %}
+
+{% block content %}
+<style>
+    .health-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    .health-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #333;
+    }
+    
+    .health-header h1 {
+        font-size: 24px;
+        color: #fff;
+        margin: 0;
+    }
+    
+    .refresh-btn {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .refresh-btn:hover {
+        background: #2563eb;
+    }
+    
+    .refresh-btn.loading {
+        opacity: 0.7;
+        pointer-events: none;
+    }
+    
+    .last-updated {
+        color: #888;
+        font-size: 13px;
+    }
+    
+    .health-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 20px;
+    }
+    
+    .health-card {
+        background: #1a1a2e;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #333;
+    }
+    
+    .health-card h2 {
+        font-size: 16px;
+        color: #fff;
+        margin: 0 0 16px 0;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #333;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .status-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .status-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #222;
+    }
+    
+    .status-item:last-child {
+        border-bottom: none;
+    }
+    
+    .status-label {
+        color: #ccc;
+        font-size: 14px;
+    }
+    
+    .status-value {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+    }
+    
+    .status-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    
+    .status-badge.ok {
+        background: rgba(16, 185, 129, 0.2);
+        color: #10b981;
+    }
+    
+    .status-badge.warning {
+        background: rgba(245, 158, 11, 0.2);
+        color: #f59e0b;
+    }
+    
+    .status-badge.error {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+    }
+    
+    .status-badge.disabled {
+        background: rgba(107, 114, 128, 0.2);
+        color: #6b7280;
+    }
+    
+    .status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    
+    .status-indicator.green { background: #10b981; }
+    .status-indicator.yellow { background: #f59e0b; }
+    .status-indicator.red { background: #ef4444; }
+    .status-indicator.gray { background: #6b7280; }
+    
+    .feature-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #222;
+    }
+    
+    .feature-row:last-child {
+        border-bottom: none;
+    }
+    
+    .feature-info {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .feature-name {
+        color: #fff;
+        font-size: 14px;
+    }
+    
+    .feature-desc {
+        color: #888;
+        font-size: 12px;
+    }
+    
+    .feature-details {
+        color: #888;
+        font-size: 11px;
+        margin-top: 2px;
+    }
+    
+    .channel-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    
+    .channel-table th {
+        text-align: left;
+        padding: 8px 6px;
+        color: #888;
+        font-weight: 500;
+        border-bottom: 1px solid #333;
+    }
+    
+    .channel-table td {
+        padding: 8px 6px;
+        color: #ccc;
+        border-bottom: 1px solid #222;
+    }
+    
+    .channel-table tr:last-child td {
+        border-bottom: none;
+    }
+    
+    .test-btn {
+        background: #374151;
+        color: #fff;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+    
+    .test-btn:hover {
+        background: #4b5563;
+    }
+    
+    .test-btn.testing {
+        opacity: 0.7;
+        pointer-events: none;
+    }
+    
+    .summary-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+    
+    .stat-box {
+        background: #0f172a;
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+        border: 1px solid #1e3a5f;
+    }
+    
+    .stat-value {
+        font-size: 28px;
+        font-weight: 600;
+        color: #fff;
+    }
+    
+    .stat-value.green { color: #10b981; }
+    .stat-value.yellow { color: #f59e0b; }
+    .stat-value.red { color: #ef4444; }
+    
+    .stat-label {
+        font-size: 12px;
+        color: #888;
+        margin-top: 4px;
+    }
+    
+    .overall-status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .overall-status.healthy {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    
+    .overall-status.warning {
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    
+    .overall-status.error {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    
+    .overall-icon {
+        font-size: 32px;
+    }
+    
+    .overall-text h3 {
+        margin: 0;
+        font-size: 18px;
+        color: #fff;
+    }
+    
+    .overall-text p {
+        margin: 4px 0 0 0;
+        font-size: 14px;
+        color: #888;
+    }
+    
+    .position-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+    }
+    
+    .position-chip {
+        background: #374151;
+        color: #fff;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+    
+    .validation-checklist {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .validation-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid #222;
+    }
+    
+    .validation-item:last-child {
+        border-bottom: none;
+    }
+    
+    .validation-icon {
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+    
+    .validation-content {
+        flex: 1;
+    }
+    
+    .validation-title {
+        color: #fff;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    
+    .validation-desc {
+        color: #888;
+        font-size: 12px;
+        margin-top: 2px;
+    }
+    
+    @media (max-width: 900px) {
+        .health-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .summary-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+</style>
+
+<div class="health-container">
+    <div class="health-header">
+        <div>
+            <h1>System Health</h1>
+            <span class="last-updated" id="lastUpdated">Loading...</span>
+        </div>
+        <button class="refresh-btn" onclick="refreshHealth()">
+            <span id="refreshIcon">&#8635;</span> Refresh
+        </button>
+    </div>
+    
+    <div id="overallStatus" class="overall-status healthy">
+        <div class="overall-icon">&#9989;</div>
+        <div class="overall-text">
+            <h3>System Healthy</h3>
+            <p>All enabled features are working correctly</p>
+        </div>
+    </div>
+    
+    <div class="summary-stats" id="summaryStats">
+        <div class="stat-box">
+            <div class="stat-value green" id="statConnected">-</div>
+            <div class="stat-label">Systems Connected</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value" id="statFeatures">-</div>
+            <div class="stat-label">Features Enabled</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value" id="statChannels">-</div>
+            <div class="stat-label">Active Channels</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value" id="statPositions">-</div>
+            <div class="stat-label">Open Positions</div>
+        </div>
+    </div>
+    
+    <div class="health-grid">
+        <div class="health-card">
+            <h2>&#128279; Core Systems</h2>
+            <ul class="status-list" id="coreSystems">
+                <li class="status-item">
+                    <span class="status-label">Loading...</span>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="health-card">
+            <h2>&#127974; Broker Connections</h2>
+            <ul class="status-list" id="brokerStatus">
+                <li class="status-item">
+                    <span class="status-label">Loading...</span>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="health-card">
+            <h2>&#9889; Enabled Features</h2>
+            <div id="enabledFeatures">Loading...</div>
+        </div>
+        
+        <div class="health-card">
+            <h2>&#128683; Disabled Features</h2>
+            <div id="disabledFeatures">Loading...</div>
+        </div>
+        
+        <div class="health-card" style="grid-column: span 2;">
+            <h2>&#128226; Channel Configuration</h2>
+            <div id="channelConfig">Loading...</div>
+        </div>
+        
+        <div class="health-card">
+            <h2>&#128200; Open Positions</h2>
+            <div id="positionsSummary">Loading...</div>
+        </div>
+        
+        <div class="health-card">
+            <h2>&#9881; Service Orchestrator</h2>
+            <ul class="status-list" id="servicesStatus">
+                <li class="status-item">
+                    <span class="status-label">Loading...</span>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="health-card">
+            <h2>&#128678; Broker Rate Limits</h2>
+            <ul class="status-list" id="rateLimitsStatus">
+                <li class="status-item">
+                    <span class="status-label">Loading...</span>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="health-card">
+            <h2>&#9989; Quick Validation</h2>
+            <ul class="validation-checklist" id="validationChecklist">
+                <li class="validation-item">
+                    <span class="validation-icon">&#8987;</span>
+                    <div class="validation-content">
+                        <div class="validation-title">Loading...</div>
+                    </div>
+                </li>
+            </ul>
+        </div>
+        
+        <!-- Advanced Diagnostics Card -->
+        <div class="health-card" style="grid-column: span 2;">
+            <h2>&#128736; Advanced System Diagnostics</h2>
+            
+            <!-- Tab Navigation -->
+            <div class="diag-tabs">
+                <button class="diag-tab active" onclick="showDiagTab('diagnostics')">Diagnostics</button>
+                <button class="diag-tab" onclick="showDiagTab('tests')">Unit Tests</button>
+                <button class="diag-tab" onclick="showDiagTab('qa')">QA Registry</button>
+                <button class="diag-tab" onclick="showDiagTab('migrations')">Database</button>
+                <button class="diag-tab" onclick="showDiagTab('upgrade')">Upgrade</button>
+            </div>
+            
+            <!-- Diagnostics Tab -->
+            <div id="tab-diagnostics" class="diag-tab-content active">
+                <div class="diag-actions">
+                    <button class="diag-btn primary" onclick="runDiagnostics()" id="diagBtn">
+                        <span id="diagIcon">&#9881;</span> Run Diagnostics
+                    </button>
+                    <span class="diag-status" id="diagStatus"></span>
+                </div>
+                <div id="diagResults" class="diag-results">
+                    <p class="diag-placeholder">Click "Run Diagnostics" to check system health</p>
+                </div>
+            </div>
+            
+            <!-- Tests Tab -->
+            <div id="tab-tests" class="diag-tab-content">
+                <div class="diag-actions">
+                    <button class="diag-btn primary" onclick="runTests()" id="testBtn">
+                        <span id="testIcon">&#9654;</span> Runtime Tests
+                    </button>
+                    <button class="diag-btn" onclick="runPytestIntegration('integration')" id="pytestIntBtn">
+                        <span>&#128736;</span> Integration (76)
+                    </button>
+                    <button class="diag-btn" onclick="runPytestIntegration('unit')" id="pytestUnitBtn">
+                        <span>&#128221;</span> Unit (24)
+                    </button>
+                    <button class="diag-btn" onclick="runPytestIntegration('e2e')" id="pytestE2eBtn">
+                        <span>&#128640;</span> E2E
+                    </button>
+                    <span class="diag-status" id="testStatus"></span>
+                </div>
+                <div class="test-protection-info" style="background:#1e293b;padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:13px;color:#888;">
+                    <strong style="color:#10b981;">AI Protection:</strong> These tests run automatically on every code change via GitHub Actions CI/CD. 
+                    Failures block merging to prevent regressions.
+                </div>
+                <div id="testResults" class="diag-results">
+                    <p class="diag-placeholder">Click a test button to validate system integrity</p>
+                </div>
+            </div>
+            
+            <!-- QA Registry Tab -->
+            <div id="tab-qa" class="diag-tab-content">
+                <div class="diag-actions">
+                    <button class="diag-btn primary" onclick="runQAValidation()" id="qaBtn">
+                        <span id="qaIcon">&#9989;</span> Validate All Features
+                    </button>
+                    <button class="diag-btn" onclick="loadFeatureRegistry()" id="qaLoadBtn">
+                        <span>&#128203;</span> Load Registry
+                    </button>
+                    <span class="diag-status" id="qaStatus"></span>
+                </div>
+                <div id="qaResults" class="diag-results">
+                    <p class="diag-placeholder">Click "Validate All Features" to check feature integrity against the registry</p>
+                </div>
+                <div id="featureRegistry" class="feature-registry" style="display:none;">
+                    <h4 style="color:#fff;margin:16px 0 12px 0;">Feature Registry</h4>
+                    <div class="feature-list" id="featureList"></div>
+                </div>
+            </div>
+            
+            <!-- Migrations Tab -->
+            <div id="tab-migrations" class="diag-tab-content">
+                <div class="diag-actions">
+                    <button class="diag-btn" onclick="checkMigrations()" id="migCheckBtn">
+                        <span>&#128269;</span> Check Schema
+                    </button>
+                    <button class="diag-btn primary" onclick="runMigration()" id="migRunBtn" style="display:none;">
+                        <span>&#9889;</span> Run Upgrade
+                    </button>
+                    <span class="diag-status" id="migStatus"></span>
+                </div>
+                <div id="migResults" class="diag-results">
+                    <p class="diag-placeholder">Click "Check Schema" to validate database structure</p>
+                </div>
+            </div>
+            
+            <!-- Upgrade Tab -->
+            <div id="tab-upgrade" class="diag-tab-content">
+                <div class="upgrade-header">
+                    <div class="version-info">
+                        <span class="version-label">Current Version:</span>
+                        <span class="version-value" id="currentVersion">Loading...</span>
+                    </div>
+                    <div id="updateBadge" class="update-badge" style="display:none;">
+                        Update Available!
+                    </div>
+                </div>
+                
+                <div class="diag-actions">
+                    <button class="diag-btn" onclick="checkForUpdates()" id="checkUpdateBtn">
+                        <span>&#128269;</span> Check for Updates
+                    </button>
+                    <button class="diag-btn" onclick="checkReadiness()" id="readinessBtn">
+                        <span>&#9989;</span> Check Readiness
+                    </button>
+                    <button class="diag-btn" onclick="createBackup()" id="backupBtn">
+                        <span>&#128190;</span> Create Backup
+                    </button>
+                    <span class="diag-status" id="upgradeStatus"></span>
+                </div>
+                
+                <div id="upgradeResults" class="diag-results">
+                    <p class="diag-placeholder">Check for updates to see if a new version is available</p>
+                </div>
+                
+                <!-- Update Available Panel (hidden by default) -->
+                <div id="updatePanel" class="update-panel" style="display:none;">
+                    <div class="update-info">
+                        <h4>New Version Available: <span id="newVersion"></span></h4>
+                        <div class="changelog" id="changelog"></div>
+                    </div>
+                    <div class="update-actions">
+                        <button class="diag-btn primary" onclick="runUpgrade()" id="upgradeBtn">
+                            <span>&#8593;</span> Upgrade Now
+                        </button>
+                        <button class="diag-btn" onclick="remindLater()">
+                            <span>&#128340;</span> Remind Later
+                        </button>
+                        <button class="diag-btn" onclick="skipVersion()" id="skipBtn">
+                            <span>&#10005;</span> Skip This Version
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Backup List -->
+                <div class="backup-section">
+                    <h4>Database Backups</h4>
+                    <div id="backupList" class="backup-list">
+                        <p class="diag-placeholder">Loading backups...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .diag-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 16px;
+        border-bottom: 1px solid #333;
+        padding-bottom: 12px;
+    }
+    .diag-tab {
+        background: #2a2a3e;
+        border: none;
+        color: #888;
+        padding: 8px 16px;
+        border-radius: 6px 6px 0 0;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.2s;
+    }
+    .diag-tab:hover {
+        background: #3a3a4e;
+        color: #fff;
+    }
+    .diag-tab.active {
+        background: #3b82f6;
+        color: #fff;
+    }
+    .diag-tab-content {
+        display: none;
+    }
+    .diag-tab-content.active {
+        display: block;
+    }
+    .diag-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .diag-btn {
+        background: #374151;
+        color: #fff;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
+    }
+    .diag-btn:hover {
+        background: #4b5563;
+    }
+    .diag-btn.primary {
+        background: #3b82f6;
+    }
+    .diag-btn.primary:hover {
+        background: #2563eb;
+    }
+    .diag-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .diag-status {
+        color: #888;
+        font-size: 13px;
+    }
+    .diag-results {
+        background: #0f172a;
+        border-radius: 8px;
+        padding: 16px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .diag-placeholder {
+        color: #666;
+        font-size: 14px;
+        text-align: center;
+        margin: 20px 0;
+    }
+    .diag-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid #1e293b;
+    }
+    .diag-item:last-child {
+        border-bottom: none;
+    }
+    .diag-icon {
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+    .diag-icon.pass { color: #10b981; }
+    .diag-icon.warn { color: #f59e0b; }
+    .diag-icon.fail { color: #ef4444; }
+    .diag-info {
+        flex: 1;
+    }
+    .diag-name {
+        color: #fff;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .diag-message {
+        color: #888;
+        font-size: 12px;
+        margin-top: 2px;
+    }
+    .diag-summary {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 16px;
+        padding: 12px;
+        background: #1e293b;
+        border-radius: 6px;
+    }
+    .diag-stat {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+    }
+    .diag-stat.pass { color: #10b981; }
+    .diag-stat.warn { color: #f59e0b; }
+    .diag-stat.fail { color: #ef4444; }
+    .test-output {
+        background: #000;
+        color: #0f0;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 12px;
+        border-radius: 6px;
+        white-space: pre-wrap;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    .schema-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .schema-table th, .schema-table td {
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid #1e293b;
+    }
+    .schema-table th {
+        color: #888;
+        font-weight: 500;
+    }
+    .schema-table td {
+        color: #ccc;
+    }
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    
+    /* Upgrade Tab Styles */
+    .upgrade-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #333;
+    }
+    .version-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .version-label {
+        color: #888;
+        font-size: 14px;
+    }
+    .version-value {
+        color: #10b981;
+        font-size: 16px;
+        font-weight: 600;
+    }
+    .update-badge {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: #fff;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+    .update-panel {
+        background: linear-gradient(135deg, #1e3a5f, #1e293b);
+        border: 1px solid #3b82f6;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 16px 0;
+    }
+    .update-info h4 {
+        color: #fff;
+        margin: 0 0 12px 0;
+        font-size: 16px;
+    }
+    .changelog {
+        color: #ccc;
+        font-size: 13px;
+        line-height: 1.6;
+        max-height: 150px;
+        overflow-y: auto;
+        padding: 8px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 4px;
+    }
+    .update-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+    }
+    .backup-section {
+        margin-top: 20px;
+        border-top: 1px solid #333;
+        padding-top: 16px;
+    }
+    .backup-section h4 {
+        color: #888;
+        font-size: 14px;
+        margin: 0 0 12px 0;
+    }
+    .backup-list {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .backup-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background: #0f172a;
+        border-radius: 4px;
+        margin-bottom: 8px;
+    }
+    .backup-item:last-child {
+        margin-bottom: 0;
+    }
+    .backup-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .backup-name {
+        color: #fff;
+        font-size: 13px;
+    }
+    .backup-meta {
+        color: #666;
+        font-size: 11px;
+    }
+    .backup-actions {
+        display: flex;
+        gap: 6px;
+    }
+    .backup-btn {
+        background: #374151;
+        color: #fff;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 11px;
+    }
+    .backup-btn:hover {
+        background: #4b5563;
+    }
+    .backup-btn.restore {
+        background: #3b82f6;
+    }
+    .backup-btn.restore:hover {
+        background: #2563eb;
+    }
+    .readiness-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+    }
+    .readiness-icon { font-size: 14px; }
+    .readiness-icon.pass { color: #10b981; }
+    .readiness-icon.fail { color: #ef4444; }
+    .readiness-name { color: #ccc; font-size: 13px; }
+    .readiness-msg { color: #888; font-size: 11px; margin-left: auto; }
+</style>
+
+<script>
+let healthData = null;
+
+async function refreshHealth() {
+    const btn = document.querySelector('.refresh-btn');
+    const icon = document.getElementById('refreshIcon');
+    
+    btn.classList.add('loading');
+    icon.style.animation = 'spin 1s linear infinite';
+    
+    try {
+        const response = await fetch('/api/health/full');
+        const data = await response.json();
+        
+        if (data.success) {
+            healthData = data.health;
+            renderHealth(healthData);
+        } else {
+            showError('Failed to load health data: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error fetching health:', error);
+        showError('Failed to connect to server');
+    } finally {
+        btn.classList.remove('loading');
+        icon.style.animation = '';
+    }
+}
+
+function renderHealth(health) {
+    document.getElementById('lastUpdated').textContent = 'Last updated: ' + health.timestamp;
+    
+    renderCoreSystems(health.core_systems);
+    renderBrokers(health.brokers);
+    renderFeatures(health.features);
+    renderChannels(health.channels);
+    renderPositions(health.positions);
+    renderServices(health.services);
+    renderRateLimits(health.rate_limits);
+    renderValidation(health);
+    renderSummaryStats(health);
+    updateOverallStatus(health);
+}
+
+function renderCoreSystems(systems) {
+    const container = document.getElementById('coreSystems');
+    let html = '';
+    
+    const labels = {
+        'discord_bot': 'Discord Bot',
+        'web_panel': 'Web Control Panel',
+        'order_worker': 'Order Worker',
+        'sync_service': 'Sync Service'
+    };
+    
+    for (const [key, system] of Object.entries(systems)) {
+        const statusClass = system.ok ? 'green' : 'red';
+        const badgeClass = system.ok ? 'ok' : 'error';
+        const extra = system.user ? ` (${system.user})` : '';
+        
+        html += `
+            <li class="status-item">
+                <span class="status-label">${labels[key] || key}</span>
+                <span class="status-value">
+                    <span class="status-indicator ${statusClass}"></span>
+                    <span class="status-badge ${badgeClass}">${system.status}${extra}</span>
+                </span>
+            </li>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+function renderBrokers(brokers) {
+    const container = document.getElementById('brokerStatus');
+    let html = '';
+    
+    const labels = {
+        'discord': 'Discord',
+        'webull_live': 'Webull (Live)',
+        'webull_paper': 'Webull (Paper)',
+        'alpaca_live': 'Alpaca (Live)',
+        'alpaca_paper': 'Alpaca (Paper)',
+        'ibkr_live': 'IBKR (Live)',
+        'ibkr_paper': 'IBKR (Paper)'
+    };
+    
+    for (const [key, broker] of Object.entries(brokers)) {
+        if (key === 'discord') continue;
+        
+        const statusClass = broker.connected ? 'green' : (broker.status === 'not configured' ? 'gray' : 'red');
+        const badgeClass = broker.connected ? 'ok' : (broker.status === 'not configured' ? 'disabled' : 'error');
+        
+        html += `
+            <li class="status-item">
+                <span class="status-label">${labels[key] || key}</span>
+                <span class="status-value">
+                    <span class="status-indicator ${statusClass}"></span>
+                    <span class="status-badge ${badgeClass}">${broker.status}</span>
+                    <button class="test-btn" onclick="testComponent('${key.split('_')[0]}')" ${!broker.connected ? 'disabled' : ''}>Test</button>
+                </span>
+            </li>
+        `;
+    }
+    
+    container.innerHTML = html || '<li class="status-item"><span class="status-label">No brokers configured</span></li>';
+}
+
+function renderFeatures(features) {
+    const enabledContainer = document.getElementById('enabledFeatures');
+    const disabledContainer = document.getElementById('disabledFeatures');
+    
+    let enabledHtml = '';
+    let disabledHtml = '';
+    
+    const labels = {
+        'ai_analysis': 'AI Trade Analysis',
+        'ai_commands': 'AI Commands',
+        'signal_conversion': 'Signal Conversion',
+        'sentiment_analysis': 'Sentiment Analysis',
+        'alpha_vantage': 'Alpha Vantage Scanner',
+        'swing_trading': 'Swing Trading Analysis',
+        'news_service': 'News Service',
+        'global_risk': 'Global Risk Management',
+        'slippage_protection': 'Slippage Protection'
+    };
+    
+    for (const [key, feature] of Object.entries(features)) {
+        const details = [];
+        if (feature.model) details.push(`Model: ${feature.model}`);
+        if (feature.channel) details.push(`Channel: ${feature.channel}`);
+        if (feature.min_premium) details.push(`Min: $${parseInt(feature.min_premium).toLocaleString()}`);
+        if (feature.dte_range) details.push(`DTE: ${feature.dte_range}`);
+        if (feature.min_confidence) details.push(`Min Confidence: ${feature.min_confidence}%`);
+        if (feature.profit_target_1 && feature.profit_target_1 !== 'N/A') details.push(`T1: ${feature.profit_target_1}%`);
+        if (feature.stop_loss && feature.stop_loss !== 'N/A') details.push(`SL: ${feature.stop_loss}%`);
+        
+        const html = `
+            <div class="feature-row">
+                <div class="feature-info">
+                    <span class="feature-name">${labels[key] || key}</span>
+                    <span class="feature-desc">${feature.description || ''}</span>
+                    ${details.length ? `<span class="feature-details">${details.join(' | ')}</span>` : ''}
+                </div>
+                <span class="status-badge ${feature.enabled ? 'ok' : 'disabled'}">${feature.enabled ? 'ENABLED' : 'DISABLED'}</span>
+            </div>
+        `;
+        
+        if (feature.enabled) {
+            enabledHtml += html;
+        } else {
+            disabledHtml += html;
+        }
+    }
+    
+    enabledContainer.innerHTML = enabledHtml || '<p style="color: #888; font-size: 14px;">No features enabled</p>';
+    disabledContainer.innerHTML = disabledHtml || '<p style="color: #888; font-size: 14px;">All features are enabled</p>';
+}
+
+function renderChannels(channels) {
+    const container = document.getElementById('channelConfig');
+    
+    if (!channels.channels || channels.channels.length === 0) {
+        container.innerHTML = '<p style="color: #888; font-size: 14px;">No channels configured for execution or tracking</p>';
+        return;
+    }
+    
+    let html = `
+        <p style="color: #888; font-size: 13px; margin-bottom: 12px;">
+            ${channels.execute_enabled} execute | ${channels.paper_enabled} paper | ${channels.with_risk_settings} with risk | ${channels.with_position_sizing} with sizing
+        </p>
+        <table class="channel-table">
+            <thead>
+                <tr>
+                    <th>Channel</th>
+                    <th>Execute</th>
+                    <th>Paper</th>
+                    <th>Exec Size</th>
+                    <th>Paper Size</th>
+                    <th>T1</th>
+                    <th>SL</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    for (const ch of channels.channels) {
+        html += `
+            <tr>
+                <td>${ch.name}</td>
+                <td><span class="status-indicator ${ch.execute ? 'green' : 'gray'}"></span></td>
+                <td><span class="status-indicator ${ch.paper ? 'green' : 'gray'}"></span></td>
+                <td>${ch.position_size_pct ? ch.position_size_pct + '%' : '-'}</td>
+                <td>${ch.paper_position_size_pct ? ch.paper_position_size_pct + '%' : '-'}</td>
+                <td>${ch.profit_target_1 ? ch.profit_target_1 + '%' : '-'}</td>
+                <td>${ch.stop_loss ? ch.stop_loss + '%' : '-'}</td>
+            </tr>
+        `;
+    }
+    
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function renderPositions(positions) {
+    const container = document.getElementById('positionsSummary');
+    
+    let html = `
+        <div class="status-list">
+            <div class="status-item">
+                <span class="status-label">Total Open</span>
+                <span class="status-value"><strong>${positions.total}</strong> positions</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Webull</span>
+                <span class="status-value">${positions.webull} positions</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Alpaca</span>
+                <span class="status-value">${positions.alpaca} positions</span>
+            </div>
+        </div>
+    `;
+    
+    if (positions.symbols && positions.symbols.length > 0) {
+        html += '<div class="position-list">';
+        for (const symbol of positions.symbols.slice(0, 15)) {
+            if (symbol) {
+                html += `<span class="position-chip">${symbol}</span>`;
+            }
+        }
+        if (positions.symbols.length > 15) {
+            html += `<span class="position-chip">+${positions.symbols.length - 15} more</span>`;
+        }
+        html += '</div>';
+    }
+    
+    container.innerHTML = html;
+}
+
+function renderServices(services) {
+    const container = document.getElementById('servicesStatus');
+    if (!services || Object.keys(services).length === 0) {
+        container.innerHTML = '<li class="status-item"><span class="status-label">No services registered</span></li>';
+        return;
+    }
+    
+    const labels = {
+        'risk_manager': 'Risk Manager',
+        'trade_monitor': 'Trade Monitor',
+        'conditional_orders': 'Conditional Orders',
+        'position_sync': 'Position Sync',
+        'signal_tracker': 'Signal Tracker'
+    };
+    
+    let html = '';
+    for (const [key, svc] of Object.entries(services)) {
+        const statusClass = svc.enabled ? (svc.status === 'running' ? 'green' : 'yellow') : 'gray';
+        const badgeClass = svc.enabled ? 'ok' : 'disabled';
+        let extra = '';
+        if (svc.channels_with_risk !== undefined) {
+            extra = ` (${svc.channels_with_risk} channels)`;
+        }
+        if (svc.interval) {
+            extra += ` | ${svc.interval}s interval`;
+        }
+        
+        html += `
+            <li class="status-item">
+                <span class="status-label">${labels[key] || svc.name || key}</span>
+                <span class="status-value">
+                    <span class="status-indicator ${statusClass}"></span>
+                    <span class="status-badge ${badgeClass}">${svc.enabled ? (svc.status || 'ENABLED') : 'DISABLED'}${extra}</span>
+                </span>
+            </li>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+function renderRateLimits(rateLimits) {
+    const container = document.getElementById('rateLimitsStatus');
+    if (!rateLimits || Object.keys(rateLimits).length === 0) {
+        container.innerHTML = '<li class="status-item"><span class="status-label">Rate limit manager not active</span></li>';
+        return;
+    }
+    
+    const labels = {
+        'webull': 'Webull',
+        'alpaca': 'Alpaca',
+        'robinhood': 'Robinhood',
+        'ibkr': 'IBKR',
+        'tastytrade': 'Tastytrade',
+        'schwab': 'Schwab',
+        'questrade': 'Questrade',
+        'upstox': 'Upstox',
+        'zerodha': 'Zerodha',
+        'dhanq': 'DhanQ'
+    };
+    
+    let html = '';
+    for (const [broker, limits] of Object.entries(rateLimits)) {
+        const utilization = limits.utilization_pct || 0;
+        const statusClass = limits.is_backing_off ? 'red' : (utilization > 80 ? 'yellow' : 'green');
+        const badgeClass = limits.is_backing_off ? 'error' : (utilization > 80 ? 'warning' : 'ok');
+        
+        html += `
+            <li class="status-item">
+                <span class="status-label">${labels[broker] || broker}</span>
+                <span class="status-value">
+                    <span class="status-indicator ${statusClass}"></span>
+                    <span class="status-badge ${badgeClass}">${limits.requests_in_window}/${limits.window_limit} (${utilization.toFixed(0)}%)</span>
+                    ${limits.is_backing_off ? '<span style="color:#ef4444;font-size:11px;margin-left:4px;">BACKING OFF</span>' : ''}
+                </span>
+            </li>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+function renderValidation(health) {
+    const container = document.getElementById('validationChecklist');
+    const checks = [];
+    
+    const discordOk = health.core_systems?.discord_bot?.ok;
+    checks.push({
+        ok: discordOk,
+        title: 'Discord Connection',
+        desc: discordOk ? 'Bot is connected and receiving messages' : 'Bot is not connected to Discord'
+    });
+    
+    const hasActiveBroker = Object.values(health.brokers || {}).some(b => b.connected && b.status !== 'disconnected');
+    checks.push({
+        ok: hasActiveBroker,
+        title: 'Broker Connection',
+        desc: hasActiveBroker ? 'At least one broker is connected' : 'No brokers connected'
+    });
+    
+    const hasActiveChannel = (health.channels?.execute_enabled > 0) || (health.channels?.paper_enabled > 0);
+    checks.push({
+        ok: hasActiveChannel,
+        title: 'Channel Configuration',
+        desc: hasActiveChannel ? `${health.channels?.execute_enabled || 0} execution, ${health.channels?.paper_enabled || 0} paper channels configured` : 'No channels configured for trading'
+    });
+    
+    const hasFeaturesEnabled = Object.values(health.features || {}).some(f => f.enabled);
+    checks.push({
+        ok: hasFeaturesEnabled,
+        title: 'Features Active',
+        desc: hasFeaturesEnabled ? 'Analysis and trading features are enabled' : 'No features are enabled'
+    });
+    
+    const noErrors = !health.recent_activity?.has_critical_errors;
+    checks.push({
+        ok: noErrors,
+        title: 'No Critical Errors',
+        desc: noErrors ? 'No critical errors in the last 24 hours' : 'Critical errors detected - check error logs'
+    });
+    
+    let html = '';
+    for (const check of checks) {
+        html += `
+            <li class="validation-item">
+                <span class="validation-icon">${check.ok ? '&#9989;' : '&#10060;'}</span>
+                <div class="validation-content">
+                    <div class="validation-title">${check.title}</div>
+                    <div class="validation-desc">${check.desc}</div>
+                </div>
+            </li>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+function renderSummaryStats(health) {
+    const coreOk = Object.values(health.core_systems || {}).filter(s => s.ok).length;
+    const coreTotal = Object.keys(health.core_systems || {}).length;
+    document.getElementById('statConnected').textContent = `${coreOk}/${coreTotal}`;
+    document.getElementById('statConnected').className = 'stat-value ' + (coreOk === coreTotal ? 'green' : 'yellow');
+    
+    const featuresEnabled = Object.values(health.features || {}).filter(f => f.enabled).length;
+    document.getElementById('statFeatures').textContent = featuresEnabled;
+    
+    const activeChannels = (health.channels?.execute_enabled || 0) + (health.channels?.paper_enabled || 0);
+    document.getElementById('statChannels').textContent = activeChannels;
+    
+    document.getElementById('statPositions').textContent = health.positions?.total || 0;
+}
+
+function updateOverallStatus(health) {
+    const container = document.getElementById('overallStatus');
+    
+    const allCoreOk = Object.values(health.core_systems || {}).every(s => s.ok);
+    const hasActiveBroker = Object.values(health.brokers || {}).some(b => b.connected);
+    const noErrors = !health.recent_activity?.has_critical_errors;
+    
+    if (allCoreOk && hasActiveBroker && noErrors) {
+        container.className = 'overall-status healthy';
+        container.innerHTML = `
+            <div class="overall-icon">&#9989;</div>
+            <div class="overall-text">
+                <h3>System Healthy</h3>
+                <p>All core systems are running and enabled features are working correctly</p>
+            </div>
+        `;
+    } else if (allCoreOk) {
+        container.className = 'overall-status warning';
+        container.innerHTML = `
+            <div class="overall-icon">&#9888;</div>
+            <div class="overall-text">
+                <h3>Partial Functionality</h3>
+                <p>Core systems OK but some brokers disconnected or errors detected</p>
+            </div>
+        `;
+    } else {
+        container.className = 'overall-status error';
+        container.innerHTML = `
+            <div class="overall-icon">&#10060;</div>
+            <div class="overall-text">
+                <h3>System Issues Detected</h3>
+                <p>One or more core systems are not functioning properly</p>
+            </div>
+        `;
+    }
+}
+
+async function testComponent(component) {
+    const btn = event.target;
+    btn.classList.add('testing');
+    btn.textContent = 'Testing...';
+    
+    try {
+        const response = await fetch(`/api/health/test/${component}`, { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('Test Passed: ' + data.message);
+        } else {
+            alert('Test Failed: ' + data.message);
+        }
+    } catch (error) {
+        alert('Test Error: ' + error.message);
+    } finally {
+        btn.classList.remove('testing');
+        btn.textContent = 'Test';
+    }
+}
+
+// Advanced Diagnostics Functions
+function showDiagTab(tabName) {
+    document.querySelectorAll('.diag-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.diag-tab-content').forEach(c => c.classList.remove('active'));
+    
+    event.target.classList.add('active');
+    document.getElementById('tab-' + tabName).classList.add('active');
+    
+    if (tabName === 'upgrade') {
+        initUpgradeTab();
+    }
+}
+
+async function runDiagnostics() {
+    const btn = document.getElementById('diagBtn');
+    const status = document.getElementById('diagStatus');
+    const results = document.getElementById('diagResults');
+    
+    btn.disabled = true;
+    status.textContent = 'Running diagnostics...';
+    results.innerHTML = '<p class="diag-placeholder">Running system checks...</p>';
+    
+    try {
+        const response = await fetch('/api/health/diagnostics');
+        const data = await response.json();
+        
+        if (data.success) {
+            const summary = data.summary;
+            let html = `
+                <div class="diag-summary">
+                    <span class="diag-stat pass">&#10003; ${summary.passed} Passed</span>
+                    <span class="diag-stat warn">&#9888; ${summary.warnings} Warnings</span>
+                    <span class="diag-stat fail">&#10007; ${summary.failed} Failed</span>
+                </div>
+            `;
+            
+            for (const item of data.checks) {
+                const iconClass = item.status === 'pass' ? 'pass' : item.status === 'warning' ? 'warn' : 'fail';
+                const icon = item.status === 'pass' ? '&#10003;' : item.status === 'warning' ? '&#9888;' : '&#10007;';
+                html += `
+                    <div class="diag-item">
+                        <span class="diag-icon ${iconClass}">${icon}</span>
+                        <div class="diag-info">
+                            <div class="diag-name">${item.name}</div>
+                            <div class="diag-message">${item.message}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            results.innerHTML = html;
+            const overallStatus = data.overall ? data.overall.toUpperCase() : (summary.failed > 0 ? 'FAIL' : summary.warnings > 0 ? 'WARNING' : 'PASS');
+            status.textContent = `Overall: ${overallStatus}`;
+        } else {
+            results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${data.error}</p>`;
+            status.textContent = 'Failed';
+        }
+    } catch (error) {
+        results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function runTests() {
+    const btn = document.getElementById('testBtn');
+    const status = document.getElementById('testStatus');
+    const results = document.getElementById('testResults');
+    
+    btn.disabled = true;
+    status.textContent = 'Running validation tests...';
+    results.innerHTML = '<p class="diag-placeholder">Running runtime validation tests...</p>';
+    
+    try {
+        const response = await fetch('/api/health/run-tests', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            let html = `
+                <div class="diag-summary">
+                    <span class="diag-stat pass">&#10003; ${data.passed} Tests Passed</span>
+                </div>
+            `;
+            
+            if (data.tests) {
+                for (const test of data.tests) {
+                    const icon = test.status === 'pass' ? '&#10003;' : '&#10007;';
+                    const iconClass = test.status === 'pass' ? 'pass' : 'fail';
+                    const extra = test.count !== undefined ? ` (${test.count} items)` : '';
+                    html += `
+                        <div class="diag-item">
+                            <span class="diag-icon ${iconClass}">${icon}</span>
+                            <div class="diag-info">
+                                <div class="diag-name">${test.test}</div>
+                                <div class="diag-message">${test.error || 'OK' + extra}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            results.innerHTML = html;
+            status.textContent = `All ${data.passed} tests passed!`;
+        } else {
+            let html = `
+                <div class="diag-summary">
+                    <span class="diag-stat pass">&#10003; ${data.passed || 0} Passed</span>
+                    <span class="diag-stat fail">&#10007; ${data.failed || 0} Failed</span>
+                </div>
+            `;
+            
+            if (data.tests) {
+                for (const test of data.tests) {
+                    const icon = test.status === 'pass' ? '&#10003;' : '&#10007;';
+                    const iconClass = test.status === 'pass' ? 'pass' : 'fail';
+                    html += `
+                        <div class="diag-item">
+                            <span class="diag-icon ${iconClass}">${icon}</span>
+                            <div class="diag-info">
+                                <div class="diag-name">${test.test}</div>
+                                <div class="diag-message">${test.error || 'OK'}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } else if (data.error) {
+                html += `<div class="test-output" style="color:#ef4444;">${data.error}</div>`;
+            }
+            
+            results.innerHTML = html;
+            status.textContent = `${data.failed || 0} tests failed`;
+        }
+    } catch (error) {
+        results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function runPytestIntegration(testType) {
+    const btnId = testType === 'unit' ? 'pytestUnitBtn' : testType === 'e2e' ? 'pytestE2eBtn' : 'pytestIntBtn';
+    const btn = document.getElementById(btnId);
+    const status = document.getElementById('testStatus');
+    const results = document.getElementById('testResults');
+    
+    btn.disabled = true;
+    const testLabel = testType === 'unit' ? 'Unit' : testType === 'e2e' ? 'E2E' : 'Integration';
+    status.textContent = `Running ${testLabel} tests...`;
+    results.innerHTML = `<p class="diag-placeholder">Running pytest ${testLabel.toLowerCase()} tests (may take up to 2 min)...</p>`;
+    
+    try {
+        const response = await fetch('/api/qa/pytest', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type: testType})
+        });
+        const data = await response.json();
+        
+        if (!data.available) {
+            results.innerHTML = `<p class="diag-placeholder" style="color:#888;">${data.message || 'Test framework not available'}</p>`;
+            status.textContent = 'Not available';
+            return;
+        }
+        
+        let html = `
+            <div class="diag-summary">
+                <span class="diag-stat pass">&#10003; ${data.passed} Passed</span>
+                ${data.failed > 0 ? `<span class="diag-stat fail">&#10007; ${data.failed} Failed</span>` : ''}
+            </div>
+            <div style="color:#888;font-size:12px;margin:8px 0;">Test Type: ${data.test_type.toUpperCase()}</div>
+        `;
+        
+        if (data.tests && data.tests.length > 0) {
+            for (const test of data.tests) {
+                const icon = test.status === 'pass' ? '&#10003;' : '&#10007;';
+                const iconClass = test.status === 'pass' ? 'pass' : 'fail';
+                html += `
+                    <div class="diag-item">
+                        <span class="diag-icon ${iconClass}">${icon}</span>
+                        <div class="diag-info">
+                            <div class="diag-name">${test.name}</div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        if (data.output) {
+            html += `
+                <details style="margin-top:12px;">
+                    <summary style="cursor:pointer;color:#888;font-size:12px;">Show raw output</summary>
+                    <pre class="test-output" style="margin-top:8px;max-height:200px;overflow:auto;">${data.output}</pre>
+                </details>
+            `;
+        }
+        
+        results.innerHTML = html;
+        status.textContent = data.success ? `All ${data.passed} ${testLabel} tests passed!` : `${data.failed} tests failed`;
+        
+    } catch (error) {
+        results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// QA Registry Functions
+async function runQAValidation() {
+    const btn = document.getElementById('qaBtn');
+    const status = document.getElementById('qaStatus');
+    const results = document.getElementById('qaResults');
+    
+    btn.disabled = true;
+    status.textContent = 'Validating features...';
+    results.innerHTML = '<p class="diag-placeholder">Running feature validation against registry...</p>';
+    
+    try {
+        const response = await fetch('/api/qa/validate');
+        const data = await response.json();
+        
+        if (data.success) {
+            const summary = data.summary || {};
+            let html = `
+                <div class="diag-summary">
+                    <span class="diag-stat pass">&#10003; ${summary.passed || 0} Passed</span>
+                    <span class="diag-stat warn">&#9888; ${summary.warnings || 0} Warnings</span>
+                    <span class="diag-stat fail">&#10007; ${summary.critical || 0} Critical</span>
+                </div>
+            `;
+            
+            if (data.features_validated) {
+                html += `<p style="color:#888;margin:12px 0;">Features validated: ${data.features_validated.join(', ')}</p>`;
+            }
+            
+            if (data.issues && data.issues.length > 0) {
+                html += '<div style="margin-top:16px;">';
+                for (const issue of data.issues) {
+                    const icon = issue.severity === 'critical' ? '&#10007;' : issue.severity === 'warning' ? '&#9888;' : '&#8505;';
+                    const iconClass = issue.severity === 'critical' ? 'fail' : issue.severity === 'warning' ? 'warn' : 'pass';
+                    html += `
+                        <div class="diag-item">
+                            <span class="diag-icon ${iconClass}">${icon}</span>
+                            <div class="diag-info">
+                                <div class="diag-name">${issue.component}: ${issue.field}</div>
+                                <div class="diag-message">${issue.message}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+                html += '</div>';
+            } else {
+                html += '<p style="color:#10b981;margin-top:12px;">&#10003; All feature components validated successfully</p>';
+            }
+            
+            results.innerHTML = html;
+            status.textContent = data.is_valid ? 'All Valid' : `${summary.critical || 0} Issues Found`;
+        } else if (data.message) {
+            results.innerHTML = `<p class="diag-placeholder">${data.message}</p>`;
+            status.textContent = 'N/A';
+        } else {
+            results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${data.error}</p>`;
+            status.textContent = 'Error';
+        }
+    } catch (error) {
+        results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function loadFeatureRegistry() {
+    const btn = document.getElementById('qaLoadBtn');
+    const status = document.getElementById('qaStatus');
+    const registry = document.getElementById('featureRegistry');
+    const list = document.getElementById('featureList');
+    
+    btn.disabled = true;
+    status.textContent = 'Loading registry...';
+    
+    try {
+        const response = await fetch('/api/qa/features');
+        const data = await response.json();
+        
+        if (data.success && data.features) {
+            let html = '';
+            for (const feature of data.features) {
+                const valid = feature.validation?.is_valid;
+                const icon = valid ? '&#10003;' : '&#10007;';
+                const iconColor = valid ? '#10b981' : '#ef4444';
+                const deps = feature.dependencies?.length > 0 ? feature.dependencies.join(', ') : 'None';
+                
+                html += `
+                    <div class="feature-item" style="background:#2a2a3e;padding:12px;border-radius:8px;margin-bottom:8px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <span style="color:${iconColor};margin-right:8px;">${icon}</span>
+                                <strong style="color:#fff;">${feature.name}</strong>
+                                <span style="color:#888;font-size:12px;margin-left:8px;">v${feature.version}</span>
+                            </div>
+                            <span class="status-badge ${feature.status === 'active' ? 'ok' : 'warning'}">${feature.status}</span>
+                        </div>
+                        <p style="color:#888;font-size:13px;margin:8px 0 0 24px;">${feature.description}</p>
+                        <div style="color:#666;font-size:12px;margin-left:24px;margin-top:4px;">
+                            Dependencies: ${deps} | Tables: ${(feature.db_tables || []).join(', ') || 'None'}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            list.innerHTML = html;
+            registry.style.display = 'block';
+            status.textContent = `${data.features.length} features loaded`;
+        } else if (data.message) {
+            list.innerHTML = `<p style="color:#888;">${data.message}</p>`;
+            registry.style.display = 'block';
+            status.textContent = 'N/A';
+        } else {
+            status.textContent = 'Failed to load';
+        }
+    } catch (error) {
+        status.textContent = 'Error: ' + error.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function checkMigrations() {
+    const btn = document.getElementById('migCheckBtn');
+    const runBtn = document.getElementById('migRunBtn');
+    const status = document.getElementById('migStatus');
+    const results = document.getElementById('migResults');
+    
+    btn.disabled = true;
+    status.textContent = 'Checking schema...';
+    
+    try {
+        const response = await fetch('/api/health/migrations');
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.packaged) {
+                results.innerHTML = `<p class="diag-placeholder" style="color:#10b981;">&#10003; ${data.message || 'Schema managed automatically in packaged build'}</p>`;
+                status.textContent = 'OK (Packaged)';
+                runBtn.style.display = 'none';
+            } else if (data.schema_validation) {
+                let html = '<table class="schema-table"><thead><tr><th>Table</th><th>Status</th></tr></thead><tbody>';
+                
+                for (const [table, exists] of Object.entries(data.schema_validation)) {
+                    const icon = exists ? '&#10003;' : '&#10007;';
+                    const color = exists ? '#10b981' : '#ef4444';
+                    html += `<tr><td>${table}</td><td style="color:${color}">${icon} ${exists ? 'Exists' : 'Missing'}</td></tr>`;
+                }
+                
+                html += '</tbody></table>';
+                results.innerHTML = html;
+                
+                if (data.needs_upgrade) {
+                    runBtn.style.display = 'flex';
+                    status.textContent = `${data.missing_tables.length} table(s) need to be created`;
+                } else {
+                    runBtn.style.display = 'none';
+                    status.textContent = 'All tables present';
+                }
+            } else {
+                results.innerHTML = `<p class="diag-placeholder" style="color:#10b981;">&#10003; Schema check complete</p>`;
+                status.textContent = 'OK';
+                runBtn.style.display = 'none';
+            }
+        } else {
+            results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${data.error || 'Unknown error'}</p>`;
+            status.textContent = 'Error';
+        }
+    } catch (error) {
+        results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function runMigration() {
+    if (!confirm('This will create missing database tables. A backup will be created first. Continue?')) {
+        return;
+    }
+    
+    const btn = document.getElementById('migRunBtn');
+    const status = document.getElementById('migStatus');
+    const results = document.getElementById('migResults');
+    
+    btn.disabled = true;
+    status.textContent = 'Running migration...';
+    
+    try {
+        const response = await fetch('/api/health/migrations/upgrade', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            results.innerHTML = `
+                <div class="diag-summary">
+                    <span class="diag-stat pass">&#10003; Migration Complete</span>
+                </div>
+                <p style="color:#888;margin:12px 0;">Created tables: ${data.tables_created.join(', ') || 'None needed'}</p>
+                <p style="color:#888;font-size:12px;">Backup: ${data.backup || 'N/A'}</p>
+            `;
+            status.textContent = 'Migration complete';
+            btn.style.display = 'none';
+        } else {
+            results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${data.error}</p>`;
+            status.textContent = 'Migration failed';
+        }
+    } catch (error) {
+        results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+let currentUpdateInfo = null;
+
+async function loadVersionInfo() {
+    try {
+        const response = await fetch('/api/upgrade/version');
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('currentVersion').textContent = 'v' + data.version.version;
+        }
+    } catch (error) {
+        console.error('Failed to load version:', error);
+    }
+}
+
+async function checkForUpdates() {
+    const btn = document.getElementById('checkUpdateBtn');
+    const status = document.getElementById('upgradeStatus');
+    const results = document.getElementById('upgradeResults');
+    const panel = document.getElementById('updatePanel');
+    const badge = document.getElementById('updateBadge');
+    
+    btn.disabled = true;
+    status.textContent = 'Checking for updates...';
+    
+    try {
+        const response = await fetch('/api/upgrade/check', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({force: true})
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.update_available) {
+                currentUpdateInfo = data.update;
+                document.getElementById('newVersion').textContent = 'v' + data.update.version;
+                document.getElementById('changelog').innerHTML = data.update.changelog || 'No changelog available';
+                panel.style.display = 'block';
+                badge.style.display = 'block';
+                results.innerHTML = `<p style="color:#10b981;">New version ${data.update.version} is available!</p>`;
+                status.textContent = 'Update available';
+            } else {
+                panel.style.display = 'none';
+                badge.style.display = 'none';
+                results.innerHTML = `<p style="color:#10b981;">You are running the latest version</p>`;
+                status.textContent = 'Up to date';
+            }
+        } else {
+            results.innerHTML = `<p style="color:#ef4444;">Error: ${data.error}</p>`;
+            status.textContent = 'Check failed';
+        }
+    } catch (error) {
+        results.innerHTML = `<p style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function checkReadiness() {
+    const btn = document.getElementById('readinessBtn');
+    const status = document.getElementById('upgradeStatus');
+    const results = document.getElementById('upgradeResults');
+    
+    btn.disabled = true;
+    status.textContent = 'Checking readiness...';
+    
+    try {
+        const response = await fetch('/api/upgrade/readiness');
+        const data = await response.json();
+        
+        if (data.success) {
+            let html = '<div style="margin-bottom:12px;">';
+            html += data.ready ? 
+                '<span style="color:#10b981;font-weight:600;">System Ready for Upgrade</span>' :
+                '<span style="color:#ef4444;font-weight:600;">System Not Ready</span>';
+            html += '</div>';
+            
+            for (const check of data.checks) {
+                const icon = check.passed ? '&#10003;' : '&#10007;';
+                const cls = check.passed ? 'pass' : 'fail';
+                html += `
+                    <div class="readiness-check">
+                        <span class="readiness-icon ${cls}">${icon}</span>
+                        <span class="readiness-name">${check.name}</span>
+                        <span class="readiness-msg">${check.message}</span>
+                    </div>
+                `;
+            }
+            
+            results.innerHTML = html;
+            status.textContent = data.ready ? 'Ready' : 'Not ready';
+        } else {
+            results.innerHTML = `<p style="color:#ef4444;">Error: ${data.error}</p>`;
+        }
+    } catch (error) {
+        results.innerHTML = `<p style="color:#ef4444;">Error: ${error.message}</p>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function createBackup() {
+    const btn = document.getElementById('backupBtn');
+    const status = document.getElementById('upgradeStatus');
+    
+    btn.disabled = true;
+    status.textContent = 'Creating backup...';
+    
+    try {
+        const response = await fetch('/api/upgrade/backup', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({tag: 'manual'})
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            status.textContent = 'Backup created';
+            loadBackups();
+        } else {
+            status.textContent = 'Backup failed: ' + data.error;
+        }
+    } catch (error) {
+        status.textContent = 'Error: ' + error.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function loadBackups() {
+    const list = document.getElementById('backupList');
+    
+    try {
+        const response = await fetch('/api/upgrade/backups');
+        const data = await response.json();
+        
+        if (data.success && data.backups.length > 0) {
+            let html = '';
+            for (const backup of data.backups) {
+                const date = new Date(backup.created_at).toLocaleString();
+                html += `
+                    <div class="backup-item">
+                        <div class="backup-info">
+                            <span class="backup-name">${backup.filename}</span>
+                            <span class="backup-meta">${date} - ${backup.size_display}</span>
+                        </div>
+                        <div class="backup-actions">
+                            <button class="backup-btn restore" onclick="restoreBackup('${backup.path}')">Restore</button>
+                        </div>
+                    </div>
+                `;
+            }
+            list.innerHTML = html;
+        } else {
+            list.innerHTML = '<p class="diag-placeholder">No backups found</p>';
+        }
+    } catch (error) {
+        list.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error loading backups</p>`;
+    }
+}
+
+async function restoreBackup(backupPath) {
+    if (!confirm('This will restore your database to this backup. Your current data will be backed up first. Continue?')) {
+        return;
+    }
+    
+    const status = document.getElementById('upgradeStatus');
+    status.textContent = 'Restoring backup...';
+    
+    try {
+        const response = await fetch('/api/upgrade/backup/restore', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({backup_path: backupPath})
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            status.textContent = 'Database restored successfully';
+            alert('Database restored. The application may need to be restarted.');
+        } else {
+            status.textContent = 'Restore failed: ' + data.error;
+        }
+    } catch (error) {
+        status.textContent = 'Error: ' + error.message;
+    }
+}
+
+async function runUpgrade() {
+    if (!confirm('This will upgrade your application to the new version. A backup will be created first. Continue?')) {
+        return;
+    }
+    
+    const btn = document.getElementById('upgradeBtn');
+    const status = document.getElementById('upgradeStatus');
+    const results = document.getElementById('upgradeResults');
+    
+    btn.disabled = true;
+    status.textContent = 'Running upgrade...';
+    
+    try {
+        const response = await fetch('/api/upgrade/run', {method: 'POST'});
+        const data = await response.json();
+        
+        if (data.success) {
+            results.innerHTML = `
+                <div style="color:#10b981;font-weight:600;margin-bottom:12px;">Upgrade Successful!</div>
+                <p style="color:#888;">Upgraded from ${data.result.from_version} to ${data.result.to_version}</p>
+                <p style="color:#888;font-size:12px;margin-top:8px;">Backup: ${data.result.backup_path}</p>
+            `;
+            status.textContent = 'Upgrade complete';
+            document.getElementById('updatePanel').style.display = 'none';
+            document.getElementById('updateBadge').style.display = 'none';
+            loadVersionInfo();
+        } else {
+            results.innerHTML = `<p style="color:#ef4444;">Upgrade failed: ${data.error || data.result?.error}</p>`;
+            status.textContent = 'Upgrade failed';
+        }
+    } catch (error) {
+        results.innerHTML = `<p style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function remindLater() {
+    try {
+        await fetch('/api/upgrade/remind-later', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({hours: 24})
+        });
+        document.getElementById('updatePanel').style.display = 'none';
+        document.getElementById('updateBadge').style.display = 'none';
+        document.getElementById('upgradeStatus').textContent = 'Will remind in 24 hours';
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
+
+async function skipVersion() {
+    if (!currentUpdateInfo) return;
+    
+    if (!confirm(`Skip version ${currentUpdateInfo.version}? You won't be notified about this version again.`)) {
+        return;
+    }
+    
+    try {
+        await fetch('/api/upgrade/skip', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({version: currentUpdateInfo.version})
+        });
+        document.getElementById('updatePanel').style.display = 'none';
+        document.getElementById('updateBadge').style.display = 'none';
+        document.getElementById('upgradeStatus').textContent = 'Version skipped';
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
+
+function initUpgradeTab() {
+    loadVersionInfo();
+    loadBackups();
+}
+
+function showError(message) {
+    const container = document.getElementById('overallStatus');
+    container.className = 'overall-status error';
+    container.innerHTML = `
+        <div class="overall-icon">&#10060;</div>
+        <div class="overall-text">
+            <h3>Error Loading Health Data</h3>
+            <p>${message}</p>
+        </div>
+    `;
+}
+
+document.addEventListener('DOMContentLoaded', refreshHealth);
+
+setInterval(refreshHealth, 30000);
+</script>
+
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
+{% endblock %}

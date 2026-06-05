@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Options Chain - QuantumPulse</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="mockup-styles.css">
+</head>
+<body>
+    <div class="mockup-container">
+        <div class="mockup-header">
+            <h2 class="mockup-title">📈 Live Options Chain - NVDA (Exp: 12/20/2024)</h2>
+            <div style="display: flex; gap: 12px;">
+                <span class="mockup-badge">Live Greeks Included</span>
+                <span class="mockup-badge locked">🔒 AI Strike Selection - Premium</span>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 20px; padding: 16px; background: var(--bg-card); border-radius: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 4px;">Stock Price</div>
+                    <div style="font-size: 2rem; font-weight: 700; color: var(--success);">$485.20</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 4px;">Change</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">+$12.40 (+2.62%)</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 4px;">IV Rank</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--warning);">47.3%</div>
+                </div>
+            </div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Strike</th>
+                    <th colspan="2">Calls</th>
+                    <th>IV</th>
+                    <th>Delta</th>
+                    <th>Probability</th>
+                    <th>IV</th>
+                    <th colspan="2">Puts</th>
+                </tr>
+                <tr style="font-size: 0.6875rem; color: var(--text-muted);">
+                    <th></th>
+                    <th>Bid</th>
+                    <th>Ask</th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th>Bid</th>
+                    <th>Ask</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>$460</strong></td>
+                    <td>$28.50</td>
+                    <td>$29.10</td>
+                    <td>38.2%</td>
+                    <td>0.89</td>
+                    <td><span class="pnl-positive">91%</span></td>
+                    <td>35.8%</td>
+                    <td>$2.80</td>
+                    <td>$3.10</td>
+                </tr>
+                <tr>
+                    <td><strong>$470</strong></td>
+                    <td>$20.20</td>
+                    <td>$20.80</td>
+                    <td>40.1%</td>
+                    <td>0.82</td>
+                    <td><span class="pnl-positive">86%</span></td>
+                    <td>37.5%</td>
+                    <td>$4.50</td>
+                    <td>$4.85</td>
+                </tr>
+                <tr style="background: rgba(0, 212, 255, 0.08); border-left: 3px solid var(--accent-teal);">
+                    <td><strong>$480</strong> <span style="font-size: 0.75rem; color: var(--accent-teal);">ATM</span></td>
+                    <td>$13.40</td>
+                    <td>$14.00</td>
+                    <td>42.8%</td>
+                    <td>0.71</td>
+                    <td><span class="pnl-positive">78%</span></td>
+                    <td>41.2%</td>
+                    <td>$7.20</td>
+                    <td>$7.60</td>
+                </tr>
+                <tr>
+                    <td><strong>$490</strong></td>
+                    <td>$8.70</td>
+                    <td>$9.20</td>
+                    <td>45.3%</td>
+                    <td>0.58</td>
+                    <td><span class="pnl-positive">65%</span></td>
+                    <td>43.8%</td>
+                    <td>$11.50</td>
+                    <td>$12.00</td>
+                </tr>
+                <tr>
+                    <td><strong>$500</strong></td>
+                    <td>$5.40</td>
+                    <td>$5.80</td>
+                    <td>47.9%</td>
+                    <td>0.45</td>
+                    <td><span class="pnl-warning">51%</span></td>
+                    <td>46.5%</td>
+                    <td>$17.20</td>
+                    <td>$17.80</td>
+                </tr>
+                <tr>
+                    <td><strong>$510</strong></td>
+                    <td>$3.20</td>
+                    <td>$3.55</td>
+                    <td>50.2%</td>
+                    <td>0.32</td>
+                    <td><span class="pnl-warning">38%</span></td>
+                    <td>48.9%</td>
+                    <td>$24.10</td>
+                    <td>$24.70</td>
+                </tr>
+                <tr>
+                    <td><strong>$520</strong></td>
+                    <td>$1.85</td>
+                    <td>$2.15</td>
+                    <td>52.7%</td>
+                    <td>0.21</td>
+                    <td><span class="pnl-negative">26%</span></td>
+                    <td>51.4%</td>
+                    <td>$32.50</td>
+                    <td>$33.20</td>
+                </tr>
+                <tr>
+                    <td><strong>$530</strong></td>
+                    <td>$0.95</td>
+                    <td>$1.20</td>
+                    <td>55.1%</td>
+                    <td>0.13</td>
+                    <td><span class="pnl-negative">16%</span></td>
+                    <td>53.8%</td>
+                    <td>$42.80</td>
+                    <td>$43.50</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="premium-banner" style="margin-top: 24px;">
+            <div class="premium-banner-icon">🎯</div>
+            <div class="premium-banner-text">
+                <strong>AI-Generated Strike Selection:</strong> Our AI analyzes probability, Greeks, and market conditions to recommend optimal strikes for your strategy. Available with Premium Plans only.
+            </div>
+            <a href="#" class="premium-banner-cta">Upgrade to Premium</a>
+        </div>
+
+        <div class="premium-banner" style="background: rgba(255, 215, 0, 0.1); border-color: rgba(255, 215, 0, 0.3);">
+            <div class="premium-banner-icon">📊</div>
+            <div class="premium-banner-text" style="color: var(--warning);">
+                <strong>Live Greeks:</strong> Real-time Delta, Gamma, Theta, and Vega calculations included with all Premium subscriptions.
+            </div>
+            <a href="#" class="premium-banner-cta" style="background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%); color: #000;">Learn More</a>
+        </div>
+    </div>
+</body>
+</html>

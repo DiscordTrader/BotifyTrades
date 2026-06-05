@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - BotifyTrades</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
+            min-height: 100vh;
+            color: #e2e8f0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 20px;
+        }
+        
+        .policy-container {
+            max-width: 800px;
+            width: 100%;
+            background: #1e293b;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+        
+        .policy-header {
+            background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+            padding: 32px;
+            text-align: center;
+        }
+        
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+        }
+        
+        .policy-header h1 {
+            color: #fff;
+            font-size: 24px;
+            font-weight: 700;
+        }
+        
+        .policy-header p {
+            color: rgba(255,255,255,0.8);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .version-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            color: #fff;
+            margin-top: 8px;
+        }
+        
+        .policy-body {
+            padding: 32px;
+        }
+        
+        .intro {
+            font-size: 14px;
+            color: #94a3b8;
+            line-height: 1.7;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: #0f172a;
+            border-radius: 10px;
+            border-left: 3px solid #3b82f6;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin-bottom: 10px;
+        }
+        
+        .section-title .num {
+            width: 28px;
+            height: 28px;
+            background: #334155;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            flex-shrink: 0;
+        }
+        
+        .section-content {
+            padding: 16px;
+            background: #0f172a;
+            border-radius: 10px;
+            border-left: 3px solid #3b82f6;
+        }
+        
+        .section-content.highlight {
+            border-left-color: #22c55e;
+        }
+        
+        .section-content.warning {
+            border-left-color: #f59e0b;
+        }
+        
+        .section-content p {
+            font-size: 13px;
+            color: #cbd5e1;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        
+        .section-content p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .section-content ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        
+        .section-content li {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.6;
+            margin-bottom: 4px;
+        }
+        
+        .section-content strong {
+            color: #e2e8f0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+        }
+        
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 13px;
+            border-bottom: 1px solid #334155;
+        }
+        
+        th {
+            color: #94a3b8;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+        
+        td {
+            color: #cbd5e1;
+        }
+        
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 24px 32px;
+            color: #3b82f6;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            background: #0f172a;
+        }
+        
+        .back-link:hover {
+            color: #60a5fa;
+        }
+        
+        @media (max-width: 600px) {
+            body {
+                padding: 20px 12px;
+            }
+            .policy-header {
+                padding: 24px 20px;
+            }
+            .policy-body {
+                padding: 24px 20px;
+            }
+            table {
+                font-size: 12px;
+            }
+            th, td {
+                padding: 8px 6px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="policy-container">
+        <div class="policy-header">
+            <div class="logo-container">
+                <div class="logo-icon">BT</div>
+            </div>
+            <h1>BotifyTrades</h1>
+            <p>Privacy Policy</p>
+            <span class="version-badge">Effective: April 2026</span>
+        </div>
+        
+        <div class="policy-body">
+            <div class="intro">
+                BotifyTrades ("we", "the Developer", "us") is committed to protecting your privacy. This Privacy Policy explains what data we collect, how we use it, and your rights regarding your personal information. This policy applies to all users of the BotifyTrades software and related services, including users in the United States and United Kingdom.
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">1</span>
+                    What Data We Collect
+                </div>
+                <div class="section-content">
+                    <table>
+                        <tr>
+                            <th>Data Type</th>
+                            <th>What</th>
+                            <th>Stored Where</th>
+                        </tr>
+                        <tr>
+                            <td><strong>Account Data</strong></td>
+                            <td>Name, email, username, hashed password</td>
+                            <td>License Server (remote)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>License Data</strong></td>
+                            <td>License key, Machine ID, activation timestamps, subscription status</td>
+                            <td>License Server (remote)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Heartbeat Data</strong></td>
+                            <td>License key, Machine ID, IP address (for rate limiting only)</td>
+                            <td>License Server (transient)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Trading Credentials</strong></td>
+                            <td>Discord tokens, broker API keys, passwords</td>
+                            <td>Your machine only (AES encrypted)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Trading Data</strong></td>
+                            <td>Trade history, positions, account balances, settings</td>
+                            <td>Your machine only (local database)</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">2</span>
+                    What We Do NOT Collect
+                </div>
+                <div class="section-content highlight">
+                    <ul>
+                        <li>We do <strong>not</strong> collect, access, or store your brokerage credentials, Discord tokens, or API keys</li>
+                        <li>We do <strong>not</strong> have access to your trading account, positions, balances, or trade history</li>
+                        <li>We do <strong>not</strong> track your trading activity or performance</li>
+                        <li>We do <strong>not</strong> sell, rent, or share your personal data with third parties for marketing purposes</li>
+                        <li>We do <strong>not</strong> use cookies for advertising or cross-site tracking</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">3</span>
+                    How We Use Your Data
+                </div>
+                <div class="section-content">
+                    <p>We use the data we collect solely for:</p>
+                    <ul>
+                        <li><strong>Authentication:</strong> To verify your identity and manage your account</li>
+                        <li><strong>License Management:</strong> To validate your subscription, prevent unauthorized sharing, and enforce license terms</li>
+                        <li><strong>Communication:</strong> To send important service notifications (e.g., subscription expiry, security alerts)</li>
+                        <li><strong>Security:</strong> To detect and prevent unauthorized access, fraud, or abuse</li>
+                    </ul>
+                    <p>We do not use your data for profiling, automated decision-making, or targeted advertising.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">4</span>
+                    Legal Basis for Processing (UK GDPR)
+                </div>
+                <div class="section-content">
+                    <p>For users in the United Kingdom, we process your personal data under the following legal bases:</p>
+                    <ul>
+                        <li><strong>Contract Performance (Article 6(1)(b)):</strong> Processing necessary to provide the Software and services you have purchased</li>
+                        <li><strong>Legitimate Interest (Article 6(1)(f)):</strong> License validation, anti-piracy measures, and security monitoring</li>
+                        <li><strong>Consent (Article 6(1)(a)):</strong> Where you have given explicit consent, such as accepting this Privacy Policy and the User Agreement</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">5</span>
+                    Data Security
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li>All trading credentials stored locally on your machine are encrypted using AES-256 encryption</li>
+                        <li>Passwords are hashed using bcrypt before storage</li>
+                        <li>Communications with the License Server use HTTPS/TLS encryption</li>
+                        <li>We implement access controls and security monitoring on our servers</li>
+                        <li>Despite these measures, no system is 100% secure. You are responsible for securing your own machine and environment</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">6</span>
+                    Data Retention
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li><strong>Account Data:</strong> Retained for the duration of your active subscription plus 12 months after termination</li>
+                        <li><strong>License Data:</strong> Retained for the duration of your active subscription plus 12 months after termination</li>
+                        <li><strong>Heartbeat Logs:</strong> IP addresses used for rate limiting are retained for a maximum of 30 days</li>
+                        <li><strong>Local Data:</strong> All data stored on your machine (trading credentials, trade history, settings) remains under your control. You may delete it at any time by uninstalling the Software</li>
+                    </ul>
+                    <p>After the retention period, account and license data is permanently deleted from our servers.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">7</span>
+                    Your Rights (UK GDPR / Data Protection Act 2018)
+                </div>
+                <div class="section-content warning">
+                    <p>If you are located in the United Kingdom or European Economic Area, you have the following rights:</p>
+                    <ul>
+                        <li><strong>Right of Access:</strong> Request a copy of the personal data we hold about you</li>
+                        <li><strong>Right to Rectification:</strong> Request correction of inaccurate or incomplete personal data</li>
+                        <li><strong>Right to Erasure ("Right to be Forgotten"):</strong> Request deletion of your personal data, subject to legal retention obligations</li>
+                        <li><strong>Right to Restrict Processing:</strong> Request that we limit how we use your data</li>
+                        <li><strong>Right to Data Portability:</strong> Request your data in a structured, commonly used, machine-readable format</li>
+                        <li><strong>Right to Object:</strong> Object to processing based on legitimate interest</li>
+                        <li><strong>Right to Withdraw Consent:</strong> Where processing is based on consent, you may withdraw it at any time</li>
+                    </ul>
+                    <p>To exercise any of these rights, contact us at the email address provided on the BotifyTrades website. We will respond within 30 days.</p>
+                    <p>If you are unsatisfied with our response, you have the right to lodge a complaint with the UK Information Commissioner's Office (ICO) at <strong>ico.org.uk</strong>.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">8</span>
+                    Your Rights (US Users)
+                </div>
+                <div class="section-content">
+                    <p>If you are located in the United States, you may have additional rights under state privacy laws (such as the California Consumer Privacy Act):</p>
+                    <ul>
+                        <li><strong>Right to Know:</strong> Request what personal information we collect and how it is used</li>
+                        <li><strong>Right to Delete:</strong> Request deletion of your personal information</li>
+                        <li><strong>Right to Non-Discrimination:</strong> We will not treat you differently for exercising your privacy rights</li>
+                        <li><strong>No Sale of Data:</strong> We do not sell your personal information to third parties</li>
+                    </ul>
+                    <p>To exercise these rights, contact us at the email address provided on the BotifyTrades website.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">9</span>
+                    International Data Transfers
+                </div>
+                <div class="section-content">
+                    <p>Our License Server may be located in a different country than your own. If your personal data is transferred outside your country of residence:</p>
+                    <ul>
+                        <li>We ensure appropriate safeguards are in place, such as Standard Contractual Clauses (SCCs) approved by the UK Information Commissioner's Office</li>
+                        <li>Data is transmitted using encrypted channels (HTTPS/TLS)</li>
+                        <li>Only the minimum necessary data is transferred (license key, Machine ID, account email)</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">10</span>
+                    Third-Party Services
+                </div>
+                <div class="section-content">
+                    <p>The Software may interact with third-party services. These interactions are governed by the respective third party's privacy policies, not ours:</p>
+                    <ul>
+                        <li><strong>Discord:</strong> Signal monitoring via your own Discord account and token</li>
+                        <li><strong>Brokerages (Webull, Schwab, Tastytrade, Robinhood, Alpaca, IBKR):</strong> Trade execution via your own brokerage credentials</li>
+                        <li><strong>Google (if enabled):</strong> Google OAuth for account login</li>
+                    </ul>
+                    <p>We are not responsible for the privacy practices of these third-party services. Please review their respective privacy policies.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">11</span>
+                    Children's Privacy
+                </div>
+                <div class="section-content">
+                    <p>BotifyTrades is not intended for use by anyone under the age of 18. We do not knowingly collect personal data from children. If we become aware that we have collected data from a person under 18, we will delete it immediately.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">12</span>
+                    Data Breach Notification
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li>In the event of a data breach affecting your personal data, we will notify you via email within <strong>72 hours</strong> of becoming aware of the breach, as required by UK GDPR</li>
+                        <li>We will also notify the relevant supervisory authority (UK ICO) where required</li>
+                        <li>The notification will include the nature of the breach, the data affected, and the measures taken to address it</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">13</span>
+                    Changes to This Policy
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li>We may update this Privacy Policy from time to time to reflect changes in our practices or legal requirements</li>
+                        <li>Material changes will be communicated via email or a notice within the Software</li>
+                        <li>Continued use of the Software after changes constitutes acceptance of the updated policy</li>
+                        <li>The effective date at the top of this page indicates when this policy was last updated</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">14</span>
+                    Contact Us
+                </div>
+                <div class="section-content">
+                    <p>For privacy-related inquiries, data access requests, or to exercise your rights under UK GDPR or US state privacy laws, please contact us at the email address listed on the BotifyTrades website.</p>
+                    <p>For UK users: You also have the right to contact the Information Commissioner's Office (ICO) at <strong>ico.org.uk</strong> if you believe your data protection rights have been violated.</p>
+                </div>
+            </div>
+        </div>
+        
+        <a href="javascript:history.back()" class="back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Back
+        </a>
+    </div>
+</body>
+</html>

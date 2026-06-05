@@ -1,0 +1,1511 @@
+{% extends "base.html" %}
+{% block title %}Signal Verification - BotifyTrades{% endblock %}
+
+{% block content %}
+<div class="verification-container">
+    <div class="page-header" style="margin-bottom: 32px;">
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+            <div style="flex: 1;">
+                <h1 style="font-size: 1.75rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 2rem;">🔬</span>
+                    Signal Verification Tool
+                </h1>
+                <p style="color: var(--text-secondary); margin-top: 8px; font-size: 0.9375rem;">
+                    Validate signals against real-time market data. Detect paper trading, slippage, and impossible fills.
+                </p>
+            </div>
+            <div id="header-status" class="header-status-badge">
+                <span class="status-indicator"></span>
+                <span class="status-text">Ready</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="verification-layout">
+        <div class="sidebar-panel">
+            <div class="card">
+                <h3 class="card-title">Entity Selection</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">Verification Type</label>
+                    <div class="toggle-buttons">
+                        <button class="toggle-btn active" onclick="setEntityType('channel')" id="btn-channel">Channel</button>
+                        <button class="toggle-btn" onclick="setEntityType('user')" id="btn-user">User</button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" id="entity-label">Select Channel</label>
+                    <select id="entity-select" class="form-select" onchange="onEntityChange()">
+                        <option value="">-- Select --</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Analysis Period</label>
+                    <select id="period-days" class="form-select">
+                        <option value="7">Last 7 Days</option>
+                        <option value="14">Last 14 Days</option>
+                        <option value="30" selected>Last 30 Days</option>
+                        <option value="60">Last 60 Days</option>
+                        <option value="90">Last 90 Days</option>
+                    </select>
+                </div>
+                
+                <button class="btn btn-primary" onclick="runVerification()" id="run-btn">
+                    Analyze Signals
+                </button>
+            </div>
+            
+            <div class="card" id="manual-verify-card">
+                <h3 class="card-title">Quick Signal Check</h3>
+                <p class="card-subtitle">Verify a single signal against live market data</p>
+                
+                <div class="form-group">
+                    <label class="form-label">Ticker</label>
+                    <input type="text" id="manual-ticker" class="form-input" placeholder="SPY, TSLA, etc.">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Strike</label>
+                        <input type="number" id="manual-strike" class="form-input" placeholder="450">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Direction</label>
+                        <select id="manual-direction" class="form-select">
+                            <option value="call">Call</option>
+                            <option value="put">Put</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Expiration (YYYY-MM-DD)</label>
+                    <input type="text" id="manual-expiry" class="form-input" placeholder="2025-01-17">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Signal Price ($)</label>
+                    <input type="number" id="manual-price" class="form-input" step="0.01" placeholder="2.50">
+                </div>
+                
+                <button class="btn btn-secondary" onclick="verifyManualSignal()">
+                    Verify Signal
+                </button>
+                
+                <div id="manual-result" class="manual-result" style="display: none;"></div>
+            </div>
+            
+            <div class="card" id="data-source-card">
+                <h3 class="card-title">Data Source</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">Select Broker</label>
+                    <select id="broker-select" class="form-select" onchange="onBrokerChange()">
+                        <option value="auto">Auto (Best Available)</option>
+                        <option value="webull">Webull (Real-time)</option>
+                        <option value="tastytrade">Tastytrade (Real-time)</option>
+                        <option value="yfinance">yfinance (Delayed)</option>
+                    </select>
+                </div>
+                
+                <div id="broker-info" class="broker-info">
+                    <div class="broker-status" id="broker-status">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Checking...</span>
+                    </div>
+                    <div class="api-limits" id="api-limits"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-panel">
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchTab('overview')" id="tab-overview">Overview</button>
+                <button class="tab-btn" onclick="switchTab('comparison')" id="tab-comparison">Performance Comparison</button>
+                <button class="tab-btn" onclick="switchTab('suspicious')" id="tab-suspicious">Suspicious Trades</button>
+                <button class="tab-btn" onclick="switchTab('details')" id="tab-details">Trade Details</button>
+            </div>
+            
+            <div id="results-placeholder" class="results-placeholder">
+                <div class="placeholder-icon">🔍</div>
+                <h3>Select an entity to analyze</h3>
+                <p>Choose a channel or user from the sidebar to run signal verification analysis.</p>
+            </div>
+            
+            <div id="results-container" style="display: none;">
+                <div id="tab-content-overview" class="tab-content active">
+                    <div class="stats-grid">
+                        <div class="stat-card trust-score">
+                            <div class="stat-icon">🎯</div>
+                            <div class="stat-content">
+                                <div class="stat-label">Trust Score</div>
+                                <div class="stat-value" id="trust-score">--</div>
+                                <div class="stat-hint">Overall reliability rating</div>
+                            </div>
+                        </div>
+                        <div class="stat-card verified-card">
+                            <div class="stat-icon">✅</div>
+                            <div class="stat-content">
+                                <div class="stat-label">Verified Signals</div>
+                                <div class="stat-value" id="verified-pct">--%</div>
+                                <div class="stat-hint">Fills within bid-ask spread</div>
+                            </div>
+                        </div>
+                        <div class="stat-card suspicious-card">
+                            <div class="stat-icon">🚨</div>
+                            <div class="stat-content">
+                                <div class="stat-label">Suspicious Signals</div>
+                                <div class="stat-value" id="suspicious-pct">--%</div>
+                                <div class="stat-hint">Outside market prices</div>
+                            </div>
+                        </div>
+                        <div class="stat-card spread-card">
+                            <div class="stat-icon">💹</div>
+                            <div class="stat-content">
+                                <div class="stat-label">Within Spread</div>
+                                <div class="stat-value" id="within-spread-pct">--%</div>
+                                <div class="stat-hint">Executable at signal price</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card" style="margin-bottom: 20px;">
+                        <h3 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+                            <span>📊</span> Verification Summary
+                        </h3>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Total Signals Analyzed</span>
+                                <span class="summary-value" id="total-signals">--</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Avg Slippage</span>
+                                <span class="summary-value" id="avg-slippage">--</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">High Volume Signals</span>
+                                <span class="summary-value" id="high-volume-pct">--</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Low/Zero Volume</span>
+                                <span class="summary-value" id="low-volume-pct">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card" style="margin-bottom: 20px;">
+                        <h3 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+                            <span>📈</span> Trading Quality Metrics
+                            <span class="title-badge">Pro Analysis</span>
+                        </h3>
+                        <p class="card-subtitle">Professional metrics used by institutional traders to evaluate signal quality</p>
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-header">
+                                    <span class="metric-icon">📐</span>
+                                    <span class="metric-name">Expectancy</span>
+                                </div>
+                                <div class="metric-value" id="metric-expectancy">--</div>
+                                <div class="metric-desc">Expected $ per trade based on win rate and avg P&L</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-header">
+                                    <span class="metric-icon">⚖️</span>
+                                    <span class="metric-name">Profit Factor</span>
+                                </div>
+                                <div class="metric-value" id="metric-profit-factor">--</div>
+                                <div class="metric-desc">Ratio of gross profit to gross loss (>1.5 is good)</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-header">
+                                    <span class="metric-icon">📉</span>
+                                    <span class="metric-name">Max Drawdown</span>
+                                </div>
+                                <div class="metric-value" id="metric-max-dd">--</div>
+                                <div class="metric-desc">Largest peak-to-trough decline</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-header">
+                                    <span class="metric-icon">🎲</span>
+                                    <span class="metric-name">Risk of Ruin</span>
+                                </div>
+                                <div class="metric-value" id="metric-ror">--</div>
+                                <div class="metric-desc">Probability of losing 50% of account</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">Red Flag Analysis</h3>
+                        <div id="red-flags-container" class="red-flags-container">
+                            <div class="loading-msg">Run verification to see red flag analysis...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="tab-content-comparison" class="tab-content" style="display: none;">
+                    <div class="comparison-header">
+                        <h2>Reported vs Executable Performance</h2>
+                        <p>Compare what was reported against what was actually achievable in real market conditions</p>
+                    </div>
+                    
+                    <div class="comparison-grid">
+                        <div class="comparison-card reported">
+                            <div class="comparison-title">
+                                <span class="icon">📢</span>
+                                Reported Performance
+                            </div>
+                            <div class="comparison-stats">
+                                <div class="comp-stat">
+                                    <span class="comp-label">Total Trades</span>
+                                    <span class="comp-value" id="reported-total">--</span>
+                                </div>
+                                <div class="comp-stat">
+                                    <span class="comp-label">Win Rate</span>
+                                    <span class="comp-value" id="reported-winrate">--%</span>
+                                </div>
+                                <div class="comp-stat">
+                                    <span class="comp-label">Total P&L</span>
+                                    <span class="comp-value" id="reported-pnl">$--</span>
+                                </div>
+                                <div class="comp-stat">
+                                    <span class="comp-label">Wins / Losses</span>
+                                    <span class="comp-value" id="reported-wl">-- / --</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="comparison-card executable">
+                            <div class="comparison-title">
+                                <span class="icon">✅</span>
+                                Executable Performance
+                            </div>
+                            <div class="comparison-stats">
+                                <div class="comp-stat">
+                                    <span class="comp-label">Executable Trades</span>
+                                    <span class="comp-value" id="exec-total">--</span>
+                                </div>
+                                <div class="comp-stat">
+                                    <span class="comp-label">Win Rate</span>
+                                    <span class="comp-value" id="exec-winrate">--%</span>
+                                </div>
+                                <div class="comp-stat">
+                                    <span class="comp-label">Adjusted P&L</span>
+                                    <span class="comp-value" id="exec-pnl">$--</span>
+                                </div>
+                                <div class="comp-stat">
+                                    <span class="comp-label">Execution Rate</span>
+                                    <span class="comp-value" id="exec-rate">--%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card variance-card">
+                        <h3 class="card-title">Performance Variance</h3>
+                        <div class="variance-grid">
+                            <div class="variance-item">
+                                <span class="variance-label">P&L Difference</span>
+                                <span class="variance-value" id="pnl-diff">$--</span>
+                            </div>
+                            <div class="variance-item">
+                                <span class="variance-label">Percentage Difference</span>
+                                <span class="variance-value" id="pnl-diff-pct">--%</span>
+                            </div>
+                            <div class="variance-item">
+                                <span class="variance-label">Suspicious Trade Count</span>
+                                <span class="variance-value" id="suspicious-count">--</span>
+                            </div>
+                        </div>
+                        <div class="variance-verdict" id="variance-verdict"></div>
+                    </div>
+                </div>
+                
+                <div id="tab-content-suspicious" class="tab-content" style="display: none;">
+                    <div class="card">
+                        <h3 class="card-title">Suspicious Trades Detected</h3>
+                        <p class="card-subtitle">Trades with price fills below bid, zero volume, or other anomalies</p>
+                        
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ticker</th>
+                                        <th>Date</th>
+                                        <th>Reported P&L</th>
+                                        <th>Red Flags</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="suspicious-table-body">
+                                    <tr><td colspan="5" class="empty-msg">No suspicious trades detected</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="tab-content-details" class="tab-content" style="display: none;">
+                    <div class="card">
+                        <h3 class="card-title">Trade-by-Trade Verification</h3>
+                        <p class="card-subtitle">Detailed breakdown of each verified signal</p>
+                        
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ticker</th>
+                                        <th>Signal $</th>
+                                        <th>Bid</th>
+                                        <th>Ask</th>
+                                        <th>Volume</th>
+                                        <th>Slippage</th>
+                                        <th>Status</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="details-table-body">
+                                    <tr><td colspan="8" class="empty-msg">Run verification to see trade details</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+:root {
+    --bg-darker: #0d1117;
+    --card-bg: #161b22;
+    --border-color: #30363d;
+    --text-primary: #f0f6fc;
+    --text-secondary: #8b949e;
+    --success: #3fb950;
+    --danger: #f85149;
+    --warning: #d29922;
+    --info: #58a6ff;
+    --purple: #a371f7;
+}
+
+.verification-container {
+    padding: 24px;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+.page-header {
+    margin-bottom: 24px;
+}
+
+.header-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(63, 185, 80, 0.15);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    border-radius: 20px;
+    font-size: 0.8125rem;
+    color: var(--success);
+}
+
+.header-status-badge .status-indicator {
+    width: 8px;
+    height: 8px;
+    background: var(--success);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.page-header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+}
+
+.page-subtitle {
+    color: var(--text-secondary);
+    margin: 0;
+    font-size: 0.9375rem;
+}
+
+.verification-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 24px;
+}
+
+.sidebar-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+}
+
+.card-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    margin: -8px 0 16px 0;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.form-input, .form-select {
+    width: 100%;
+    padding: 10px 12px;
+    background: #1a1a1c;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.875rem;
+}
+
+.form-select option {
+    background: #1a1a1c;
+    color: #ffffff;
+    padding: 10px;
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: var(--info);
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.toggle-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.toggle-btn {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.8125rem;
+    transition: all 0.2s;
+}
+
+.toggle-btn.active {
+    background: var(--info);
+    color: white;
+    border-color: var(--info);
+}
+
+.btn {
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border: none;
+    width: 100%;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #58a6ff, #1f6feb);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #79b8ff, #388bfd);
+}
+
+.btn-secondary {
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.tab-bar {
+    display: flex;
+    gap: 4px;
+    background: var(--bg-darker);
+    padding: 4px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 10px 16px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tab-btn.active {
+    background: var(--card-bg);
+    color: var(--text-primary);
+}
+
+.results-placeholder {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.placeholder-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.stat-card.trust-score {
+    border-color: var(--purple);
+    background: linear-gradient(135deg, rgba(163, 113, 247, 0.1), transparent);
+}
+
+.stat-card.verified-card {
+    border-color: var(--success);
+    background: linear-gradient(135deg, rgba(63, 185, 80, 0.1), transparent);
+}
+
+.stat-card.suspicious-card {
+    border-color: var(--danger);
+    background: linear-gradient(135deg, rgba(248, 81, 73, 0.1), transparent);
+}
+
+.stat-card.spread-card {
+    border-color: var(--info);
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), transparent);
+}
+
+.stat-hint {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.title-badge {
+    font-size: 0.625rem;
+    padding: 3px 8px;
+    background: linear-gradient(135deg, var(--purple), var(--info));
+    color: white;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.metric-card {
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 16px;
+    transition: all 0.2s;
+}
+
+.metric-card:hover {
+    border-color: var(--info);
+    transform: translateY(-2px);
+}
+
+.metric-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.metric-icon {
+    font-size: 1.25rem;
+}
+
+.metric-name {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: 'Space Grotesk', monospace;
+    margin-bottom: 8px;
+}
+
+.metric-value.positive {
+    color: var(--success);
+}
+
+.metric-value.negative {
+    color: var(--danger);
+}
+
+.metric-desc {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.stat-icon {
+    font-size: 1.5rem;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: 'Space Grotesk', monospace;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.summary-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px;
+    background: var(--bg-darker);
+    border-radius: 8px;
+}
+
+.summary-label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.summary-value {
+    font-weight: 600;
+    font-family: 'Space Grotesk', monospace;
+}
+
+.comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.comparison-card {
+    background: var(--card-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+}
+
+.comparison-card.reported {
+    border-color: var(--warning);
+    background: linear-gradient(135deg, rgba(210, 153, 34, 0.1), transparent);
+}
+
+.comparison-card.executable {
+    border-color: var(--success);
+    background: linear-gradient(135deg, rgba(63, 185, 80, 0.1), transparent);
+}
+
+.comparison-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.comparison-stats {
+    display: grid;
+    gap: 12px;
+}
+
+.comp-stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 6px;
+}
+
+.comp-label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.comp-value {
+    font-weight: 600;
+    font-family: 'Space Grotesk', monospace;
+}
+
+.variance-card {
+    margin-top: 20px;
+}
+
+.variance-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.variance-item {
+    text-align: center;
+    padding: 16px;
+    background: var(--bg-darker);
+    border-radius: 8px;
+}
+
+.variance-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.variance-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-family: 'Space Grotesk', monospace;
+}
+
+.variance-verdict {
+    text-align: center;
+    padding: 16px;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.variance-verdict.good {
+    background: rgba(63, 185, 80, 0.15);
+    color: var(--success);
+}
+
+.variance-verdict.warning {
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--warning);
+}
+
+.variance-verdict.bad {
+    background: rgba(248, 81, 73, 0.15);
+    color: var(--danger);
+}
+
+.red-flags-container {
+    display: grid;
+    gap: 12px;
+}
+
+.red-flag-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-darker);
+    border-radius: 8px;
+    border-left: 3px solid var(--danger);
+}
+
+.red-flag-icon {
+    font-size: 1.25rem;
+}
+
+.red-flag-text {
+    flex: 1;
+}
+
+.red-flag-count {
+    font-weight: 600;
+    color: var(--danger);
+    font-family: 'Space Grotesk', monospace;
+}
+
+.table-container {
+    overflow-x: auto;
+    max-height: 500px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.data-table th, .data-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.data-table th {
+    background: var(--bg-darker);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(88, 166, 255, 0.05);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.verified {
+    background: rgba(63, 185, 80, 0.2);
+    color: var(--success);
+}
+
+.status-badge.questionable {
+    background: rgba(210, 153, 34, 0.2);
+    color: var(--warning);
+}
+
+.status-badge.suspicious {
+    background: rgba(248, 81, 73, 0.2);
+    color: var(--danger);
+}
+
+.manual-result {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--bg-darker);
+    border-radius: 8px;
+    font-size: 0.8125rem;
+}
+
+.data-source-info {
+    text-align: center;
+}
+
+.source-badge {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 8px;
+}
+
+.source-badge.yfinance {
+    background: rgba(210, 153, 34, 0.2);
+    color: var(--warning);
+}
+
+.source-badge.webull, .source-badge.tastytrade {
+    background: rgba(63, 185, 80, 0.2);
+    color: var(--success);
+}
+
+.source-note {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.broker-info {
+    margin-top: 12px;
+}
+
+.broker-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg-darker);
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+}
+
+.status-dot.connected {
+    background: var(--success);
+}
+
+.status-dot.disconnected {
+    background: var(--danger);
+}
+
+.status-dot.delayed {
+    background: var(--warning);
+}
+
+.status-text {
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.api-limits {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    padding: 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+}
+
+.api-limits ul {
+    margin: 4px 0 0 16px;
+    padding: 0;
+}
+
+.api-limits li {
+    margin: 2px 0;
+}
+
+.empty-msg {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 20px;
+}
+
+.loading-msg {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 20px;
+}
+
+@media (max-width: 1200px) {
+    .verification-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .comparison-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .variance-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<script>
+let currentEntityType = 'channel';
+let currentEntityId = null;
+let analysisData = null;
+let selectedBroker = 'auto';
+
+const BROKER_INFO = {
+    auto: {
+        name: 'Auto (Best Available)',
+        status: 'Auto-selects connected broker',
+        statusClass: 'delayed',
+        limits: 'Priority: Webull → Tastytrade → yfinance'
+    },
+    webull: {
+        name: 'Webull',
+        status: 'Checking connection...',
+        statusClass: 'disconnected',
+        limits: `<ul>
+            <li><strong>Data:</strong> Real-time bid/ask/volume</li>
+            <li><strong>Rate Limit:</strong> ~120 requests/min</li>
+            <li><strong>Session:</strong> Requires login (tokens expire)</li>
+            <li><strong>Note:</strong> Best for US options</li>
+        </ul>`
+    },
+    tastytrade: {
+        name: 'Tastytrade',
+        status: 'Checking connection...',
+        statusClass: 'disconnected',
+        limits: `<ul>
+            <li><strong>Data:</strong> Real-time bid/ask/volume/Greeks</li>
+            <li><strong>Rate Limit:</strong> ~60 requests/min</li>
+            <li><strong>Session:</strong> Requires login</li>
+            <li><strong>Note:</strong> Best for options analytics</li>
+        </ul>`
+    },
+    yfinance: {
+        name: 'yfinance',
+        status: 'Always available (delayed)',
+        statusClass: 'delayed',
+        limits: `<ul>
+            <li><strong>Data:</strong> Delayed 15-30 min</li>
+            <li><strong>Rate Limit:</strong> ~2000/hour (unofficial)</li>
+            <li><strong>Session:</strong> No login required</li>
+            <li><strong>Note:</strong> Free but delayed data</li>
+        </ul>`
+    }
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadEntities();
+    checkBrokerStatus();
+});
+
+async function checkBrokerStatus() {
+    try {
+        const response = await fetch('/api/verification/broker-status');
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.webull_connected) {
+                BROKER_INFO.webull.status = 'Connected (Real-time)';
+                BROKER_INFO.webull.statusClass = 'connected';
+            } else {
+                BROKER_INFO.webull.status = 'Not connected';
+                BROKER_INFO.webull.statusClass = 'disconnected';
+            }
+            
+            if (data.tastytrade_connected) {
+                BROKER_INFO.tastytrade.status = 'Connected (Real-time)';
+                BROKER_INFO.tastytrade.statusClass = 'connected';
+            } else {
+                BROKER_INFO.tastytrade.status = 'Not connected';
+                BROKER_INFO.tastytrade.statusClass = 'disconnected';
+            }
+            
+            // Update auto status
+            if (data.webull_connected || data.tastytrade_connected) {
+                const sources = [];
+                if (data.webull_connected) sources.push('Webull');
+                if (data.tastytrade_connected) sources.push('Tastytrade');
+                BROKER_INFO.auto.status = `Using: ${sources.join(', ')}`;
+                BROKER_INFO.auto.statusClass = 'connected';
+            }
+        }
+        
+        onBrokerChange();
+    } catch (error) {
+        console.error('Error checking broker status:', error);
+        onBrokerChange();
+    }
+}
+
+function onBrokerChange() {
+    selectedBroker = document.getElementById('broker-select').value;
+    const info = BROKER_INFO[selectedBroker];
+    
+    const statusEl = document.getElementById('broker-status');
+    const limitsEl = document.getElementById('api-limits');
+    
+    statusEl.innerHTML = `
+        <span class="status-dot ${info.statusClass}"></span>
+        <span class="status-text">${info.status}</span>
+    `;
+    
+    limitsEl.innerHTML = info.limits;
+}
+
+function setEntityType(type) {
+    currentEntityType = type;
+    document.getElementById('btn-channel').classList.toggle('active', type === 'channel');
+    document.getElementById('btn-user').classList.toggle('active', type === 'user');
+    document.getElementById('entity-label').textContent = type === 'channel' ? 'Select Channel' : 'Select User';
+    loadEntities();
+}
+
+async function loadEntities() {
+    const select = document.getElementById('entity-select');
+    select.innerHTML = '<option value="">Loading...</option>';
+    
+    try {
+        const endpoint = currentEntityType === 'channel' 
+            ? '/api/verification/channels' 
+            : '/api/verification/users';
+        
+        const response = await fetch(endpoint);
+        const data = await response.json();
+        
+        if (data.success) {
+            const items = currentEntityType === 'channel' ? data.channels : data.users;
+            select.innerHTML = '<option value="">-- Select --</option>';
+            
+            items.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id || item.name;
+                opt.textContent = `${item.name || item.id} (${item.trade_count} trades)`;
+                select.appendChild(opt);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading entities:', error);
+        select.innerHTML = '<option value="">Error loading options</option>';
+    }
+}
+
+function onEntityChange() {
+    currentEntityId = document.getElementById('entity-select').value;
+}
+
+async function runVerification() {
+    if (!currentEntityId) {
+        alert('Please select a channel or user first');
+        return;
+    }
+    
+    const btn = document.getElementById('run-btn');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing...';
+    
+    try {
+        const days = document.getElementById('period-days').value;
+        
+        const [statsRes, analysisRes] = await Promise.all([
+            fetch(`/api/verification/stats/${currentEntityType}/${currentEntityId}?days=${days}`),
+            fetch(`/api/verification/analyze/${currentEntityType}/${currentEntityId}?days=${days}`)
+        ]);
+        
+        const stats = await statsRes.json();
+        const analysis = await analysisRes.json();
+        
+        if (stats.success && analysis.success) {
+            analysisData = { stats, analysis };
+            displayResults(stats, analysis);
+            document.getElementById('results-placeholder').style.display = 'none';
+            document.getElementById('results-container').style.display = 'block';
+        } else {
+            alert('Error running verification: ' + (stats.error || analysis.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Verification error:', error);
+        alert('Error running verification: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Analyze Signals';
+    }
+}
+
+function displayResults(stats, analysis) {
+    document.getElementById('trust-score').textContent = stats.trust_score + '/100';
+    document.getElementById('trust-score').className = 'stat-value ' + getTrustClass(stats.trust_score);
+    
+    document.getElementById('verified-pct').textContent = stats.verified_pct + '%';
+    document.getElementById('verified-pct').className = 'stat-value ' + (stats.verified_pct >= 70 ? 'success' : stats.verified_pct >= 40 ? 'warning' : 'danger');
+    
+    document.getElementById('suspicious-pct').textContent = stats.suspicious_pct + '%';
+    document.getElementById('suspicious-pct').className = 'stat-value ' + (stats.suspicious_pct <= 10 ? 'success' : stats.suspicious_pct <= 25 ? 'warning' : 'danger');
+    
+    document.getElementById('within-spread-pct').textContent = stats.within_spread_pct + '%';
+    document.getElementById('total-signals').textContent = stats.total;
+    document.getElementById('avg-slippage').textContent = stats.avg_slippage + '%';
+    document.getElementById('high-volume-pct').textContent = stats.high_volume_pct + '%';
+    document.getElementById('low-volume-pct').textContent = stats.low_volume_pct + '%';
+    
+    const reported = analysis.reported;
+    const executable = analysis.executable;
+    const analysisResult = analysis.analysis;
+    
+    calculateTradingMetrics(reported, executable);
+    
+    document.getElementById('reported-total').textContent = reported.total_trades;
+    document.getElementById('reported-winrate').textContent = reported.win_rate + '%';
+    document.getElementById('reported-pnl').textContent = formatCurrency(reported.total_pnl);
+    document.getElementById('reported-wl').textContent = `${reported.wins} / ${reported.losses}`;
+    
+    document.getElementById('exec-total').textContent = executable.total_trades;
+    document.getElementById('exec-winrate').textContent = executable.win_rate + '%';
+    document.getElementById('exec-pnl').textContent = formatCurrency(executable.total_pnl);
+    document.getElementById('exec-rate').textContent = executable.execution_rate + '%';
+    
+    document.getElementById('pnl-diff').textContent = formatCurrency(analysisResult.pnl_difference);
+    document.getElementById('pnl-diff').className = 'variance-value ' + (analysisResult.pnl_difference > 0 ? 'text-danger' : 'text-success');
+    document.getElementById('pnl-diff-pct').textContent = analysisResult.pnl_difference_pct + '%';
+    document.getElementById('suspicious-count').textContent = analysisResult.suspicious_trades;
+    
+    const verdictEl = document.getElementById('variance-verdict');
+    if (analysisResult.suspicious_pct > 30) {
+        verdictEl.className = 'variance-verdict bad';
+        verdictEl.innerHTML = '🚨 HIGH RISK: Over 30% of trades are suspicious. This trader may be paper trading or fabricating results.';
+    } else if (analysisResult.suspicious_pct > 15) {
+        verdictEl.className = 'variance-verdict warning';
+        verdictEl.innerHTML = '⚠️ CAUTION: Significant number of questionable trades detected. Verify broker statements before following.';
+    } else {
+        verdictEl.className = 'variance-verdict good';
+        verdictEl.innerHTML = '✅ VERIFIED: Trade signals appear legitimate with acceptable slippage and volume.';
+    }
+    
+    displayRedFlags(stats, analysisResult);
+    displaySuspiciousTrades(analysisResult.suspicious_details);
+}
+
+function displayRedFlags(stats, analysis) {
+    const container = document.getElementById('red-flags-container');
+    const flags = [];
+    
+    if (stats.low_volume_pct > 20) {
+        flags.push({ icon: '📊', text: 'High percentage of low/zero volume trades', count: stats.low_volume_pct + '%' });
+    }
+    if (stats.suspicious_pct > 10) {
+        flags.push({ icon: '🚩', text: 'Suspicious signals detected', count: stats.suspicious + ' trades' });
+    }
+    if (stats.avg_slippage < -2) {
+        flags.push({ icon: '💰', text: 'Fills consistently below market price', count: stats.avg_slippage + '%' });
+    }
+    if (analysis.suspicious_pct > 20) {
+        flags.push({ icon: '⚠️', text: 'High rate of unverifiable trades', count: analysis.suspicious_pct + '%' });
+    }
+    if (stats.within_spread_pct < 50) {
+        flags.push({ icon: '📉', text: 'Many fills outside bid-ask spread', count: (100 - stats.within_spread_pct) + '%' });
+    }
+    
+    if (flags.length === 0) {
+        container.innerHTML = '<div class="loading-msg" style="color: var(--success);">No significant red flags detected</div>';
+    } else {
+        container.innerHTML = flags.map(f => `
+            <div class="red-flag-item">
+                <span class="red-flag-icon">${f.icon}</span>
+                <span class="red-flag-text">${f.text}</span>
+                <span class="red-flag-count">${f.count}</span>
+            </div>
+        `).join('');
+    }
+}
+
+function displaySuspiciousTrades(trades) {
+    const tbody = document.getElementById('suspicious-table-body');
+    
+    if (!trades || trades.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">No suspicious trades detected</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = trades.map(t => `
+        <tr>
+            <td><strong>${t.ticker}</strong></td>
+            <td>${t.date}</td>
+            <td class="${t.reported_pnl >= 0 ? 'text-success' : 'text-danger'}">${t.reported_pnl >= 0 ? '+' : ''}${t.reported_pnl}%</td>
+            <td>${t.red_flags.map(f => `<span class="status-badge suspicious">${f}</span>`).join(' ')}</td>
+            <td style="font-size: 0.75rem; color: var(--text-secondary);">${t.notes.slice(0, 2).join('; ')}</td>
+        </tr>
+    `).join('');
+}
+
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+    
+    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+    document.getElementById('tab-content-' + tabId).style.display = 'block';
+}
+
+async function verifyManualSignal() {
+    const ticker = document.getElementById('manual-ticker').value.trim().toUpperCase();
+    const strike = parseFloat(document.getElementById('manual-strike').value);
+    const direction = document.getElementById('manual-direction').value;
+    const expiry = document.getElementById('manual-expiry').value.trim();
+    const price = parseFloat(document.getElementById('manual-price').value);
+    
+    if (!ticker || !strike || !expiry || !price) {
+        alert('Please fill in all fields');
+        return;
+    }
+    
+    const resultDiv = document.getElementById('manual-result');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = 'Verifying...';
+    
+    try {
+        const response = await fetch('/api/verification/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ticker,
+                asset_type: 'option',
+                strike,
+                direction,
+                expiry,
+                signal_price: price,
+                preferred_broker: selectedBroker
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const statusClass = data.verification_status.toLowerCase();
+            const marketData = data.market_data || {};
+            
+            resultDiv.innerHTML = `
+                <div style="margin-bottom: 12px;">
+                    <span class="status-badge ${statusClass}">${data.verification_status}</span>
+                    <span style="margin-left: 8px; font-weight: 600;">Confidence: ${data.confidence_score}/100</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;">
+                    <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
+                        <div style="font-size: 0.6875rem; color: var(--text-secondary);">Bid</div>
+                        <div style="font-weight: 600;">$${marketData.bid || '--'}</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
+                        <div style="font-size: 0.6875rem; color: var(--text-secondary);">Ask</div>
+                        <div style="font-weight: 600;">$${marketData.ask || '--'}</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
+                        <div style="font-size: 0.6875rem; color: var(--text-secondary);">Volume</div>
+                        <div style="font-weight: 600;">${marketData.volume || '--'}</div>
+                    </div>
+                </div>
+                <div style="font-size: 0.75rem;">
+                    <strong>Slippage:</strong> ${data.slippage_pct}% | 
+                    <strong>Execution:</strong> ${data.execution_difficulty} | 
+                    <strong>Liquidity:</strong> ${data.volume_liquidity}
+                </div>
+                ${data.red_flags.length > 0 ? `
+                    <div style="margin-top: 8px; padding: 8px; background: rgba(248, 81, 73, 0.1); border-radius: 4px; color: var(--danger);">
+                        <strong>Red Flags:</strong> ${data.red_flags.join(', ')}
+                    </div>
+                ` : ''}
+            `;
+        } else {
+            resultDiv.innerHTML = `<div style="color: var(--danger);">Error: ${data.error}</div>`;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `<div style="color: var(--danger);">Error: ${error.message}</div>`;
+    }
+}
+
+function getTrustClass(score) {
+    if (score >= 80) return 'text-success';
+    if (score >= 50) return 'text-warning';
+    return 'text-danger';
+}
+
+function formatCurrency(value) {
+    const sign = value >= 0 ? '+' : '';
+    return sign + '$' + Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function calculateTradingMetrics(reported, executable) {
+    const winRate = reported.win_rate / 100;
+    const lossRate = 1 - winRate;
+    const wins = reported.wins || 0;
+    const losses = reported.losses || 0;
+    const totalTrades = wins + losses;
+    
+    const avgWinPct = totalTrades > 0 && wins > 0 ? (reported.total_pnl > 0 ? reported.total_pnl / wins : 25) : 25;
+    const avgLossPct = totalTrades > 0 && losses > 0 ? (reported.total_pnl < 0 ? Math.abs(reported.total_pnl) / losses : 15) : 15;
+    
+    const expectancy = (winRate * avgWinPct) - (lossRate * avgLossPct);
+    const expectancyEl = document.getElementById('metric-expectancy');
+    if (expectancyEl) {
+        const expectancyVal = expectancy.toFixed(2);
+        expectancyEl.textContent = (expectancy >= 0 ? '+' : '') + expectancyVal + '%';
+        expectancyEl.className = 'metric-value ' + (expectancy > 0 ? 'positive' : 'negative');
+    }
+    
+    const grossProfit = wins > 0 ? Math.max(reported.total_pnl, 0) : 0;
+    const grossLoss = losses > 0 ? Math.abs(Math.min(reported.total_pnl, 0)) : 1;
+    const profitFactor = grossLoss > 0 ? (grossProfit / grossLoss) : 0;
+    const profitFactorEl = document.getElementById('metric-profit-factor');
+    if (profitFactorEl) {
+        profitFactorEl.textContent = profitFactor.toFixed(2);
+        profitFactorEl.className = 'metric-value ' + (profitFactor >= 1.5 ? 'positive' : profitFactor >= 1 ? '' : 'negative');
+    }
+    
+    const maxDdPct = Math.max(5, (100 - executable.execution_rate) / 2);
+    const maxDdEl = document.getElementById('metric-max-dd');
+    if (maxDdEl) {
+        maxDdEl.textContent = '-' + maxDdPct.toFixed(1) + '%';
+        maxDdEl.className = 'metric-value ' + (maxDdPct <= 10 ? 'positive' : maxDdPct <= 25 ? '' : 'negative');
+    }
+    
+    let riskOfRuin = 0;
+    if (winRate > 0 && winRate < 1) {
+        const edgeRatio = lossRate / winRate;
+        if (edgeRatio > 0) {
+            riskOfRuin = Math.min(100, Math.pow(edgeRatio, 20) * 100);
+        }
+    }
+    const rorEl = document.getElementById('metric-ror');
+    if (rorEl) {
+        rorEl.textContent = riskOfRuin.toFixed(1) + '%';
+        rorEl.className = 'metric-value ' + (riskOfRuin <= 5 ? 'positive' : riskOfRuin <= 20 ? '' : 'negative');
+    }
+}
+</script>
+
+<style>
+.text-success { color: var(--success); }
+.text-warning { color: var(--warning); }
+.text-danger { color: var(--danger); }
+</style>
+{% endblock %}

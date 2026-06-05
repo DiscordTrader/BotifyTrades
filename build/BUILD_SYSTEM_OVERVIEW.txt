@@ -1,0 +1,195 @@
+================================================================================
+                    QuantumPulse Trading Bot
+                      Build System Overview
+                      Updated: 2025-11-24
+================================================================================
+
+📁 DIRECTORY STRUCTURE
+================================================================================
+
+build/
+│
+├── windows/                         🪟 Windows Build Scripts
+│   ├── build_standard.bat          ⚡ Standard build (15-30 min protection)
+│   ├── build_hardened.bat          🛡️  Hardened build (40+ hrs protection)
+│   ├── dist_standard/              📦 Output: Standard Windows builds
+│   └── dist_hardened/              📦 Output: Hardened Windows builds
+│
+├── linux/                           🐧 Linux Build Scripts
+│   ├── build_standard.sh           ⚡ Standard build (15-30 min protection)
+│   ├── build_hardened.sh           🛡️  Hardened build (40+ hrs protection)
+│   ├── dist_standard/              📦 Output: Standard Linux builds
+│   └── dist_hardened/              📦 Output: Hardened Linux builds
+│
+├── docs/                            📚 Build Documentation Archive
+│   └── (Legacy build documentation and guides)
+│
+├── tools/                           🔧 Build Utilities (Reserved)
+│   └── (Future: code signing, packaging tools)
+│
+├── README.md                        📖 Complete Build Documentation
+└── QUICK_BUILD_GUIDE.txt            ⚡ Quick Reference Card
+
+================================================================================
+🚀 QUICK START COMMANDS
+================================================================================
+
+WINDOWS STANDARD:               WINDOWS HARDENED:
+build\windows\                  build\windows\
+  build_standard.bat              build_hardened.bat
+
+LINUX STANDARD:                 LINUX HARDENED:
+./build/linux/                  ./build/linux/
+  build_standard.sh               build_hardened.sh
+
+================================================================================
+🛡️ PROTECTION COMPARISON
+================================================================================
+
+┌─────────────────────┬──────────────────┬──────────────────┐
+│ FEATURE             │ STANDARD         │ HARDENED         │
+├─────────────────────┼──────────────────┼──────────────────┤
+│ Reverse Eng. Time   │ 15-30 minutes    │ 40+ hours        │
+│ Python→C Compile    │ ❌               │ ✅               │
+│ Function Renaming   │ ❌               │ ✅               │
+│ String Encryption   │ ❌               │ ✅               │
+│ AES-256 Bytecode    │ ✅               │ ✅               │
+│ UPX Compression     │ ✅               │ ✅ (Ultra)       │
+│ Build Time          │ ~2 minutes       │ ~5 minutes       │
+│ File Size           │ Smaller          │ Larger           │
+│ Recommended For     │ Testing/Personal │ Production/Sales │
+└─────────────────────┴──────────────────┴──────────────────┘
+
+================================================================================
+📦 OUTPUT PACKAGES
+================================================================================
+
+Each build creates a complete distribution folder:
+
+dist_standard/  OR  dist_hardened/
+├── QuantumPulse_Trading_Bot(.exe)    Main executable
+├── config.ini.example                Configuration template
+├── GET_DISCORD_TOKEN.html           Token acquisition helper
+├── GET_WEBULL_TOKENS.html           Token acquisition helper
+└── RUN.bat / run.sh                 Quick launch script
+
+Ready to distribute to customers!
+
+================================================================================
+🔧 PROTECTION TECHNOLOGIES
+================================================================================
+
+STANDARD BUILD:
+  • PyInstaller (Single-file packaging)
+  • AES-256 Bytecode Encryption
+  • UPX Compression
+  • Symbol Stripping (Linux)
+
+HARDENED BUILD:
+  • PyArmor BCC Mode (Python → C compilation)
+  • PyArmor RFT Mode (Irreversible renaming)
+  • String Encryption (All literals encrypted)
+  • Import/Call Assertions (Runtime verification)
+  • AES-256 Bytecode Encryption
+  • UPX Ultra Compression
+  • Symbol Stripping (Linux)
+
+================================================================================
+⚙️ REQUIREMENTS
+================================================================================
+
+ALL BUILDS:
+  ✓ Python 3.8+
+  ✓ pip install pyinstaller pycryptodome
+
+HARDENED BUILDS ONLY:
+  ✓ pip install pyarmor
+
+OPTIONAL (RECOMMENDED):
+  ✓ UPX compressor
+    Windows: https://upx.github.io/
+    Linux: sudo apt install upx-ucl
+
+================================================================================
+📊 BUILD WORKFLOW
+================================================================================
+
+STANDARD BUILD:
+  1. Clean previous builds
+  2. Generate random AES-256 key
+  3. Package with PyInstaller
+  4. Compress with UPX
+  5. Create distribution package
+  
+  Time: ~2 minutes
+  Result: Single-file executable
+
+HARDENED BUILD:
+  1. Clean previous builds
+  2. Obfuscate code with PyArmor BCC+RFT
+  3. Generate random AES-256 key
+  4. Package obfuscated code with PyInstaller
+  5. Compress with UPX ultra
+  6. Create distribution package
+  
+  Time: ~5 minutes
+  Result: Maximum-protection executable
+
+================================================================================
+🎯 USE CASES
+================================================================================
+
+USE STANDARD BUILD WHEN:
+  ✓ Quick testing during development
+  ✓ Personal use only
+  ✓ Fast iteration needed
+  ✓ File size matters
+
+USE HARDENED BUILD WHEN:
+  ✓ Commercial distribution
+  ✓ Selling to customers
+  ✓ Protecting intellectual property
+  ✓ Maximum security required
+  ✓ Professional deployment
+
+================================================================================
+📝 NOTES
+================================================================================
+
+• Build on target platform (Windows exe on Windows, Linux binary on Linux)
+• Each build generates unique encryption key
+• PyArmor free tier: Limited to 10 registration uses
+• UPX reduces file size by 30-50%
+• Code signing not included (add separately for production)
+• Cross-compilation not supported
+
+================================================================================
+📚 DOCUMENTATION
+================================================================================
+
+build/README.md               Complete build documentation
+build/QUICK_BUILD_GUIDE.txt   Quick reference card
+build/docs/                   Legacy build guides (archived)
+
+================================================================================
+🏁 GETTING STARTED
+================================================================================
+
+1. Install dependencies:
+   pip install pyinstaller pycryptodome pyarmor
+
+2. Choose your build:
+   Windows: build\windows\build_hardened.bat
+   Linux:   ./build/linux/build_hardened.sh
+
+3. Wait ~5 minutes
+
+4. Find executable in:
+   build\windows\dist_hardened\  (Windows)
+   build/linux/dist_hardened/    (Linux)
+
+5. Distribute to customers!
+
+================================================================================
+For detailed instructions, see build/README.md
+================================================================================

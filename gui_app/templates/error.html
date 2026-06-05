@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}{{ error_title or 'Error' }} - BotifyTrades{% endblock %}
+
+{% block content %}
+<style>
+.error-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    text-align: center;
+    padding: 40px;
+}
+
+.error-icon {
+    font-size: 72px;
+    margin-bottom: 24px;
+    opacity: 0.8;
+}
+
+.error-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 32px;
+    font-weight: 800;
+    color: #ff6b6b;
+    margin-bottom: 16px;
+}
+
+.error-message {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+    max-width: 500px;
+    line-height: 1.6;
+}
+
+.error-actions {
+    display: flex;
+    gap: 16px;
+}
+
+.btn-back {
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #00d4ff, #00a3cc);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-back:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+}
+
+.btn-secondary {
+    padding: 12px 24px;
+    background: rgba(108, 117, 125, 0.2);
+    color: var(--text-secondary);
+    border: 1px solid rgba(108, 117, 125, 0.3);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+    background: rgba(108, 117, 125, 0.3);
+    color: var(--text-primary);
+}
+</style>
+
+<div class="error-container">
+    <div class="error-icon">🔒</div>
+    <h1 class="error-title">{{ error_title or 'Error' }}</h1>
+    <p class="error-message">{{ error_message or 'An unexpected error occurred.' }}</p>
+    <div class="error-actions">
+        <a href="/" class="btn-back">← Back to Dashboard</a>
+        <a href="javascript:history.back()" class="btn-secondary">Go Back</a>
+    </div>
+</div>
+{% endblock %}

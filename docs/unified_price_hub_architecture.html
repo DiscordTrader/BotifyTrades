@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unified Price Hub — Architecture & Code Walkthrough</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #22263a;
+  --border: #2d3148;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --accent: #6366f1;
+  --accent2: #818cf8;
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --cyan: #06b6d4;
+  --pink: #ec4899;
+  --blue: #3b82f6;
+  --yellow: #eab308;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height:1.6; }
+
+.header { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%); padding: 40px 32px; text-align:center; border-bottom: 2px solid var(--accent); }
+.header h1 { font-size:2rem; font-weight:700; margin-bottom:8px; }
+.header .sub { color: var(--accent2); font-size:1rem; }
+.header .version { color: var(--text2); font-size:0.85rem; margin-top:4px; }
+
+.tabs { display:flex; gap:0; background: var(--surface); border-bottom: 2px solid var(--border); padding: 0 24px; overflow-x:auto; position:sticky; top:0; z-index:100; }
+.tab { padding:14px 22px; cursor:pointer; color: var(--text2); font-weight:500; border-bottom: 3px solid transparent; transition:all .2s; white-space:nowrap; font-size:0.9rem; }
+.tab:hover { color: var(--text); background: var(--surface2); }
+.tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+
+.content { max-width:1400px; margin:0 auto; padding:24px; }
+.panel { display:none; }
+.panel.active { display:block; }
+
+.card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:20px; }
+.card h2 { font-size:1.3rem; margin-bottom:16px; color: var(--accent2); }
+.card h3 { font-size:1.05rem; margin-bottom:12px; color: var(--cyan); }
+.card p { margin-bottom:12px; color: var(--text2); }
+
+.grid-2 { display:grid; grid-template-columns: repeat(auto-fit, minmax(380px,1fr)); gap:16px; margin-bottom:24px; }
+.grid-3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap:16px; margin-bottom:24px; }
+
+.info-card { background: var(--surface2); border:1px solid var(--border); border-radius:10px; padding:20px; }
+.info-card.green { border-left: 4px solid var(--green); }
+.info-card.blue { border-left: 4px solid var(--blue); }
+.info-card.orange { border-left: 4px solid var(--orange); }
+.info-card.red { border-left: 4px solid var(--red); }
+.info-card.cyan { border-left: 4px solid var(--cyan); }
+.info-card.pink { border-left: 4px solid var(--pink); }
+.info-card h4 { margin-bottom:8px; font-size:0.95rem; }
+.info-card h4.green { color: var(--green); }
+.info-card h4.blue { color: var(--blue); }
+.info-card h4.orange { color: var(--orange); }
+.info-card h4.red { color: var(--red); }
+.info-card h4.cyan { color: var(--cyan); }
+.info-card h4.pink { color: var(--pink); }
+
+.code { background:#0d1117; padding:12px 16px; border-radius:8px; font-family:'Cascadia Code','Fira Code',monospace; font-size:0.82rem; color:#c9d1d9; margin:10px 0; overflow-x:auto; white-space:pre; line-height:1.5; }
+.code .kw { color: #ff7b72; }
+.code .fn { color: #d2a8ff; }
+.code .str { color: #a5d6ff; }
+.code .num { color: #79c0ff; }
+.code .cm { color: #8b949e; }
+.code .var { color: #ffa657; }
+
+.badge { display:inline-block; padding:3px 10px; border-radius:12px; font-size:0.75rem; font-weight:600; }
+.badge.green { background:rgba(34,197,94,.15); color:var(--green); }
+.badge.blue { background:rgba(59,130,246,.15); color:var(--blue); }
+.badge.orange { background:rgba(245,158,11,.15); color:var(--orange); }
+.badge.red { background:rgba(239,68,68,.15); color:var(--red); }
+.badge.cyan { background:rgba(6,182,212,.15); color:var(--cyan); }
+.badge.pink { background:rgba(236,72,153,.15); color:var(--pink); }
+
+table { width:100%; border-collapse:collapse; margin:12px 0; }
+th { background: var(--surface2); color: var(--accent2); padding:10px 14px; text-align:left; font-size:0.85rem; border-bottom:2px solid var(--border); }
+td { padding:10px 14px; border-bottom:1px solid var(--border); font-size:0.85rem; color: var(--text2); }
+tr:hover td { background: rgba(99,102,241,.05); }
+
+.flow-diagram { background: var(--surface2); border-radius:10px; padding:24px; margin:16px 0; }
+.flow-step { display:flex; align-items:flex-start; gap:16px; margin-bottom:16px; }
+.flow-num { min-width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.9rem; flex-shrink:0; }
+.flow-num.blue { background:rgba(59,130,246,.2); color:var(--blue); border:2px solid var(--blue); }
+.flow-num.green { background:rgba(34,197,94,.2); color:var(--green); border:2px solid var(--green); }
+.flow-num.orange { background:rgba(245,158,11,.2); color:var(--orange); border:2px solid var(--orange); }
+.flow-num.red { background:rgba(239,68,68,.2); color:var(--red); border:2px solid var(--red); }
+.flow-num.cyan { background:rgba(6,182,212,.2); color:var(--cyan); border:2px solid var(--cyan); }
+.flow-body { flex:1; }
+.flow-body h4 { font-size:0.95rem; margin-bottom:4px; }
+.flow-body p { color: var(--text2); font-size:0.85rem; }
+
+.arrow-down { text-align:center; color: var(--text2); font-size:1.5rem; margin: -8px 0; }
+
+.timeline { position:relative; padding-left:28px; margin:16px 0; }
+.timeline::before { content:''; position:absolute; left:12px; top:0; bottom:0; width:2px; background: var(--border); }
+.tl-item { position:relative; margin-bottom:16px; }
+.tl-item::before { content:''; position:absolute; left:-20px; top:6px; width:12px; height:12px; border-radius:50%; border:2px solid var(--accent); background: var(--bg); }
+.tl-item.active::before { background: var(--accent); }
+.tl-item h5 { font-size:0.9rem; margin-bottom:4px; }
+.tl-item p { color: var(--text2); font-size:0.82rem; }
+
+.stat-row { display:flex; gap:16px; flex-wrap:wrap; margin:12px 0; }
+.stat { text-align:center; padding:12px 20px; background:var(--surface2); border-radius:8px; min-width:120px; }
+.stat .val { font-size:1.4rem; font-weight:700; }
+.stat .label { font-size:0.75rem; color:var(--text2); margin-top:2px; }
+
+.highlight { background: rgba(99,102,241,.1); border:1px solid rgba(99,102,241,.3); border-radius:8px; padding:16px; margin:12px 0; }
+
+.file-ref { display:inline-block; background: rgba(6,182,212,.1); color: var(--cyan); padding:2px 8px; border-radius:4px; font-family:monospace; font-size:0.82rem; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Unified Price Hub (UPH) — Architecture & Code Walkthrough</h1>
+  <div class="sub">Industry-Grade Frozen Price Detection, Cross-Broker Recovery & Real-Time Price Aggregation</div>
+  <div class="version">BotifyTrades v2 | Active Mode | April 2026</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab(0)">1. System Overview</div>
+  <div class="tab" onclick="showTab(1)">2. Data Flow</div>
+  <div class="tab" onclick="showTab(2)">3. Frozen Detection</div>
+  <div class="tab" onclick="showTab(3)">4. Cross-Broker Recovery</div>
+  <div class="tab" onclick="showTab(4)">5. Pipeline Integration</div>
+  <div class="tab" onclick="showTab(5)">6. Code Walkthrough</div>
+  <div class="tab" onclick="showTab(6)">7. Constants & Config</div>
+  <div class="tab" onclick="showTab(7)">8. Files Modified</div>
+</div>
+
+<div class="content">
+
+<!-- ═══════════════════════ TAB 1: System Overview ═══════════════════════ -->
+<div class="panel active">
+<div class="card">
+  <h2>What is the Unified Price Hub?</h2>
+  <p>The <strong>UnifiedPriceHub (UPH)</strong> is a singleton, thread-safe price aggregation engine that collects real-time prices from all connected broker streaming hubs (Webull MQTT, Schwab WebSocket, IBKR TWS, Tastytrade DXLink, Trading212) into one centralized cache. It serves as the single source of truth for all price consumers in the system.</p>
+  <p>Previously operating in <span class="badge orange">Shadow Mode</span> (observe-only), the UPH is now promoted to <span class="badge green">Active Mode</span> — it directly supplies prices to the Risk Engine, Conditional Orders, and Streaming Price Monitor with built-in frozen detection and automatic cross-broker recovery.</p>
+</div>
+
+<div class="card">
+  <h2>High-Level Architecture</h2>
+  <div style="text-align:center; padding:20px;">
+    <div style="display:inline-block; text-align:left; max-width:900px; width:100%;">
+      <div class="code" style="font-size:0.78rem;">
+                      ┌─────────────────────────────────────────────────────────┐
+                      │              BROKER STREAMING HUBS                       │
+                      │                                                         │
+                      │  ┌──────────┐ ┌──────────┐ ┌──────┐ ┌───────────┐     │
+                      │  │  Webull   │ │  Schwab   │ │ IBKR │ │Tastytrade │     │
+                      │  │  MQTT     │ │ WebSocket │ │ TWS  │ │  DXLink   │     │
+                      │  └────┬─────┘ └─────┬─────┘ └──┬───┘ └─────┬─────┘     │
+                      │       │ event        │ event    │ event     │ event     │
+                      └───────┼──────────────┼──────────┼───────────┼───────────┘
+                              │              │          │           │
+                              ▼              ▼          ▼           ▼
+                   ┌──────────────────────────────────────────────────────────┐
+                   │                                                          │
+                   │          <span class="var">UNIFIED PRICE HUB (Singleton)</span>                   │
+                   │                                                          │
+                   │  ┌──────────────────────────────────────────────────┐    │
+                   │  │           UNIFIED CACHE (Dict[str, Quote])       │    │
+                   │  │  Symbol → {bid, ask, last, freshness, source}    │    │
+                   │  └──────────────────────────────────────────────────┘    │
+                   │                                                          │
+                   │  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐   │
+                   │  │ Frozen Sweep│  │ Cross-Broker  │  │ REST Fallback│   │
+                   │  │  (every 1s) │  │    Probe      │  │ (rate-limit) │   │
+                   │  └─────────────┘  └──────────────┘  └──────────────┘   │
+                   │                                                          │
+                   │  ┌──────────────────────────────────────────────────┐    │
+                   │  │         Proactive Subscription Manager           │    │
+                   │  │  (subscribes on Schwab, IBKR, Tastytrade)       │    │
+                   │  └──────────────────────────────────────────────────┘    │
+                   │                                                          │
+                   └────────────┬──────────────┬──────────────┬───────────────┘
+                                │              │              │
+                                ▼              ▼              ▼
+                   ┌────────────────┐ ┌────────────────┐ ┌────────────────────┐
+                   │  Risk Engine   │ │  Conditional   │ │  Streaming Price   │
+                   │  (position     │ │  Order Service │ │  Monitor (base.py) │
+                   │   monitor.py)  │ │                │ │                    │
+                   └────────────────┘ └────────────────┘ └────────────────────┘</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Key Design Principles</h2>
+  <div class="grid-3">
+    <div class="info-card green">
+      <h4 class="green">Zero-Latency Streaming Path</h4>
+      <p>Hub events fire to consumers via <code>on('quote_updated')</code> callbacks. UPH subscribes as a parallel listener — it does NOT sit in the middleware path. Existing broker → consumer latency is unchanged (sub-millisecond).</p>
+    </div>
+    <div class="info-card blue">
+      <h4 class="blue">Event + Poll Dual Mode</h4>
+      <p>Real-time events provide instant tick-by-tick data. The 1-second poll loop catches any missed events via <code>poll_all_hubs()</code> and runs the frozen detection sweep.</p>
+    </div>
+    <div class="info-card orange">
+      <h4 class="orange">Graceful Degradation</h4>
+      <p>If UPH is not running or returns no quote, all three consumers fall back to their original price pipelines. UPH is additive — never subtractive.</p>
+    </div>
+    <div class="info-card cyan">
+      <h4 class="cyan">Thread-Safe Singleton</h4>
+      <p>Double-checked locking via <code>_create_lock</code>. All mutable state protected by dedicated locks. Lock ordering enforced to prevent deadlocks.</p>
+    </div>
+    <div class="info-card pink">
+      <h4 class="pink">Symbol Canonicalization</h4>
+      <p>Index symbols (SPXW→SPX, NDXP→NDX, VIXW→VIX) are canonicalized on entry. Per-hub symbol maps translate back for subscription and lookup.</p>
+    </div>
+    <div class="info-card green">
+      <h4 class="green">Dynamic Freshness</h4>
+      <p>Freshness is recomputed on every <code>get_quote()</code> call using real-time <code>price_age_seconds</code>. Consumers always see current freshness, never stale classifications.</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════ TAB 2: Data Flow ═══════════════════════ -->
+<div class="panel">
+<div class="card">
+  <h2>Price Data Flow — From Broker to Consumer</h2>
+  <p>There are two pathways for price data to reach the UPH cache, plus one recovery pathway:</p>
+</div>
+
+<div class="card">
+  <h3>Path 1: Real-Time Event Subscription (Primary — Millisecond Latency)</h3>
+  <div class="flow-diagram">
+    <div class="flow-step">
+      <div class="flow-num blue">1</div>
+      <div class="flow-body">
+        <h4>Broker Hub emits <code>quote_updated</code> event</h4>
+        <p>Each broker data hub (WebullDataHub, SchwabDataHub, etc.) fires an event when a new price tick arrives from their streaming connection (MQTT, WebSocket, TWS API, DXLink).</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num green">2</div>
+      <div class="flow-body">
+        <h4>UPH callback <code>_on_quote_updated()</code> fires</h4>
+        <p>During <code>_subscribe_to_hubs()</code>, UPH registers <code>hub.on('quote_updated', callback)</code> for each hub. The callback extracts bid/ask/last/greeks from the event data. UPH is a <strong>parallel subscriber</strong> — Risk Engine and other consumers also subscribe directly.</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num cyan">3</div>
+      <div class="flow-body">
+        <h4><code>_update_cache()</code> stores in unified cache</h4>
+        <p>Canonicalizes symbol, merges with existing quote, detects price changes (<code>last_changed_ts</code>), classifies freshness, emits <code>quote_updated</code> event. Rejects stale data if incoming timestamp < existing - 1 second.</p>
+      </div>
+    </div>
+  </div>
+  <div class="code"><span class="cm">// Event subscription chain</span>
+hub.on('quote_updated', callback)  <span class="cm">→ parallel to Risk Engine's own subscription</span>
+  → callback extracts {bid, ask, last, volume, greeks, timestamp}
+    → _update_cache(symbol, data, 'webull')
+      → canonicalize: SPXW → SPX
+      → merge into existing UnifiedQuote
+      → track last_changed_ts (price movement detection)
+      → classify freshness: fresh/aging/stale/degraded/unverified
+      → emit('quote_updated', {...})</div>
+</div>
+
+<div class="card">
+  <h3>Path 2: Poll-Based Bulk Sync (Backup — 1 Second Interval)</h3>
+  <div class="flow-diagram">
+    <div class="flow-step">
+      <div class="flow-num orange">1</div>
+      <div class="flow-body">
+        <h4>Poll loop calls <code>poll_all_hubs()</code> every 1 second</h4>
+        <p>Iterates all connected hubs that have <code>is_streaming()</code> == True and <code>get_all_quotes()</code>. Bulk-reads entire quote cache from each hub.</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num orange">2</div>
+      <div class="flow-body">
+        <h4>Each quote is fed to <code>_update_cache()</code></h4>
+        <p>Same merge logic as event path. Stale-data rejection prevents poll from overwriting fresher event data. Acts as a safety net to catch any events that were missed.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Path 3: Recovery — Cross-Broker Probe + REST Fallback</h3>
+  <div class="flow-diagram">
+    <div class="flow-step">
+      <div class="flow-num red">1</div>
+      <div class="flow-body">
+        <h4>Frozen sweep detects stale price</h4>
+        <p><code>_frozen_sweep()</code> runs every 1s. If a monitored symbol's <code>price_age_seconds</code> exceeds threshold (2s regular / 15s extended hours), it's flagged as frozen.</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num red">2</div>
+      <div class="flow-body">
+        <h4><code>_trigger_cross_broker_probe()</code></h4>
+        <p>Checks ALL other broker hubs (excluding the frozen symbol's source hub) for a fresh price within 3 seconds. If found, updates cache and clears frozen flag.</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num red">3</div>
+      <div class="flow-body">
+        <h4><code>_try_rest_probe()</code> — Last resort</h4>
+        <p>If no cross-broker has fresh data, falls back to REST API calls (Schwab or Webull). Rate-limited to 1 call per symbol per 2 seconds. Uses <code>RateLimitManager</code> to rank brokers by remaining API budget.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Consumer Read Path</h2>
+  <div class="code"><span class="cm">// When Risk Engine / Conditional Orders need a price:</span>
+uph.get_quote(symbol)
+  → _to_canonical(symbol)         <span class="cm">// SPXW → SPX</span>
+  → cache lookup (O(1) dict get)
+  → <span class="kw">if</span> found: recompute freshness  <span class="cm">// dynamic, not stored stale value</span>
+             return UnifiedQuote
+  → <span class="kw">if</span> miss: _try_fill_from_hubs() <span class="cm">// query all live hubs directly</span>
+  → <span class="kw">if</span> still miss: return None      <span class="cm">// consumer falls back to own pipeline</span></div>
+  <div class="highlight">
+    <strong>Key:</strong> Freshness is <em>recomputed dynamically</em> in <code>get_quote()</code> before returning. When consumers check <code>quote.freshness in ('fresh', 'aging')</code>, they see the <em>current</em> age — not the age at cache-write time. This prevents stale freshness classification from allowing old prices through.
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════ TAB 3: Frozen Detection ═══════════════════════ -->
+<div class="panel">
+<div class="card">
+  <h2>Frozen Price Detection Engine</h2>
+  <p>The frozen detection sweep runs every 1 second inside the poll loop. It monitors all symbols registered by the Risk Engine and conditional orders, detecting when streaming prices stop updating.</p>
+</div>
+
+<div class="card">
+  <h3>How Frozen Detection Works</h3>
+  <div class="flow-diagram">
+    <div class="flow-step">
+      <div class="flow-num blue">1</div>
+      <div class="flow-body">
+        <h4>Market Hours Gate</h4>
+        <p><code>_is_market_open()</code> checks if we're in US/Eastern 4:00 AM - 8:00 PM weekdays. Frozen detection is disabled outside market hours — no false positives overnight.</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num blue">2</div>
+      <div class="flow-body">
+        <h4>Threshold Selection</h4>
+        <p>Regular hours (9:30 AM - 4:00 PM ET): <span class="badge red">2 seconds</span>. Extended hours: <span class="badge orange">15 seconds</span>. Extended hours have lower tick frequency, so a longer threshold avoids false positives.</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num green">3</div>
+      <div class="flow-body">
+        <h4>Snapshot Monitored Symbols</h4>
+        <p>Takes a thread-safe snapshot of <code>_monitored_symbols</code>. These are symbols registered by the Risk Engine's <code>_update_monitored_symbols()</code> — all open position equity underlyings.</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num orange">4</div>
+      <div class="flow-body">
+        <h4>Check Each Cached Symbol</h4>
+        <p>For every monitored symbol in cache: compute <code>price_age_seconds</code> (current time minus <code>last_changed_ts</code>). If age exceeds threshold → newly frozen. If age is below threshold and was frozen → recovered.</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num red">5</div>
+      <div class="flow-body">
+        <h4>Grace Period for Uncached Symbols</h4>
+        <p>Symbols in <code>_monitored_symbols</code> but NOT in cache get a <span class="badge orange">5-second grace period</span> from when monitoring started. This prevents a flood of false frozen alerts at startup before streaming data arrives.</p>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num cyan">6</div>
+      <div class="flow-body">
+        <h4>Trigger Recovery & Re-probe</h4>
+        <p>Newly frozen symbols immediately trigger <code>_trigger_cross_broker_probe()</code>. Already-frozen symbols are re-probed every <span class="badge orange">2 seconds</span> (cooldown).</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Frozen Sweep Code Flow</h3>
+  <div class="code"><span class="fn">_frozen_sweep</span>() <span class="cm">— runs every 1 second in poll loop</span>
+│
+├── <span class="kw">if not</span> _is_market_open() → <span class="cm">return (skip outside market hours)</span>
+│
+├── threshold = <span class="num">2.0s</span> (regular) or <span class="num">15.0s</span> (extended)
+│
+├── <span class="cm">snapshot monitored_symbols set (thread-safe copy)</span>
+├── <span class="cm">snapshot cache entries for monitored symbols only</span>
+│
+├── <span class="kw">for</span> each cached monitored symbol:
+│   ├── <span class="kw">if</span> price_age >= threshold → mark frozen, trigger probe
+│   └── <span class="kw">if</span> price_age < threshold and was frozen → mark recovered
+│
+├── <span class="kw">if</span> grace period elapsed (5s):
+│   └── <span class="kw">for</span> uncached monitored symbols → mark frozen, trigger probe
+│
+└── <span class="kw">for</span> already-frozen symbols past probe cooldown (2s):
+    └── re-trigger cross-broker probe</div>
+</div>
+
+<div class="card">
+  <h2>Freshness Classification</h2>
+  <table>
+    <tr>
+      <th>Classification</th>
+      <th>Age Threshold</th>
+      <th>Meaning</th>
+      <th>Consumer Action</th>
+    </tr>
+    <tr>
+      <td><span class="badge green">fresh</span></td>
+      <td>0 - 3 seconds</td>
+      <td>Price recently changed, highly reliable</td>
+      <td>Use directly ✓</td>
+    </tr>
+    <tr>
+      <td><span class="badge blue">aging</span></td>
+      <td>3 - 5 seconds</td>
+      <td>Price hasn't changed in a few seconds, still acceptable</td>
+      <td>Use directly ✓</td>
+    </tr>
+    <tr>
+      <td><span class="badge orange">stale</span></td>
+      <td>5 - 10 seconds</td>
+      <td>Price is getting old, may be frozen</td>
+      <td>Rejected by consumers</td>
+    </tr>
+    <tr>
+      <td><span class="badge red">degraded</span></td>
+      <td>10 - 30 seconds</td>
+      <td>Price is significantly old</td>
+      <td>Rejected by consumers</td>
+    </tr>
+    <tr>
+      <td style="color:var(--text2)"><span class="badge red">unverified</span></td>
+      <td>> 30 seconds</td>
+      <td>Price is unreliable</td>
+      <td>Rejected by consumers</td>
+    </tr>
+  </table>
+  <div class="highlight">
+    All three consumers (Risk Engine, Conditional Orders, StreamingPriceMonitor) only accept quotes where <code>freshness in ('fresh', 'aging')</code> — effectively a <strong>5-second price validity window</strong>.
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════ TAB 4: Cross-Broker Recovery ═══════════════════════ -->
+<div class="panel">
+<div class="card">
+  <h2>Cross-Broker Recovery Pipeline</h2>
+  <p>When a frozen price is detected, recovery follows a tiered escalation strategy designed to minimize latency and API usage.</p>
+</div>
+
+<div class="card">
+  <h3>Tier 1: Cross-Broker Streaming Probe</h3>
+  <div class="info-card green" style="margin:12px 0;">
+    <h4 class="green">Fastest Recovery — Sub-Second</h4>
+    <p>Checks all OTHER broker hub caches for a fresh price. This costs zero API calls — it reads from data already received via streaming.</p>
+  </div>
+  <div class="code"><span class="fn">_trigger_cross_broker_probe</span>(symbol)
+│
+├── Get current quote's source_hub (e.g., "webull")
+│
+├── <span class="kw">for</span> each hub <span class="kw">except</span> source_hub:
+│   ├── <span class="kw">if not</span> hub.is_streaming() → skip
+│   ├── <span class="kw">if not</span> _is_hub_live(hub) → skip  <span class="cm">(no quote in 120s = dead)</span>
+│   │
+│   ├── lookup = _symbol_for_hub(symbol, hub_key) <span class="cm">// SPX→SPXW for Schwab</span>
+│   ├── price = _get_hub_price_if_fresh(hub, lookup, max_age=<span class="num">3s</span>)
+│   │
+│   ├── <span class="kw">if</span> price found AND different:
+│   │   ├── _update_cache() with new price
+│   │   ├── clear frozen flag
+│   │   └── <span class="cm">return ✓</span>
+│   │
+│   └── <span class="kw">if</span> price found AND same (confirmed fresh):
+│       ├── clear frozen flag <span class="cm">(price is just not moving)</span>
+│       └── <span class="cm">return ✓</span>
+│
+└── No cross-broker found → fall through to Tier 2</div>
+  <div class="highlight">
+    <strong>Same-price handling:</strong> If another broker confirms the same price with a fresh timestamp, the symbol is unfrozen. This prevents symbols from being stuck as "frozen" when the underlying price is legitimately not moving (e.g., slow-moving stocks during lunch hours).
+  </div>
+</div>
+
+<div class="card">
+  <h3>Tier 2: Smart REST Fallback</h3>
+  <div class="info-card orange" style="margin:12px 0;">
+    <h4 class="orange">API-Budget-Aware — Rate Limited</h4>
+    <p>Only triggered when ALL broker streaming caches fail. Uses the system's <code>RateLimitManager</code> to choose the broker with the most remaining API budget.</p>
+  </div>
+  <div class="code"><span class="fn">_try_rest_probe</span>(symbol)
+│
+├── Rate limit check: <span class="num">2s</span> cooldown per symbol
+│
+├── <span class="fn">_rank_rest_brokers</span>(rate_limit_manager)
+│   ├── Candidates: ['schwab', 'webull'] only
+│   ├── Skip any broker in backoff
+│   └── Sort by remaining window budget (highest first)
+│
+├── <span class="kw">for</span> each ranked broker:
+│   ├── Check rate_limit_manager.can_make_request()
+│   │
+│   ├── <span class="kw">if</span> schwab:
+│   │   ├── Get access_token from schwab_auth.get_token_manager()
+│   │   ├── GET https://api.schwabapi.com/marketdata/v1/quotes
+│   │   ├── timeout=<span class="num">5s</span>
+│   │   └── Parse bid/ask → mid, or lastPrice if regular hours
+│   │
+│   ├── <span class="kw">if</span> webull:
+│   │   ├── Lazy-init webull REST client
+│   │   ├── client.get_quote(stock=symbol) <span class="cm">with 5s thread timeout</span>
+│   │   ├── Parse bidPrice/askPrice → mid
+│   │   ├── Fallback: pPrice (premarket) during extended hours
+│   │   └── Fallback: last only during regular hours
+│   │
+│   └── <span class="kw">if</span> price > 0:
+│       ├── record_request() in rate_limit_manager
+│       ├── _update_cache() with source='rest/schwab' or 'rest/webull'
+│       ├── clear frozen flag
+│       └── <span class="cm">return ✓</span></div>
+</div>
+
+<div class="card">
+  <h2>Recovery Timeline Example</h2>
+  <table>
+    <tr><th>Time</th><th>Event</th><th>Action</th></tr>
+    <tr>
+      <td>T+0.0s</td>
+      <td>Webull MQTT stops sending AAPL ticks</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>T+2.0s</td>
+      <td>Frozen sweep: AAPL price_age=2.0s >= threshold</td>
+      <td style="color:var(--orange)">Flag frozen, trigger cross-broker probe</td>
+    </tr>
+    <tr>
+      <td>T+2.0s</td>
+      <td>Cross-broker: Schwab has AAPL at $189.55 (age=0.8s)</td>
+      <td style="color:var(--green)">✓ Cache updated, frozen cleared</td>
+    </tr>
+    <tr>
+      <td colspan="3" style="text-align:center; color:var(--text2)">— OR if no cross-broker has fresh data —</td>
+    </tr>
+    <tr>
+      <td>T+2.0s</td>
+      <td>Cross-broker: no fresh data from any other hub</td>
+      <td style="color:var(--orange)">Fall through to REST</td>
+    </tr>
+    <tr>
+      <td>T+2.1s</td>
+      <td>REST probe: Schwab API returns AAPL bid/ask</td>
+      <td style="color:var(--green)">✓ Cache updated from rest/schwab</td>
+    </tr>
+    <tr>
+      <td>T+4.0s</td>
+      <td>If still frozen: re-probe (cooldown=2s)</td>
+      <td>Cycle repeats</td>
+    </tr>
+    <tr>
+      <td>T+???</td>
+      <td>Webull MQTT resumes sending AAPL ticks</td>
+      <td style="color:var(--green)">✓ Event callback fires, cache updates, next sweep clears frozen</td>
+    </tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Proactive Subscription Manager</h2>
+  <p>When the Risk Engine opens a position, it calls <code>uph.register_monitored_symbols()</code>. The UPH doesn't wait for a freeze to subscribe on other brokers — it proactively subscribes the symbol on ALL available streaming hubs at position-open time.</p>
+  <div class="grid-3">
+    <div class="info-card green">
+      <h4 class="green">Schwab</h4>
+      <p><code>hub.request_subscribe_equities(symbols)</code><br>Batched subscription through WebSocket pending queue. Drain interval reduced to 3s.</p>
+    </div>
+    <div class="info-card blue">
+      <h4 class="blue">IBKR</h4>
+      <p><code>hub.subscribe_symbol(sym)</code><br>Individual subscription via TWS API. One-by-one to respect IBKR's rate limits.</p>
+    </div>
+    <div class="info-card cyan">
+      <h4 class="cyan">Tastytrade</h4>
+      <p><code>hub.subscribe_symbol(sym)</code><br>Individual subscription via DXLink. Same pattern as IBKR.</p>
+    </div>
+  </div>
+  <div class="highlight">
+    <strong>Symbol Canonicalization:</strong> All symbols are canonicalized via <code>_to_canonical()</code> before storing in <code>_monitored_symbols</code>. This ensures SPXW, SPX all resolve to the same canonical key (SPX), preventing missed detections for index symbols.
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════ TAB 5: Pipeline Integration ═══════════════════════ -->
+<div class="panel">
+<div class="card">
+  <h2>Three Independent Price Pipelines</h2>
+  <p>The system has three independent consumers that need real-time prices. Each one now tries the UPH first, with their original pipeline as fallback.</p>
+</div>
+
+<div class="card">
+  <h3>Pipeline 1: Risk Engine — <span class="file-ref">position_monitor.py</span></h3>
+  <div class="info-card blue" style="margin:12px 0;">
+    <h4 class="blue">Purpose: P&L calculation, stop-loss triggers, portfolio risk assessment</h4>
+    <p>The Risk Engine updates all open position prices every cycle. It has the most complex price pipeline with multiple sources and a REST repair guard.</p>
+  </div>
+  <div class="code"><span class="fn">_update_prices_from_hub</span>(positions)
+│
+├── <span class="cm">Step 1: Direct hub prices (existing — unchanged)</span>
+│   └── Each position's broker hub → get_quote_price()
+│
+├── <span class="cm">Step 2: Cross-broker hub (existing — unchanged)</span>
+│   └── For unfilled positions, try other broker hubs
+│
+├── <span class="cm">Step 3: UPH fill (NEW)</span>
+│   ├── <span class="kw">for</span> each unfilled position:
+│   │   ├── uph.get_quote(symbol)
+│   │   ├── <span class="kw">if</span> freshness in ('fresh', 'aging'):
+│   │   │   ├── Option sanity check (reject if price/avg_cost > 50x)
+│   │   │   ├── <span class="kw">if</span> REST repair active:
+│   │   │   │   └── Only override if UPH price differs significantly
+│   │   │   └── <span class="kw">else</span>: use UPH price directly
+│   │   └── <span class="kw">else</span>: skip (stale/degraded/unverified)
+│   └── Log "UPH(N)" count in price update summary
+│
+├── <span class="cm">Step 4: REST fallback (existing — unchanged)</span>
+│   └── Webull REST for remaining unfilled positions
+│
+└── total = hub + cross_broker + uph + rest</div>
+
+  <div class="info-card orange" style="margin:12px 0;">
+    <h4 class="orange">REST Repair Guard</h4>
+    <p>When the Risk Engine makes a REST API call and gets a fresh price, it creates a "repair" entry that blocks hub/UPH prices for 30 seconds — unless the new price differs significantly (>0.5% or >$0.02). This prevents a known-good REST price from being overwritten by a potentially frozen hub price.</p>
+  </div>
+
+  <h4>Monitored Symbols Registration</h4>
+  <div class="code"><span class="fn">_update_monitored_symbols</span>(positions)  <span class="cm">— called by Risk Engine</span>
+│
+├── Collect all equity symbols from open positions
+├── uph.register_monitored_symbols(equity_symbols)
+│   ├── Canonicalize each symbol
+│   ├── Add to _monitored_symbols set
+│   └── Proactively subscribe on Schwab, IBKR, Tastytrade
+│
+└── <span class="cm">This is what populates the frozen sweep's watchlist</span></div>
+</div>
+
+<div class="card">
+  <h3>Pipeline 2: Conditional Order Service — <span class="file-ref">conditional_order_service.py</span></h3>
+  <div class="info-card green" style="margin:12px 0;">
+    <h4 class="green">Purpose: Trigger conditional orders (stop, limit, trailing) when price conditions are met</h4>
+    <p>The <code>BrokerPriceMonitor</code> checks prices for active conditional orders. Time-sensitive — a delayed price could miss a stop-loss trigger.</p>
+  </div>
+  <div class="code"><span class="fn">_try_streaming_hub_price</span>()
+│
+├── <span class="cm">Step 1: UPH check (NEW — first priority)</span>
+│   ├── uph.get_quote(self.symbol)
+│   ├── <span class="kw">if</span> freshness in ('fresh', 'aging') and last > 0:
+│   │   └── return price ✓
+│   └── <span class="kw">else</span>: fall through
+│
+└── <span class="cm">Step 2: Direct hub (existing — fallback)</span>
+    ├── self.data_hub.get_quote_price(self.symbol)
+    └── return price or None</div>
+</div>
+
+<div class="card">
+  <h3>Pipeline 3: Streaming Price Monitor — <span class="file-ref">conditional_orders/base.py</span></h3>
+  <div class="info-card cyan" style="margin:12px 0;">
+    <h4 class="cyan">Purpose: Real-time price monitoring for individual conditional orders</h4>
+    <p>Each conditional order (OCO, bracket, trailing stop) has its own <code>StreamingPriceMonitor</code>. The <code>_query_hub()</code> method is called on each monitoring cycle.</p>
+  </div>
+  <div class="code"><span class="fn">_query_hub</span>()
+│
+├── <span class="cm">Step 1: UPH check (NEW — first priority)</span>
+│   ├── uph.get_quote(self.symbol)
+│   ├── <span class="kw">if</span> freshness in ('fresh', 'aging') and last > 0:
+│   │   └── return float(price) ✓
+│   └── <span class="kw">else</span>: fall through
+│
+└── <span class="cm">Step 2: Direct hub (existing — fallback)</span>
+    ├── self.data_hub.get_quote_price(self.symbol)
+    └── return float(price) or None</div>
+</div>
+
+<div class="card">
+  <h2>Integration Pattern — All Three Pipelines</h2>
+  <div class="highlight">
+    Every integration follows the same defensive pattern:
+    <ol style="margin:8px 0 0 20px; color:var(--text2); font-size:0.9rem;">
+      <li>Try-import <code>get_unified_price_hub</code> (import guard — no crash if file missing)</li>
+      <li>Check <code>uph._shadow_mode == False</code> (safety — does nothing if reverted to shadow)</li>
+      <li>Check <code>uph._poll_running</code> (safety — does nothing if polling hasn't started)</li>
+      <li>Call <code>uph.get_quote(symbol)</code></li>
+      <li>Check <code>freshness in ('fresh', 'aging')</code> (only use if within 5s of last price change)</li>
+      <li>On any exception: <code>pass</code> (never let UPH crash existing pipelines)</li>
+    </ol>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════ TAB 6: Code Walkthrough ═══════════════════════ -->
+<div class="panel">
+<div class="card">
+  <h2>Key Classes & Methods — unified_price_hub.py</h2>
+</div>
+
+<div class="card">
+  <h3><code>UnifiedQuote</code> dataclass (line 8)</h3>
+  <p>The core data structure stored in the cache. One per canonical symbol.</p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>symbol</code></td><td>str</td><td>Original symbol as received</td></tr>
+    <tr><td><code>canonical</code></td><td>str</td><td>Canonicalized key (SPXW → SPX)</td></tr>
+    <tr><td><code>bid, ask, last</code></td><td>float</td><td>Current bid, ask, last prices</td></tr>
+    <tr><td><code>delta, gamma, theta, vega</code></td><td>float</td><td>Option greeks (if available)</td></tr>
+    <tr><td><code>source_hub</code></td><td>str</td><td>"webull", "schwab", "rest/schwab", etc.</td></tr>
+    <tr><td><code>timestamp</code></td><td>float</td><td>When this data arrived</td></tr>
+    <tr><td><code>last_changed_ts</code></td><td>float</td><td>When <code>last</code> price actually changed value</td></tr>
+    <tr><td><code>freshness</code></td><td>str</td><td>Recomputed on read: fresh/aging/stale/degraded/unverified</td></tr>
+  </table>
+  <h4 style="margin-top:12px;">Computed Properties</h4>
+  <table>
+    <tr><th>Property</th><th>Formula</th></tr>
+    <tr><td><code>mid</code></td><td><code>(bid + ask) / 2</code> if both > 0, else <code>last</code></td></tr>
+    <tr><td><code>age_seconds</code></td><td><code>time.time() - timestamp</code> (data arrival age)</td></tr>
+    <tr><td><code>price_age_seconds</code></td><td><code>time.time() - last_changed_ts</code> (price movement age — the one used for frozen detection)</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3>Singleton Pattern (line 86)</h3>
+  <div class="code"><span class="kw">class</span> <span class="fn">UnifiedPriceHub</span>:
+    _instance = <span class="kw">None</span>
+    _create_lock = threading.Lock()
+
+    <span class="kw">def</span> <span class="fn">__new__</span>(cls):
+        <span class="kw">with</span> cls._create_lock:            <span class="cm"># thread-safe double-checked locking</span>
+            <span class="kw">if</span> cls._instance <span class="kw">is None</span>:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = <span class="kw">False</span>
+            <span class="kw">return</span> cls._instance</div>
+  <p>Only one UPH instance ever exists. All consumers share the same cache. Access via <code>get_unified_price_hub()</code> module-level function.</p>
+</div>
+
+<div class="card">
+  <h3>Symbol Resolution System</h3>
+  <div class="grid-2">
+    <div class="info-card cyan">
+      <h4 class="cyan">_to_canonical(symbol)</h4>
+      <p>Maps any symbol to its canonical form. Uses <code>_INDEX_TO_CANONICAL</code> map: SPXW→SPX, NDXP→NDX, VIXW→VIX, RUTW→RUT, DJXW→DJX. Non-index symbols pass through unchanged.</p>
+    </div>
+    <div class="info-card blue">
+      <h4 class="blue">_symbol_for_hub(symbol, hub_key)</h4>
+      <p>Reverse mapping: given a canonical symbol, what does this specific hub call it? E.g., Schwab uses SPXW for SPX, NDXP for NDX. Webull uses SPX directly.</p>
+    </div>
+  </div>
+  <div class="code"><span class="cm">// Example: User has SPX options position</span>
+register_monitored_symbols(['SPX', 'SPXW'])
+  → both canonicalize to 'SPX'
+  → _monitored_symbols = {'SPX'}
+  → proactive subscribe:
+      Schwab: request_subscribe_equities({'SPXW'})  <span class="cm">// Schwab uses SPXW</span>
+      IBKR:   subscribe_symbol('SPX')                <span class="cm">// IBKR uses SPX</span></div>
+</div>
+
+<div class="card">
+  <h3>Lock Architecture</h3>
+  <table>
+    <tr><th>Lock</th><th>Protects</th><th>Notes</th></tr>
+    <tr><td><code>_cache_lock</code></td><td>_cache dict</td><td>Held briefly during read/write</td></tr>
+    <tr><td><code>_alias_lock</code></td><td>_alias_map</td><td>Read-heavy, rarely written</td></tr>
+    <tr><td><code>_hub_cache_lock</code></td><td>_hub_cache, _hub_cache_ts</td><td>TTL-based refresh (30s)</td></tr>
+    <tr><td><code>_frozen_lock</code></td><td>_frozen_symbols dict</td><td>Written by sweep, read by consumers</td></tr>
+    <tr><td><code>_monitored_lock</code></td><td>_monitored_symbols set</td><td>Written by Risk Engine, read by sweep</td></tr>
+    <tr><td><code>_probe_lock</code></td><td>_rest_probe_ts, _last_probe_ts</td><td>Rate-limit tracking</td></tr>
+    <tr><td><code>_stats_lock</code></td><td>_stats counters</td><td>Hit/miss/fill counters</td></tr>
+    <tr><td><code>_webull_rest_lock</code></td><td>_webull_rest_client</td><td>Lazy init of Webull REST client</td></tr>
+  </table>
+  <div class="highlight">
+    <strong>Lock ordering rule:</strong> Frozen sweep takes snapshots of <code>_probe_lock</code> data BEFORE acquiring <code>_frozen_lock</code>. This prevents the AB/BA deadlock where <code>_frozen_sweep</code> holds frozen→acquires probe while <code>_trigger_cross_broker_probe</code> holds probe→acquires frozen.
+  </div>
+</div>
+
+<div class="card">
+  <h3>Poll Loop (line 997)</h3>
+  <div class="code"><span class="fn">_poll_loop</span>() <span class="cm">— runs on dedicated daemon thread "UPH-Poller"</span>
+│
+<span class="kw">while</span> _poll_running:
+│
+├── _subscribe_to_hubs()     <span class="cm">// discover & subscribe to new hubs</span>
+├── poll_all_hubs()          <span class="cm">// bulk read all hub caches</span>
+├── _frozen_sweep()          <span class="cm">// detect frozen, trigger recovery</span>
+├── get_stale_symbols()      <span class="cm">// count stale for stats</span>
+│
+├── <span class="kw">every 60s</span>: log diagnostics
+│   ├── Hub status (streaming T/F)
+│   ├── Cache size, stale count
+│   ├── Monitored/frozen counts
+│   ├── Hit/miss/fill counters
+│   └── Frozen detection stats
+│
+└── sleep(_poll_interval)    <span class="cm">// 1.0 second</span></div>
+</div>
+</div>
+
+<!-- ═══════════════════════ TAB 7: Constants & Config ═══════════════════════ -->
+<div class="panel">
+<div class="card">
+  <h2>Tunable Constants</h2>
+  <table>
+    <tr><th>Constant</th><th>Value</th><th>Location</th><th>Purpose</th></tr>
+    <tr>
+      <td><code>FRESHNESS_FRESH</code></td>
+      <td><span class="badge green">3.0s</span></td>
+      <td>Line 66</td>
+      <td>Price changed within 3 seconds — highly reliable</td>
+    </tr>
+    <tr>
+      <td><code>FRESHNESS_PROBE</code></td>
+      <td><span class="badge blue">5.0s</span></td>
+      <td>Line 67</td>
+      <td>Upper bound for "aging" — still usable. Consumer acceptance cutoff.</td>
+    </tr>
+    <tr>
+      <td><code>FRESHNESS_STALE</code></td>
+      <td><span class="badge orange">10.0s</span></td>
+      <td>Line 68</td>
+      <td>Price is stale — rejected by consumers</td>
+    </tr>
+    <tr>
+      <td><code>FRESHNESS_UNVERIFIED</code></td>
+      <td><span class="badge red">30.0s</span></td>
+      <td>Line 69</td>
+      <td>Price is unreliable — completely ignored</td>
+    </tr>
+    <tr>
+      <td><code>FROZEN_THRESHOLD_REGULAR</code></td>
+      <td><span class="badge red">2.0s</span></td>
+      <td>Line 71</td>
+      <td>During regular hours (9:30-4 ET), trigger frozen after 2s without price change</td>
+    </tr>
+    <tr>
+      <td><code>FROZEN_THRESHOLD_EXTENDED</code></td>
+      <td><span class="badge orange">15.0s</span></td>
+      <td>Line 72</td>
+      <td>During extended hours (4AM-9:30, 4-8PM ET), more lenient threshold</td>
+    </tr>
+    <tr>
+      <td><code>FROZEN_PROBE_COOLDOWN</code></td>
+      <td><span class="badge blue">2.0s</span></td>
+      <td>Line 73</td>
+      <td>Re-probe interval for still-frozen symbols</td>
+    </tr>
+    <tr>
+      <td><code>REST_PROBE_INTERVAL</code></td>
+      <td><span class="badge blue">2.0s</span></td>
+      <td>Line 74</td>
+      <td>Minimum time between REST API calls for same symbol (normal cadence)</td>
+    </tr>
+    <tr>
+      <td><code>_REST_MAX_CONSECUTIVE_FAILS</code></td>
+      <td><span class="badge orange">10</span></td>
+      <td>Line 639</td>
+      <td>After 10 consecutive REST failures for a symbol, switch to backoff interval</td>
+    </tr>
+    <tr>
+      <td><code>_REST_BACKOFF_INTERVAL</code></td>
+      <td><span class="badge orange">60.0s</span></td>
+      <td>Line 640</td>
+      <td>REST probe interval after max failures reached (prevents API churn)</td>
+    </tr>
+    <tr>
+      <td><code>HUB_LIVE_MAX_AGE</code></td>
+      <td><span class="badge orange">120.0s</span></td>
+      <td>Line 75</td>
+      <td>Hub is considered "dead" if no quote received in 120 seconds</td>
+    </tr>
+    <tr>
+      <td><code>CROSS_BROKER_MAX_AGE</code></td>
+      <td><span class="badge green">3.0s</span></td>
+      <td>Line 76</td>
+      <td>Cross-broker price is only accepted if its timestamp is within 3 seconds</td>
+    </tr>
+    <tr>
+      <td><code>_MONITOR_GRACE_PERIOD</code></td>
+      <td><span class="badge blue">5.0s</span></td>
+      <td>Line 518</td>
+      <td>Delay before flagging uncached symbols as frozen (startup flood prevention)</td>
+    </tr>
+    <tr>
+      <td><code>_HUB_CACHE_TTL</code></td>
+      <td><span class="badge blue">30.0s</span></td>
+      <td>Line 116</td>
+      <td>How long to cache the hub object references before re-discovering</td>
+    </tr>
+    <tr>
+      <td><code>poll_interval</code></td>
+      <td><span class="badge green">1.0s</span></td>
+      <td>Line 977</td>
+      <td>Main poll loop interval (was 2.0s, reduced for faster frozen detection)</td>
+    </tr>
+    <tr>
+      <td><code>Schwab pending drain</code></td>
+      <td><span class="badge green">3.0s</span></td>
+      <td>schwab_streaming_client.py:409</td>
+      <td>WebSocket pending subscription drain interval (was 10s, reduced for faster proactive subscription)</td>
+    </tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Hub Registry</h2>
+  <table>
+    <tr><th>Key</th><th>Module</th><th>Getter</th><th>Protocol</th></tr>
+    <tr><td>webull</td><td>src.services.webull_data_hub</td><td>get_webull_data_hub()</td><td>MQTT (sub-ms)</td></tr>
+    <tr><td>schwab</td><td>src.services.schwab_data_hub</td><td>get_schwab_data_hub()</td><td>WebSocket (~10ms)</td></tr>
+    <tr><td>ibkr</td><td>src.services.ibkr_data_hub</td><td>get_ibkr_data_hub()</td><td>TWS API (~5ms)</td></tr>
+    <tr><td>tastytrade</td><td>src.services.tastytrade_data_hub</td><td>get_tastytrade_data_hub()</td><td>DXLink (~15ms)</td></tr>
+    <tr><td>trading212</td><td>src.services.trading212_data_hub</td><td>get_trading212_data_hub()</td><td>Polling</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>REST API Candidates</h2>
+  <div class="grid-2">
+    <div class="info-card green">
+      <h4 class="green">Schwab REST</h4>
+      <p><strong>Endpoint:</strong> <code>api.schwabapi.com/marketdata/v1/quotes</code><br>
+      <strong>Auth:</strong> OAuth2 via schwab_auth.get_token_manager()<br>
+      <strong>Timeout:</strong> 5 seconds<br>
+      <strong>Returns:</strong> bid/ask mid-point, or lastPrice during regular hours</p>
+    </div>
+    <div class="info-card blue">
+      <h4 class="blue">Webull REST</h4>
+      <p><strong>Method:</strong> <code>webull().get_quote(stock=symbol)</code><br>
+      <strong>Auth:</strong> None (public endpoint)<br>
+      <strong>Timeout:</strong> 5 seconds (thread pool enforced)<br>
+      <strong>Returns:</strong> bid/ask mid, premarket price, or lastPrice during regular hours</p>
+    </div>
+  </div>
+  <div class="highlight">
+    <strong>IBKR, Tastytrade, Alpaca</strong> are NOT used as REST candidates. IBKR's REST API has strict rate limits and requires separate auth. Tastytrade and Alpaca don't have suitable simple quote endpoints.
+  </div>
+</div>
+
+<div class="card">
+  <h2>Statistics Tracked</h2>
+  <div class="grid-3">
+    <div class="stat"><div class="val" style="color:var(--green)">hits</div><div class="label">Cache hits</div></div>
+    <div class="stat"><div class="val" style="color:var(--red)">misses</div><div class="label">Cache misses</div></div>
+    <div class="stat"><div class="val" style="color:var(--cyan)">cross_hub_fills</div><div class="label">Filled from other hub on miss</div></div>
+    <div class="stat"><div class="val" style="color:var(--blue)">streaming_ticks</div><div class="label">Real-time events received</div></div>
+    <div class="stat"><div class="val" style="color:var(--orange)">total_updates</div><div class="label">Total cache writes</div></div>
+    <div class="stat"><div class="val" style="color:var(--red)">frozen_detections</div><div class="label">Symbols flagged frozen</div></div>
+    <div class="stat"><div class="val" style="color:var(--pink)">cross_broker_probes</div><div class="label">Cross-broker probe attempts</div></div>
+    <div class="stat"><div class="val" style="color:var(--green)">cross_broker_fills</div><div class="label">Successful cross-broker recoveries</div></div>
+    <div class="stat"><div class="val" style="color:var(--orange)">rest_probes</div><div class="label">REST API probe attempts</div></div>
+    <div class="stat"><div class="val" style="color:var(--green)">rest_fills</div><div class="label">Successful REST recoveries</div></div>
+    <div class="stat"><div class="val" style="color:var(--text2)">stale_detections</div><div class="label">Stale symbol counts per cycle</div></div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════ TAB 8: Files Modified ═══════════════════════ -->
+<div class="panel">
+<div class="card">
+  <h2>Files Modified in This Implementation</h2>
+</div>
+
+<div class="card">
+  <h3><span class="file-ref">src/services/unified_price_hub.py</span> <span class="badge red">MAJOR</span></h3>
+  <p>Core UPH file — promoted from shadow to active mode. ~1100 lines.</p>
+  <table>
+    <tr><th>Change</th><th>Lines</th><th>Description</th></tr>
+    <tr><td>Shadow mode disabled</td><td>121</td><td><code>_shadow_mode = False</code> (was True)</td></tr>
+    <tr><td>Frozen constants</td><td>71-76</td><td>New threshold/cooldown/interval constants</td></tr>
+    <tr><td>Frozen state</td><td>135-144</td><td>New instance vars: _frozen_symbols, _monitored_symbols, probe timestamps</td></tr>
+    <tr><td>Frozen stats</td><td>150-151</td><td>New counters: frozen_detections, cross_broker_probes/fills, rest_probes/fills</td></tr>
+    <tr><td>Dynamic freshness</td><td>344</td><td><code>get_quote()</code> recomputes freshness before returning</td></tr>
+    <tr><td>Frozen sweep</td><td>520-589</td><td><code>_frozen_sweep()</code> — 1s interval detection with grace period</td></tr>
+    <tr><td>Cross-broker probe</td><td>591-636</td><td><code>_trigger_cross_broker_probe()</code> — check all other hubs</td></tr>
+    <tr><td>REST fallback</td><td>638-759</td><td><code>_try_rest_probe()</code>, <code>_rest_webull_quote()</code>, <code>_rest_schwab_quote()</code></td></tr>
+    <tr><td>Proactive subscribe</td><td>763-818</td><td><code>register_monitored_symbols()</code> with canonical symbol fix</td></tr>
+    <tr><td>Webull REST timeout</td><td>711-713</td><td>ThreadPoolExecutor with 5s timeout for webull REST</td></tr>
+    <tr><td>Poll interval</td><td>977</td><td><code>start_polling(interval=1.0)</code> (was 2.0)</td></tr>
+    <tr><td>Poll loop</td><td>997-1049</td><td>Calls <code>_frozen_sweep()</code> every iteration + enhanced logging</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="file-ref">src/risk/position_monitor.py</span> <span class="badge orange">MODERATE</span></h3>
+  <table>
+    <tr><th>Change</th><th>Description</th></tr>
+    <tr><td>UPH price fill block</td><td>In <code>_update_prices_from_hub()</code>: tries UPH for positions not yet filled by hub/cross-broker. Respects REST repair guard. Logs UPH(N) count.</td></tr>
+    <tr><td>Monitored symbols registration</td><td>In <code>_update_monitored_symbols()</code>: calls <code>uph.register_monitored_symbols(equity_symbols)</code> to populate frozen sweep watchlist and trigger proactive subscription.</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="file-ref">src/services/conditional_orders/base.py</span> <span class="badge blue">MINOR</span></h3>
+  <table>
+    <tr><th>Change</th><th>Description</th></tr>
+    <tr><td>UPH-first in _query_hub()</td><td>StreamingPriceMonitor's <code>_query_hub()</code> tries UPH before data_hub.get_quote_price(). Same defensive pattern.</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="file-ref">src/services/conditional_order_service.py</span> <span class="badge blue">MINOR</span></h3>
+  <table>
+    <tr><th>Change</th><th>Description</th></tr>
+    <tr><td>UPH-first in _try_streaming_hub_price()</td><td>BrokerPriceMonitor's <code>_try_streaming_hub_price()</code> tries UPH before direct hub. Same pattern as base.py.</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="file-ref">src/services/schwab_streaming_client.py</span> <span class="badge green">TRIVIAL</span></h3>
+  <table>
+    <tr><th>Change</th><th>Description</th></tr>
+    <tr><td>Pending drain interval</td><td>Line 409: <code>>= 3</code> (was <code>>= 10</code>). Reduces Schwab WebSocket pending subscription drain from 10s to 3s for faster proactive subscription activation.</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="file-ref">src/selfbot_webull.py</span> <span class="badge green">TRIVIAL</span></h3>
+  <table>
+    <tr><th>Change</th><th>Description</th></tr>
+    <tr><td>Init call</td><td><code>init_unified_price_hub(start_polling=True, poll_interval=1.0)</code> (was 2.0). Updated log message to say "active mode".</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Bugs Fixed in This Implementation</h2>
+  <table>
+    <tr><th>#</th><th>Bug</th><th>Root Cause</th><th>Fix</th></tr>
+    <tr>
+      <td>1</td>
+      <td>Schwab REST used non-existent <code>hub._broker</code></td>
+      <td>SchwabDataHub has no _broker attr</td>
+      <td>Use <code>gui_app.schwab_auth.get_token_manager()</code> directly</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Webull REST returned stale close during extended hours</td>
+      <td>bid/ask=0 in extended, last is previous close</td>
+      <td>Added <code>_is_regular_hours()</code> check + premarket <code>pPrice</code> fallback</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Nested lock deadlock</td>
+      <td>frozen_lock→probe_lock vs probe_lock→frozen_lock</td>
+      <td>Snapshot probe data before acquiring frozen_lock</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Startup flood of false frozen alerts</td>
+      <td>Uncached symbols immediately flagged frozen</td>
+      <td>5-second grace period (<code>_MONITOR_GRACE_PERIOD</code>)</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Same-price kept symbol frozen forever</td>
+      <td>Cross-broker same price not clearing frozen flag</td>
+      <td>Clear frozen when cross-broker confirms fresh same price</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Webull proactive subscription broken</td>
+      <td>No accessible streaming client reference on hub</td>
+      <td>Removed Webull from proactive subscription</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>REST broker candidates mismatch</td>
+      <td>Listed ibkr/tastytrade/alpaca but only handled webull/schwab</td>
+      <td>Reduced candidates to <code>['schwab', 'webull']</code> only</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td style="color:var(--green)">Freshness stale at read time</td>
+      <td>freshness string computed at cache-write, stale by read time</td>
+      <td>Recompute freshness in <code>get_quote()</code> before returning</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td style="color:var(--green)">Canonical vs raw symbol mismatch</td>
+      <td>SPXW stored raw in _monitored_symbols, SPX in cache</td>
+      <td>Canonicalize in <code>register_monitored_symbols()</code></td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td style="color:var(--green)">Webull REST blocks poll loop</td>
+      <td>Synchronous HTTP with no timeout</td>
+      <td>ThreadPoolExecutor with 5s timeout</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td style="color:var(--cyan)">Webull REST timeout was non-functional</td>
+      <td><code>with ThreadPoolExecutor</code> context manager calls <code>shutdown(wait=True)</code> on exit, blocking until worker finishes regardless of timeout</td>
+      <td>Use explicit <code>pool.shutdown(wait=False, cancel_futures=True)</code> without context manager</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td style="color:var(--cyan)"><code>unregister_monitored_symbols</code> didn't canonicalize</td>
+      <td>Register uses <code>_to_canonical()</code>, unregister used raw <code>.upper().strip()</code> — SPXW could never be unregistered</td>
+      <td>Use <code>_to_canonical()</code> in unregister for both monitored and frozen sets</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td style="color:var(--cyan)">Perpetual REST churn for unfetchable symbols</td>
+      <td>No backoff when REST probe fails repeatedly for same symbol — infinite API calls every 2s</td>
+      <td>Added <code>_rest_fail_count</code> tracker: after 10 consecutive failures, backoff to 60s interval</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td style="color:var(--cyan)">SL/PT guardian used stale prices</td>
+      <td><code>get_quote_price()</code> returns price regardless of freshness — 30s-old price could trigger stop-loss</td>
+      <td>Changed to <code>get_quote()</code> with <code>freshness in ('fresh', 'aging')</code> check</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td style="color:var(--cyan)">Diagnostic stale count used stored freshness</td>
+      <td><code>get_shadow_report</code> read cached <code>q.freshness</code> string instead of recomputing</td>
+      <td>Call <code>_classify_freshness(q)</code> dynamically in the count</td>
+    </tr>
+  </table>
+    <tr>
+      <td>16</td>
+      <td style="color:var(--orange)">Schwab REST missing <code>needExtendedHoursData</code></td>
+      <td>UPH Schwab REST didn't request extended hours data — empty bid/ask during pre/post market</td>
+      <td>Added <code>'needExtendedHoursData': 'true'</code> to match Risk Engine's Schwab REST params</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td style="color:var(--orange)">REST fail count not cleared on non-REST recovery</td>
+      <td>Cross-broker fill or streaming resumption cleared frozen flag but left fail count at 10, causing 60s backoff on re-freeze</td>
+      <td>Clear <code>_rest_fail_count</code> in cross-broker fill, same-price confirm, and natural recovery paths</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td style="color:var(--orange)">Leaked worker threads on Webull REST timeout</td>
+      <td>Per-call <code>ThreadPoolExecutor</code> created zombie threads — stuck HTTP calls run indefinitely in background</td>
+      <td>Shared reusable pool (<code>max_workers=2</code>) — bounds total threads, reuses workers across calls</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td style="color:var(--orange)">UTC fallback if pytz missing — wrong market hours</td>
+      <td>Fell back to <code>datetime.utcnow()</code> but compared against Eastern Time ranges — 4-5 hour offset</td>
+      <td>New <code>_now_eastern()</code> tries zoneinfo (stdlib) → pytz → dateutil → UTC-5 estimate with warning</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td style="color:var(--orange)">Probe tracking dicts never pruned</td>
+      <td><code>_rest_probe_ts</code>, <code>_last_probe_ts</code>, <code>_rest_fail_count</code> accumulated entries forever</td>
+      <td>Cleaned up in <code>unregister_monitored_symbols()</code> when symbols leave the watchlist</td>
+    </tr>
+  </table>
+  <p style="margin-top:8px; font-size:0.85rem;">Bugs #1-7: first review. #8-10 (green): second review. #11-15 (cyan): third review. #16-20 (orange): fourth review.</p>
+</div>
+</div>
+
+</div><!-- /content -->
+
+<script>
+const tabs = document.querySelectorAll('.tab');
+const panels = document.querySelectorAll('.panel');
+
+function showTab(idx) {
+  tabs.forEach((t, i) => {
+    t.classList.toggle('active', i === idx);
+  });
+  panels.forEach((p, i) => {
+    p.classList.toggle('active', i === idx);
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+
+</body>
+</html>

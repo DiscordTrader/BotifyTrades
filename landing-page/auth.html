@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In - QuantumPulse</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <style>
+        .thanksgiving-offer {
+            background: linear-gradient(135deg, rgba(255, 107, 53, 0.15) 0%, rgba(255, 215, 0, 0.1) 100%);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .offer-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 14px;
+            color: #ffd700;
+            margin-bottom: 6px;
+        }
+        .offer-title .turkey {
+            font-size: 20px;
+            animation: wiggle 1s ease-in-out infinite;
+        }
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(-5deg); }
+            50% { transform: rotate(5deg); }
+        }
+        .offer-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .offer-text strong {
+            color: #ffd700;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <!-- Thanksgiving Launch Offer -->
+            <div class="thanksgiving-offer">
+                <div class="offer-title">
+                    <span class="turkey">🦃</span>
+                    THANKSGIVING LAUNCH SPECIAL
+                    <span class="turkey">🦃</span>
+                </div>
+                <div class="offer-text">
+                    Sign up now and get <strong>15 DAYS FREE TRIAL</strong> - Limited time offer!
+                </div>
+            </div>
+
+            <!-- Auth Header -->
+            <div class="auth-header">
+                <h1 class="auth-logo">Ψ∿ QuantumPulse</h1>
+                <p class="auth-subtitle">Sign in to your AI trading assistant</p>
+            </div>
+
+            <!-- Auth Tabs -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="signin" onclick="switchAuthTab('signin')">
+                    Sign In
+                </button>
+                <button class="auth-tab" data-tab="signup" onclick="switchAuthTab('signup')">
+                    Sign Up
+                </button>
+            </div>
+
+            <!-- Sign In Form -->
+            <div class="auth-form active" id="signin-form">
+                <form onsubmit="handleSignIn(event)">
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input 
+                            type="email" 
+                            class="form-input" 
+                            placeholder="you@example.com" 
+                            id="signin-email"
+                            required
+                        >
+                        <div class="form-error" id="signin-email-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input 
+                            type="password" 
+                            class="form-input" 
+                            placeholder="••••••••" 
+                            id="signin-password"
+                            required
+                        >
+                        <div class="form-error" id="signin-password-error"></div>
+                    </div>
+
+                    <div class="form-checkbox">
+                        <input type="checkbox" id="remember-me">
+                        <label for="remember-me" style="color: var(--text-secondary); font-size: 0.875rem;">
+                            Remember me
+                        </label>
+                    </div>
+
+                    <div class="form-group" style="text-align: right; margin-bottom: var(--spacing-lg);">
+                        <a href="#" style="font-size: 0.875rem; color: var(--accent-primary);">
+                            Forgot password?
+                        </a>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-full">
+                        Sign In
+                    </button>
+
+                    <div class="form-divider">
+                        <span>or</span>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary btn-full" onclick="handleGuestMode()">
+                        Continue as Guest
+                    </button>
+
+                    <div class="guest-note">
+                        <strong>Guest mode:</strong> Limited access to features. Sign up for full functionality.
+                    </div>
+                </form>
+
+                <div class="form-footer">
+                    <p class="form-footer-link">
+                        Don't have an account? <a href="#" onclick="switchAuthTab('signup'); return false;">Sign up</a>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Sign Up Form -->
+            <div class="auth-form" id="signup-form">
+                <form onsubmit="handleSignUp(event)">
+                    <div class="form-group">
+                        <label class="form-label">Full Name</label>
+                        <input 
+                            type="text" 
+                            class="form-input" 
+                            placeholder="John Doe" 
+                            id="signup-name"
+                            required
+                        >
+                        <div class="form-error" id="signup-name-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input 
+                            type="email" 
+                            class="form-input" 
+                            placeholder="you@example.com" 
+                            id="signup-email"
+                            required
+                        >
+                        <div class="form-error" id="signup-email-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input 
+                            type="password" 
+                            class="form-input" 
+                            placeholder="At least 8 characters" 
+                            id="signup-password"
+                            required
+                            minlength="8"
+                        >
+                        <div class="form-error" id="signup-password-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Confirm Password</label>
+                        <input 
+                            type="password" 
+                            class="form-input" 
+                            placeholder="Re-enter password" 
+                            id="signup-confirm-password"
+                            required
+                        >
+                        <div class="form-error" id="signup-confirm-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">I am a:</label>
+                        <select class="form-select" id="signup-role">
+                            <option value="trader">Trader</option>
+                            <option value="group-owner">Group Owner</option>
+                            <option value="affiliate">Affiliate</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-full btn-large">
+                        Create Account & Start Free Trial
+                    </button>
+                </form>
+
+                <div class="form-footer">
+                    <p class="form-footer-link">
+                        Already have an account? <a href="#" onclick="switchAuthTab('signin'); return false;">Sign in</a>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Success Panel (Hidden by default) -->
+            <div class="success-panel" id="success-panel">
+                <div class="success-icon">✓</div>
+                <h2 class="success-title">Welcome to QuantumPulse!</h2>
+                <p class="success-message">
+                    Your free trial is ready. Download the trial version below and follow the included instructions to get started.
+                </p>
+                <a href="https://github.com/your-username/quantumpulse-trial/releases" 
+                   class="success-download btn-icon"
+                   target="_blank">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    Download Trial from GitHub
+                </a>
+                <div style="margin-top: var(--spacing-lg);">
+                    <a href="dashboard.html" class="btn btn-secondary">
+                        Go to Dashboard (Demo)
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>

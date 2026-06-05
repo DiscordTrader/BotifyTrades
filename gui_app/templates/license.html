@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>License Management - BotifyTrades</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0f0f1a 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+        .header {
+            background: rgba(26, 26, 46, 0.95);
+            border-bottom: 1px solid rgba(15, 240, 179, 0.2);
+            padding: 16px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .botify-logo-mark {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #0FF0B3 0%, #7C3AED 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-symbol {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: #0E1117;
+        }
+        .brand-name {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #0FF0B3, #7C3AED);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-links {
+            display: flex;
+            gap: 24px;
+        }
+        .nav-links a {
+            color: #888;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover, .nav-links a.active {
+            color: #0FF0B3;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .page-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #0FF0B3, #7C3AED);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .page-subtitle {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+        .license-status-card {
+            background: rgba(26, 26, 46, 0.95);
+            border: 1px solid rgba(15, 240, 179, 0.3);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 24px;
+        }
+        .status-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .status-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+        }
+        .status-icon.valid {
+            background: rgba(15, 240, 179, 0.2);
+            color: #0FF0B3;
+        }
+        .status-icon.expired {
+            background: rgba(255, 82, 82, 0.2);
+            color: #ff5252;
+        }
+        .status-icon.inactive {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
+        .status-info h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .status-info.valid h2 { color: #0FF0B3; }
+        .status-info.expired h2 { color: #ff5252; }
+        .status-info.inactive h2 { color: #ffc107; }
+        .status-info p {
+            color: #888;
+            font-size: 14px;
+        }
+        .license-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .detail-item {
+            background: rgba(0, 50, 80, 0.3);
+            border: 1px solid rgba(15, 240, 179, 0.15);
+            border-radius: 10px;
+            padding: 16px;
+        }
+        .detail-label {
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .detail-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+        }
+        .days-remaining {
+            font-size: 32px;
+            font-weight: 700;
+            color: #0FF0B3;
+        }
+        .days-remaining.warning { color: #ffc107; }
+        .days-remaining.critical { color: #ff5252; }
+        .section-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #fff;
+        }
+        .activation-card {
+            background: rgba(26, 26, 46, 0.95);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 24px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #aaa;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .form-group textarea {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(0, 50, 80, 0.3);
+            border: 1px solid rgba(15, 240, 179, 0.2);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 13px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            resize: vertical;
+            min-height: 100px;
+            transition: all 0.3s ease;
+        }
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #0FF0B3;
+            box-shadow: 0 0 0 3px rgba(15, 240, 179, 0.1);
+        }
+        .form-group textarea::placeholder {
+            color: #555;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #0FF0B3, #7C3AED);
+            color: #0E1117;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(15, 240, 179, 0.3);
+        }
+        .btn-secondary {
+            background: rgba(124, 58, 237, 0.2);
+            color: #7C3AED;
+            border: 1px solid rgba(124, 58, 237, 0.4);
+        }
+        .btn-secondary:hover {
+            background: rgba(124, 58, 237, 0.3);
+        }
+        .btn-danger {
+            background: rgba(255, 82, 82, 0.2);
+            color: #ff5252;
+            border: 1px solid rgba(255, 82, 82, 0.4);
+        }
+        .btn-danger:hover {
+            background: rgba(255, 82, 82, 0.3);
+        }
+        .button-group {
+            display: flex;
+            gap: 12px;
+        }
+        .machine-info-card {
+            background: rgba(26, 26, 46, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .machine-id-display {
+            background: rgba(0, 50, 80, 0.4);
+            border: 1px solid rgba(15, 240, 179, 0.2);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 14px;
+            color: #0FF0B3;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .copy-btn {
+            background: transparent;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px 8px;
+        }
+        .copy-btn:hover {
+            color: #0FF0B3;
+        }
+        .alert {
+            padding: 14px 18px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .alert-success {
+            background: rgba(15, 240, 179, 0.15);
+            border: 1px solid rgba(15, 240, 179, 0.4);
+            color: #0FF0B3;
+        }
+        .alert-error {
+            background: rgba(255, 82, 82, 0.15);
+            border: 1px solid rgba(255, 82, 82, 0.4);
+            color: #ff8888;
+        }
+        .alert-warning {
+            background: rgba(255, 193, 7, 0.15);
+            border: 1px solid rgba(255, 193, 7, 0.4);
+            color: #ffc107;
+        }
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+        .license-type-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .badge-activation {
+            background: rgba(124, 58, 237, 0.2);
+            color: #a78bfa;
+        }
+        .badge-machine {
+            background: rgba(15, 240, 179, 0.2);
+            color: #0FF0B3;
+        }
+        .badge-legacy {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 12px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0FF0B3, #7C3AED);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        .progress-fill.warning { background: linear-gradient(90deg, #ffc107, #ff9800); }
+        .progress-fill.critical { background: linear-gradient(90deg, #ff5252, #d32f2f); }
+        #messageContainer {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 1000;
+            max-width: 400px;
+        }
+        .toast {
+            padding: 14px 18px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo-section">
+            <div class="botify-logo-mark">
+                <span class="logo-symbol">BT</span>
+            </div>
+            <span class="brand-name">BotifyTrades</span>
+        </div>
+        <nav class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/channels">Channels</a>
+            <a href="/positions">Positions</a>
+            <a href="/pnl">P&L</a>
+            <a href="/settings">Settings</a>
+            <a href="/license" class="active">License</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 class="page-title">License Management</h1>
+        <p class="page-subtitle">Manage your BotifyTrades license activation and status</p>
+
+        <div id="messageContainer"></div>
+
+        <div class="license-status-card" id="statusCard">
+            <div class="status-header">
+                <div class="status-icon" id="statusIcon">
+                    <span id="statusEmoji">🔐</span>
+                </div>
+                <div class="status-info" id="statusInfo">
+                    <h2 id="statusTitle">Loading...</h2>
+                    <p id="statusMessage">Checking license status</p>
+                </div>
+            </div>
+
+            <div class="license-details" id="licenseDetails" style="display: none;">
+                <div class="detail-item">
+                    <div class="detail-label">Days Remaining</div>
+                    <div class="days-remaining" id="daysRemaining">--</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Customer ID</div>
+                    <div class="detail-value" id="customerId">--</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Expires On</div>
+                    <div class="detail-value" id="expiresOn">--</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">License Type</div>
+                    <div id="licenseType">--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="activation-card">
+            <h3 class="section-title">Activate License</h3>
+            <p class="help-text" style="margin-bottom: 16px;">Enter your license key to activate or renew your BotifyTrades license. The license will be automatically bound to this machine.</p>
+            
+            <div class="form-group">
+                <label for="licenseKey">License Key</label>
+                <div style="position: relative;">
+                    <textarea id="licenseKey" placeholder="Paste your license key here..."></textarea>
+                    <button type="button" onclick="pasteFromClipboard()" style="position: absolute; top: 8px; right: 8px; background: rgba(15, 240, 179, 0.2); border: 1px solid rgba(15, 240, 179, 0.4); color: #0FF0B3; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.background='rgba(15, 240, 179, 0.35)'" onmouseout="this.style.background='rgba(15, 240, 179, 0.2)'">📋 Paste</button>
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="activateLicense()">Activate License</button>
+                <button class="btn btn-secondary" onclick="validateLicense()">Validate Only</button>
+            </div>
+        </div>
+
+        <div class="machine-info-card">
+            <h3 class="section-title">Machine Information</h3>
+            <p class="help-text" style="margin-bottom: 16px;">This unique identifier is used to bind licenses to your machine. Share this with support if you need a machine-bound license.</p>
+            
+            <div class="machine-id-display">
+                <span id="machineId">Loading...</span>
+                <button class="copy-btn" onclick="copyMachineId()">📋 Copy</button>
+            </div>
+            
+            <div style="margin-top: 16px;">
+                <div class="detail-label">Platform</div>
+                <div class="detail-value" id="platformInfo">--</div>
+            </div>
+        </div>
+
+        <div class="machine-info-card">
+            <h3 class="section-title">License Actions</h3>
+            <div class="button-group">
+                <button class="btn btn-secondary" onclick="refreshStatus()">Refresh Status</button>
+                <button class="btn btn-danger" onclick="deactivateLicense()">Deactivate License</button>
+            </div>
+            <p class="help-text" style="margin-top: 12px;">Deactivating will remove the license from this machine. You'll need to re-enter the license key to use the application.</p>
+        </div>
+    </div>
+
+    <script>
+        function showMessage(message, type = 'success') {
+            const container = document.getElementById('messageContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast alert-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 5000);
+        }
+
+        async function loadLicenseStatus() {
+            try {
+                const response = await fetch('/api/license/status');
+                const data = await response.json();
+                
+                const statusIcon = document.getElementById('statusIcon');
+                const statusEmoji = document.getElementById('statusEmoji');
+                const statusInfo = document.getElementById('statusInfo');
+                const statusTitle = document.getElementById('statusTitle');
+                const statusMessage = document.getElementById('statusMessage');
+                const licenseDetails = document.getElementById('licenseDetails');
+                
+                statusIcon.classList.remove('valid', 'expired', 'inactive');
+                statusInfo.classList.remove('valid', 'expired', 'inactive');
+                
+                if (data.is_valid) {
+                    statusIcon.classList.add('valid');
+                    statusInfo.classList.add('valid');
+                    statusEmoji.textContent = '✅';
+                    statusTitle.textContent = 'License Active';
+                    statusMessage.textContent = data.message || 'Your license is valid and active';
+                    licenseDetails.style.display = 'grid';
+                    
+                    const daysRemaining = document.getElementById('daysRemaining');
+                    const progressFill = document.getElementById('progressFill');
+                    const days = data.days_remaining || 0;
+                    
+                    daysRemaining.textContent = days;
+                    daysRemaining.classList.remove('warning', 'critical');
+                    progressFill.classList.remove('warning', 'critical');
+                    
+                    if (days <= 7) {
+                        daysRemaining.classList.add('critical');
+                        progressFill.classList.add('critical');
+                    } else if (days <= 30) {
+                        daysRemaining.classList.add('warning');
+                        progressFill.classList.add('warning');
+                    }
+                    
+                    const totalDays = data.total_days || 365;
+                    const progressPercent = Math.min(100, (days / totalDays) * 100);
+                    progressFill.style.width = progressPercent + '%';
+                    
+                    document.getElementById('customerId').textContent = data.customer_id || '--';
+                    document.getElementById('expiresOn').textContent = data.expires || '--';
+                    
+                    const licenseType = document.getElementById('licenseType');
+                    const type = data.license_type || 'activation';
+                    licenseType.innerHTML = `<span class="license-type-badge badge-${type}">${type}</span>`;
+                } else if (data.is_expired) {
+                    statusIcon.classList.add('expired');
+                    statusInfo.classList.add('expired');
+                    statusEmoji.textContent = '⚠️';
+                    statusTitle.textContent = 'License Expired';
+                    statusMessage.textContent = data.error || 'Your license has expired. Please renew.';
+                    licenseDetails.style.display = 'none';
+                } else {
+                    statusIcon.classList.add('inactive');
+                    statusInfo.classList.add('inactive');
+                    statusEmoji.textContent = '🔒';
+                    statusTitle.textContent = 'No Active License';
+                    statusMessage.textContent = data.error || 'Please enter a license key to activate.';
+                    licenseDetails.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error loading license status:', error);
+                showMessage('Failed to load license status', 'error');
+            }
+        }
+
+        async function loadMachineInfo() {
+            try {
+                const response = await fetch('/api/license/machine-info');
+                const data = await response.json();
+                
+                document.getElementById('machineId').textContent = data.machine_id || 'Unknown';
+                document.getElementById('platformInfo').textContent = 
+                    `${data.platform || '--'} (${data.machine || '--'})`;
+            } catch (error) {
+                console.error('Error loading machine info:', error);
+            }
+        }
+
+        async function activateLicense() {
+            const licenseKey = document.getElementById('licenseKey').value.trim();
+            if (!licenseKey) {
+                showMessage('Please enter a license key', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/license/activate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ license_key: licenseKey })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('License activated successfully!', 'success');
+                    document.getElementById('licenseKey').value = '';
+                    loadLicenseStatus();
+                } else {
+                    showMessage(data.error || 'Failed to activate license', 'error');
+                }
+            } catch (error) {
+                console.error('Error activating license:', error);
+                showMessage('Failed to activate license', 'error');
+            }
+        }
+
+        async function validateLicense() {
+            const licenseKey = document.getElementById('licenseKey').value.trim();
+            if (!licenseKey) {
+                showMessage('Please enter a license key', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/license/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ license_key: licenseKey })
+                });
+                
+                const data = await response.json();
+                
+                if (data.is_valid) {
+                    showMessage(`License is valid! ${data.days_remaining} days remaining.`, 'success');
+                } else {
+                    showMessage(data.error || 'License is invalid', 'error');
+                }
+            } catch (error) {
+                console.error('Error validating license:', error);
+                showMessage('Failed to validate license', 'error');
+            }
+        }
+
+        async function deactivateLicense() {
+            if (!confirm('Are you sure you want to deactivate the license on this machine?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/license/deactivate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('License deactivated successfully', 'success');
+                    loadLicenseStatus();
+                } else {
+                    showMessage(data.error || 'Failed to deactivate license', 'error');
+                }
+            } catch (error) {
+                console.error('Error deactivating license:', error);
+                showMessage('Failed to deactivate license', 'error');
+            }
+        }
+
+        function refreshStatus() {
+            loadLicenseStatus();
+            loadMachineInfo();
+            showMessage('Status refreshed', 'success');
+        }
+
+        async function pasteFromClipboard() {
+            const textarea = document.getElementById('licenseKey');
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    textarea.value = text.trim();
+                    showMessage('License key pasted from clipboard', 'success');
+                } else {
+                    showMessage('Clipboard is empty', 'error');
+                }
+            } catch (err) {
+                textarea.focus();
+                let fallbackOk = false;
+                try {
+                    fallbackOk = document.execCommand('paste');
+                } catch (e) {}
+                if (!fallbackOk) {
+                    showMessage('Clipboard access is restricted. Please click inside the text box and use Ctrl+V (or Cmd+V on Mac) to paste your license key.', 'error');
+                }
+            }
+        }
+
+        function copyMachineId() {
+            const machineId = document.getElementById('machineId').textContent;
+            navigator.clipboard.writeText(machineId).then(() => {
+                showMessage('Machine ID copied to clipboard', 'success');
+            }).catch(() => {
+                showMessage('Failed to copy', 'error');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLicenseStatus();
+            loadMachineInfo();
+        });
+    </script>
+</body>
+</html>

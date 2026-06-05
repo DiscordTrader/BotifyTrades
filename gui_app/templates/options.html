@@ -1,0 +1,1980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Options Trading - BotifyTrades</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0E1117;
+            --bg-secondary: #161B22;
+            --bg-tertiary: #1C2128;
+            --bg-card: #21262D;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #E6EDF3;
+            --text-secondary: #8B949E;
+            --text-muted: #6E7681;
+            --accent-mint: #0FF0B3;
+            --accent-violet: #7C3AED;
+            --accent-blue: #58A6FF;
+            --success: #3FB950;
+            --danger: #F85149;
+            --warning: #D29922;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        
+        .navbar {
+            background: rgba(14, 17, 23, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            height: 70px;
+        }
+        
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+        }
+        
+        .logo-mark {
+            position: relative;
+            width: 46px;
+            height: 46px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 0 60px rgba(0, 245, 255, 0.4), inset 0 1px 1px rgba(255,255,255,0.3);
+        }
+        
+        .logo-mark::before {
+            content: '';
+            position: absolute;
+            inset: 2px;
+            background: #070B14;
+            border-radius: 12px;
+        }
+        
+        .logo-mark::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%);
+            animation: logoShine 3s ease-in-out infinite;
+        }
+        
+        @keyframes logoShine {
+            0%, 100% { transform: translateX(-100%) rotate(45deg); }
+            50% { transform: translateX(100%) rotate(45deg); }
+        }
+        
+        .logo-text {
+            position: relative;
+            z-index: 1;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00F5FF 0%, #0FF0B3 25%, #8B5CF6 50%, #EC4899 75%, #F43F5E 100%);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: textGradient 4s ease infinite;
+        }
+        
+        @keyframes textGradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .brand-name {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .brand-tagline {
+            font-size: 10px;
+            font-weight: 600;
+            color: #00F5FF;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .nav-links a:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+        
+        .nav-links a.active {
+            background: linear-gradient(135deg, rgba(15, 240, 179, 0.15), rgba(124, 58, 237, 0.15));
+            color: var(--accent-mint);
+        }
+        
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        
+        .page-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-mint) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .page-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+        
+        .broker-selector {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .broker-selector label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        
+        .broker-select {
+            background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text-primary);
+            padding: 14px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            min-width: 180px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .broker-select:focus {
+            outline: none;
+            border-color: var(--accent-mint);
+            box-shadow: 0 0 0 3px rgba(15, 240, 179, 0.15);
+        }
+        
+        .broker-select option {
+            background: #1a1f2a;
+            color: #e6edf3;
+            padding: 12px 16px;
+            font-size: 14px;
+        }
+        
+        .broker-select option:hover,
+        .broker-select option:checked {
+            background: linear-gradient(135deg, #0ff0b3 0%, #00d4aa 100%);
+            color: #0d1117;
+            font-weight: 600;
+        }
+
+        .options-table {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .option-row {
+            background: linear-gradient(180deg, var(--bg-secondary) 0%, rgba(22, 27, 34, 0.8) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 10px 12px;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            transition: all 0.25s ease;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .option-row::-webkit-scrollbar {
+            height: 4px;
+        }
+        
+        .option-row::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .option-row::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+        }
+
+        .option-row:hover {
+            border-color: rgba(15, 240, 179, 0.35);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+        }
+
+        .option-row.has-data {
+            border-color: rgba(15, 240, 179, 0.25);
+            background: linear-gradient(180deg, rgba(22, 27, 34, 1) 0%, rgba(15, 240, 179, 0.03) 100%);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2), 0 0 40px rgba(15, 240, 179, 0.05);
+        }
+
+        .row-number {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-muted);
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+
+        .input-section {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .input-small {
+            background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text-primary);
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .input-small:focus {
+            outline: none;
+            border-color: var(--accent-mint);
+            box-shadow: 0 0 0 3px rgba(15, 240, 179, 0.15), 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .input-small::placeholder {
+            color: var(--text-muted);
+        }
+        
+        /* Dark styling for all select dropdowns */
+        .input-small option,
+        select.input-small option {
+            background: #1a1f2a;
+            color: #e6edf3;
+            padding: 10px 14px;
+            font-size: 13px;
+        }
+        
+        .input-small option:hover,
+        .input-small option:checked,
+        select.input-small option:hover,
+        select.input-small option:checked {
+            background: linear-gradient(135deg, #0ff0b3 0%, #00d4aa 100%);
+            color: #0d1117;
+            font-weight: 600;
+        }
+
+        .input-symbol {
+            width: 70px;
+            text-transform: uppercase;
+            font-family: 'Space Grotesk', sans-serif;
+            letter-spacing: 0.5px;
+        }
+
+        .input-strike {
+            width: 95px;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        
+        .input-strike option.atm {
+            background: rgba(15, 240, 179, 0.2);
+            font-weight: 700;
+        }
+        
+        .stock-price-badge {
+            background: linear-gradient(135deg, rgba(15, 240, 179, 0.2), rgba(88, 166, 255, 0.2));
+            border: 1px solid rgba(15, 240, 179, 0.4);
+            color: var(--accent-mint);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 6px;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(15, 240, 179, 0.15);
+        }
+
+        .input-expiry {
+            width: 120px;
+            cursor: pointer;
+        }
+
+        .type-toggle-mini {
+            display: flex;
+            gap: 4px;
+        }
+
+        .type-btn-mini {
+            padding: 8px 14px;
+            border: 2px solid var(--border-color);
+            background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+            color: var(--text-secondary);
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .type-btn-mini:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .type-btn-mini.active.call {
+            background: linear-gradient(180deg, rgba(63, 185, 80, 0.3) 0%, rgba(63, 185, 80, 0.15) 100%);
+            border-color: var(--success);
+            color: var(--success);
+            box-shadow: 0 0 12px rgba(63, 185, 80, 0.3), 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .type-btn-mini.active.put {
+            background: linear-gradient(180deg, rgba(248, 81, 73, 0.3) 0%, rgba(248, 81, 73, 0.15) 100%);
+            border-color: var(--danger);
+            color: var(--danger);
+            box-shadow: 0 0 12px rgba(248, 81, 73, 0.3), 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .load-btn-mini {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, var(--accent-mint) 0%, #00D4AA 50%, var(--accent-violet) 100%);
+            border: none;
+            border-radius: 6px;
+            color: #0E1117;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            box-shadow: 0 3px 10px rgba(15, 240, 179, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .load-btn-mini:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(15, 240, 179, 0.5), 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .load-btn-mini:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .divider {
+            width: 2px;
+            height: 36px;
+            background: linear-gradient(180deg, transparent, var(--border-color), transparent);
+            flex-shrink: 0;
+            margin: 0 4px;
+        }
+
+        .quote-section {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .quote-box {
+            background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 4px 8px;
+            text-align: center;
+            min-width: 50px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            flex-shrink: 0;
+        }
+
+        .quote-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 4px;
+        }
+
+        .quote-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .quote-value.bid { 
+            color: var(--success); 
+            text-shadow: 0 0 12px rgba(63, 185, 80, 0.5);
+        }
+        .quote-value.ask { 
+            color: var(--danger); 
+            text-shadow: 0 0 12px rgba(248, 81, 73, 0.5);
+        }
+        .quote-value.mid { 
+            color: var(--accent-blue); 
+            text-shadow: 0 0 12px rgba(88, 166, 255, 0.5);
+        }
+
+        .quote-placeholder {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-style: italic;
+            white-space: nowrap;
+        }
+
+        .greeks-inline {
+            display: none;
+        }
+
+        .greek-item {
+            display: flex;
+            gap: 4px;
+            white-space: nowrap;
+        }
+
+        .greek-label {
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 10px;
+        }
+
+        .greek-value {
+            color: var(--accent-blue);
+            font-weight: 700;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .data-source-badge {
+            font-size: 9px;
+            font-weight: 700;
+            padding: 4px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+
+        .data-source-badge.webull {
+            background: linear-gradient(135deg, rgba(63, 185, 80, 0.2), rgba(63, 185, 80, 0.1));
+            color: var(--success);
+            border: 1px solid rgba(63, 185, 80, 0.3);
+        }
+
+        .data-source-badge.alpaca {
+            background: linear-gradient(135deg, rgba(210, 153, 34, 0.2), rgba(210, 153, 34, 0.1));
+            color: var(--warning);
+            border: 1px solid rgba(210, 153, 34, 0.3);
+        }
+
+        .order-section {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-shrink: 0;
+            flex-wrap: nowrap;
+        }
+
+        .stepper-input {
+            display: flex;
+            align-items: center;
+            background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .stepper-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 700;
+        }
+
+        .stepper-btn:hover {
+            background: rgba(15, 240, 179, 0.1);
+            color: var(--accent-mint);
+        }
+
+        .stepper-value {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            text-align: center;
+            font-size: 12px;
+            font-weight: 700;
+            width: 45px;
+            padding: 4px 2px;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .stepper-value:focus {
+            outline: none;
+        }
+
+        .stepper-value.qty {
+            width: 30px;
+        }
+
+        .total-display {
+            background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 4px 8px;
+            text-align: center;
+            min-width: 55px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            flex-shrink: 0;
+        }
+
+        .total-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .total-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent-mint);
+            text-shadow: 0 0 8px rgba(15, 240, 179, 0.4);
+        }
+
+        .action-section {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .order-btn {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            flex-shrink: 0;
+        }
+
+        .order-btn.buy {
+            background: var(--success);
+            color: #0E1117;
+        }
+
+        .order-btn.sell {
+            background: var(--danger);
+            color: #fff;
+        }
+        .order-btn.discord {
+            background: #5865F2;
+            color: #fff;
+            font-size: 11px;
+            min-width: 28px;
+            padding: 6px 8px;
+        }
+        .order-btn.discord:hover {
+            background: #4752c4;
+        }
+        .order-btn.webhook {
+            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            color: #fff;
+            font-size: 11px;
+            min-width: 28px;
+            padding: 6px 8px;
+        }
+        .order-btn.webhook:hover {
+            background: linear-gradient(135deg, #E55A25 0%, #E5830E 100%);
+        }
+        .order-btn.webhook-stc {
+            background: linear-gradient(135deg, #E53935 0%, #FF5252 100%);
+            color: #fff;
+            font-size: 11px;
+            min-width: 28px;
+            padding: 6px 8px;
+        }
+        .order-btn.webhook-stc:hover {
+            background: linear-gradient(135deg, #C62828 0%, #E53935 100%);
+        }
+        .webhook-channels-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 16px;
+        }
+        .webhook-channels-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .webhook-channels-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        .webhook-channels-header .add-channel-btn {
+            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            color: #fff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .webhook-channels-header .add-channel-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+        }
+        .webhook-add-form {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            display: none;
+        }
+        .webhook-add-form.show {
+            display: block;
+        }
+        .webhook-add-form .form-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .webhook-add-form input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 12px;
+        }
+        .webhook-add-form input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-mint);
+        }
+        .webhook-add-form .name-input {
+            width: 120px;
+        }
+        .webhook-add-form .url-input {
+            flex: 1;
+            min-width: 280px;
+        }
+        .webhook-add-form .bot-input {
+            width: 120px;
+        }
+        .webhook-add-form .color-input {
+            width: 40px;
+            height: 32px;
+            padding: 2px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            cursor: pointer;
+        }
+        .webhook-add-form .form-btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .webhook-add-form .form-btn.save {
+            background: var(--success);
+            color: #0E1117;
+        }
+        .webhook-add-form .form-btn.cancel {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+        }
+        .webhook-channels-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .webhook-channels-empty {
+            color: var(--text-muted);
+            font-size: 12px;
+            text-align: center;
+            padding: 16px;
+        }
+        .webhook-channel-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .webhook-channel-item:hover {
+            border-color: var(--accent-blue);
+        }
+        .webhook-channel-color {
+            width: 8px;
+            height: 32px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+        .webhook-channel-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .webhook-channel-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+        .webhook-channel-bot {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .webhook-channel-actions {
+            display: flex;
+            gap: 6px;
+        }
+        .webhook-channel-actions .action-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .webhook-channel-actions .action-btn:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+        .webhook-channel-actions .action-btn.delete:hover {
+            background: rgba(248, 81, 73, 0.1);
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        .channel-select {
+            padding: 4px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 10px;
+            min-width: 80px;
+            cursor: pointer;
+        }
+        .channel-select:focus {
+            outline: none;
+            border-color: var(--accent-mint);
+        }
+
+        .order-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .order-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .quote-box.clickable {
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+        }
+
+        .quote-box.clickable:hover {
+            transform: scale(1.05);
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        .quote-box.clickable.selected {
+            transform: scale(1.05);
+        }
+
+        .quote-box.clickable.selected.bid-selected {
+            border-color: var(--success);
+            box-shadow: 0 0 8px rgba(63, 185, 80, 0.4);
+        }
+
+        .quote-box.clickable.selected.ask-selected {
+            border-color: var(--danger);
+            box-shadow: 0 0 8px rgba(248, 81, 73, 0.4);
+        }
+
+        .quote-box.clickable.selected.mid-selected {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
+        }
+
+        .clear-row-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px 6px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .clear-row-btn:hover {
+            color: var(--danger);
+            background: rgba(248, 81, 73, 0.1);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.success {
+            background: rgba(63, 185, 80, 0.95);
+            color: #fff;
+        }
+
+        .toast.error {
+            background: rgba(248, 81, 73, 0.95);
+            color: #fff;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 16px;
+            }
+            
+            .option-row {
+                padding: 12px;
+            }
+            
+            .input-symbol { width: 70px; }
+            .input-strike { width: 70px; }
+            .input-expiry { width: 120px; }
+            
+            .order-btn {
+                padding: 8px 12px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="nav-brand">
+            <div class="logo-mark">
+                <span class="logo-text">BT</span>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">BotifyTrades</span>
+                <span class="brand-tagline">AUTOMATED TRADING</span>
+            </div>
+        </a>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/channels">Channels</a>
+            <a href="/pnl">P&L</a>
+            <a href="/options" class="active">Options</a>
+            <a href="/settings">Settings</a>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Options Trading</h1>
+                <p class="page-subtitle">Select symbol, expiry, and strike to get quotes - up to 4 options at once</p>
+            </div>
+            <div class="broker-selector">
+                <label>Execute On:</label>
+                <select class="broker-select" id="brokerSelect">
+                    <option value="WEBULL">Webull</option>
+                    <option value="ALPACA_PAPER">Alpaca Paper</option>
+                    <option value="ALPACA_LIVE">Alpaca Live</option>
+                    <option value="TASTYTRADE_PAPER">Tastytrade Paper</option>
+                    <option value="TASTYTRADE_LIVE">Tastytrade Live</option>
+                    <option value="SCHWAB">Schwab</option>
+                    <option value="IB">Interactive Brokers</option>
+                    <option value="ROBINHOOD">Robinhood (LIVE Only)</option>
+                </select>
+            </div>
+            <div class="broker-selector" style="margin-left: 16px;">
+                <label>Track In:</label>
+                <select class="broker-select" id="trackingChannelSelect">
+                    <option value="">Default (GUI Trades)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="webhook-channels-card">
+            <div class="webhook-channels-header">
+                <h3>Webhook Channels</h3>
+                <button class="add-channel-btn" onclick="toggleAddChannelForm()">+ Add Channel</button>
+            </div>
+            <div id="webhookAddForm" class="webhook-add-form">
+                <div class="form-row">
+                    <input type="text" id="newChannelName" class="name-input" placeholder="Channel Name">
+                    <input type="text" id="newChannelUrl" class="url-input" placeholder="https://discord.com/api/webhooks/...">
+                    <input type="text" id="newChannelBot" class="bot-input" placeholder="Bot Name" value="Trade Echo Bot">
+                    <input type="color" id="newChannelColor" class="color-input" value="#FF6B35">
+                    <button class="form-btn save" onclick="addWebhookChannel()">Save</button>
+                    <button class="form-btn cancel" onclick="toggleAddChannelForm()">Cancel</button>
+                </div>
+            </div>
+            <div id="webhookChannelsList" class="webhook-channels-list">
+                <div class="webhook-channels-empty">No webhook channels configured. Add one to start posting signals.</div>
+            </div>
+        </div>
+
+        <div class="options-table">
+            {% for i in range(1, 5) %}
+            <div class="option-row" id="optionRow{{ i }}" data-row="{{ i }}">
+                <div class="row-number">{{ i }}</div>
+                
+                <div class="input-section">
+                    <input type="text" class="input-small input-symbol" id="symbol{{ i }}" placeholder="SPY" maxlength="5">
+                    <select class="input-small input-expiry" id="expiry{{ i }}">
+                        <option value="">Expiry...</option>
+                    </select>
+                    <select class="input-small input-strike" id="strike{{ i }}">
+                        <option value="">Strike...</option>
+                    </select>
+                    <div class="type-toggle-mini">
+                        <button class="type-btn-mini active call" id="callBtn{{ i }}" onclick="setType({{ i }}, 'CALL')">C</button>
+                        <button class="type-btn-mini" id="putBtn{{ i }}" onclick="setType({{ i }}, 'PUT')">P</button>
+                    </div>
+                    <button class="load-btn-mini" onclick="loadQuote({{ i }})">Load</button>
+                </div>
+
+                <div class="divider" id="divider{{ i }}" style="display: none;"></div>
+
+                <div class="quote-section" id="quoteSection{{ i }}">
+                    <span class="quote-placeholder">Enter details & click Load</span>
+                </div>
+
+                <div class="order-section" id="orderSection{{ i }}" style="display: none;">
+                    <div class="stepper-input">
+                        <button class="stepper-btn" onclick="adjustPrice({{ i }}, -0.05)">−</button>
+                        <input type="text" class="stepper-value" id="limitPrice{{ i }}" value="0.00">
+                        <button class="stepper-btn" onclick="adjustPrice({{ i }}, 0.05)">+</button>
+                    </div>
+                    <div class="stepper-input">
+                        <button class="stepper-btn" onclick="adjustQty({{ i }}, -1)">−</button>
+                        <input type="text" class="stepper-value qty" id="qty{{ i }}" value="1">
+                        <button class="stepper-btn" onclick="adjustQty({{ i }}, 1)">+</button>
+                    </div>
+                    <div class="total-display">
+                        <div class="total-label">Total</div>
+                        <div class="total-value" id="totalCost{{ i }}">$0</div>
+                    </div>
+                    <select class="channel-select" id="webhookChannel{{ i }}" title="Select webhook channel">
+                        <option value="">Channel...</option>
+                    </select>
+                    <select class="channel-select" id="tradeType{{ i }}" title="Trade type" style="width: 70px; min-width: 70px;">
+                        <option value="Swing">Swing</option>
+                        <option value="Day">Day</option>
+                        <option value="Scalp">Scalp</option>
+                    </select>
+                    <button class="order-btn buy" onclick="placeOrder({{ i }}, 'BUY')" title="Execute BUY on Broker">BUY</button>
+                    <button class="order-btn sell" onclick="placeOrder({{ i }}, 'SELL')" title="Execute SELL on Broker">SELL</button>
+                    <button class="order-btn webhook" onclick="postWebhookBTO({{ i }})" title="Post BTO to Webhook">BTO</button>
+                    <button class="order-btn webhook-stc" onclick="postWebhookSTC({{ i }})" title="Post STC to Webhook">STC</button>
+                    <button class="clear-row-btn" onclick="clearRow({{ i }})" title="Clear">✕</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        const rowData = {};
+        let expiryCache = {};
+
+        for (let i = 1; i <= 4; i++) {
+            rowData[i] = {
+                type: 'CALL',
+                quote: null,
+                optionId: ''
+            };
+        }
+
+        // Load tracking channels on page load
+        async function loadTrackingChannels() {
+            try {
+                const response = await fetch('/api/channels');
+                const data = await response.json();
+                
+                const select = document.getElementById('trackingChannelSelect');
+                select.innerHTML = '<option value="">Default (GUI Trades)</option>';
+                
+                if (data && Array.isArray(data)) {
+                    data.forEach(channel => {
+                        if (channel.track_enabled || channel.execute_enabled) {
+                            const option = document.createElement('option');
+                            option.value = channel.id;
+                            option.textContent = channel.name;
+                            select.appendChild(option);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading tracking channels:', error);
+            }
+        }
+
+        // Load channels when page loads
+        document.addEventListener('DOMContentLoaded', loadTrackingChannels);
+
+        function setType(row, type) {
+            rowData[row].type = type;
+            const callBtn = document.getElementById(`callBtn${row}`);
+            const putBtn = document.getElementById(`putBtn${row}`);
+            
+            if (type === 'CALL') {
+                callBtn.classList.add('active', 'call');
+                callBtn.classList.remove('put');
+                putBtn.classList.remove('active', 'put', 'call');
+            } else {
+                putBtn.classList.add('active', 'put');
+                putBtn.classList.remove('call');
+                callBtn.classList.remove('active', 'call', 'put');
+            }
+        }
+
+        async function loadExpirations(row) {
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const broker = document.getElementById('brokerSelect').value;
+            console.log(`[OPTIONS] loadExpirations called - row=${row}, symbol=${symbol}, broker=${broker}`);
+            if (!symbol) return;
+
+            const expirySelect = document.getElementById(`expiry${row}`);
+            const cacheKey = `${broker}_${symbol}`;
+            
+            if (expiryCache[cacheKey]) {
+                console.log(`[OPTIONS] Using cached expirations for ${cacheKey}`);
+                populateExpiries(row, expiryCache[cacheKey]);
+                return;
+            }
+
+            expirySelect.innerHTML = `<option value="">Loading from ${broker}...</option>`;
+            
+            try {
+                console.log(`[OPTIONS] Fetching expirations from /api/options/expirations?symbol=${symbol}&broker=${broker}`);
+                const response = await fetch(`/api/options/expirations?symbol=${symbol}&broker=${broker}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                console.log(`[OPTIONS] Response status=${response.status}:`, data);
+                
+                if (!response.ok) {
+                    console.error(`[OPTIONS] API error: ${data.error || response.status}`);
+                    expirySelect.innerHTML = `<option value="">Error: ${data.error || 'API failed'}</option>`;
+                    return;
+                }
+                
+                if (data.error) {
+                    console.error(`[OPTIONS] Error from API: ${data.error}`);
+                    expirySelect.innerHTML = `<option value="">Error: ${data.error}</option>`;
+                    return;
+                }
+                
+                if (data.expirations && data.expirations.length > 0) {
+                    expiryCache[cacheKey] = data.expirations;
+                    populateExpiries(row, data.expirations);
+                } else {
+                    expirySelect.innerHTML = '<option value="">No expirations found</option>';
+                }
+            } catch (error) {
+                console.error('[OPTIONS] Error loading expirations:', error);
+                expirySelect.innerHTML = '<option value="">Error loading</option>';
+            }
+        }
+
+        function populateExpiries(row, expirations) {
+            const expirySelect = document.getElementById(`expiry${row}`);
+            expirySelect.innerHTML = '<option value="">Expiry...</option>';
+            
+            expirations.forEach(exp => {
+                const option = document.createElement('option');
+                if (typeof exp === 'object' && exp.date) {
+                    option.value = exp.date;
+                    option.textContent = exp.label || exp.date;
+                } else {
+                    option.value = exp;
+                    const date = new Date(exp + 'T12:00:00');
+                    option.textContent = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                }
+                expirySelect.appendChild(option);
+            });
+        }
+
+        let strikeCache = {};
+
+        async function loadStrikes(row) {
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const broker = document.getElementById('brokerSelect').value;
+            const strikeSelect = document.getElementById(`strike${row}`);
+            
+            if (!symbol || !expiry) {
+                strikeSelect.innerHTML = '<option value="">Strike...</option>';
+                return;
+            }
+            
+            const cacheKey = `${broker}_${symbol}_${expiry}`;
+            
+            if (strikeCache[cacheKey]) {
+                populateStrikes(row, strikeCache[cacheKey].strikes, strikeCache[cacheKey].underlying);
+                return;
+            }
+            
+            strikeSelect.innerHTML = '<option value="">Loading strikes...</option>';
+            
+            try {
+                const response = await fetch(`/api/options/chain?symbol=${symbol}&expiry=${expiry}&broker=${broker}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    strikeSelect.innerHTML = `<option value="">Error: ${data.error}</option>`;
+                    return;
+                }
+                
+                const strikes = new Set();
+                if (data.calls) data.calls.forEach(opt => strikes.add(opt.strike));
+                if (data.puts) data.puts.forEach(opt => strikes.add(opt.strike));
+                
+                const sortedStrikes = Array.from(strikes).sort((a, b) => a - b);
+                let underlyingPrice = data.stock_price || data.underlying_price || data.atm_strike || null;
+                
+                // If no stock price, estimate ATM from options with highest open interest or volume
+                if (!underlyingPrice && sortedStrikes.length > 0) {
+                    let bestOI = 0;
+                    let bestStrike = sortedStrikes[Math.floor(sortedStrikes.length / 2)]; // Default to middle
+                    const allOptions = [...(data.calls || []), ...(data.puts || [])];
+                    allOptions.forEach(opt => {
+                        const oi = opt.open_interest || 0;
+                        const vol = opt.volume || 0;
+                        if (oi + vol > bestOI) {
+                            bestOI = oi + vol;
+                            bestStrike = opt.strike;
+                        }
+                    });
+                    underlyingPrice = bestStrike;
+                    console.log(`[OPTIONS] Estimated ATM from liquidity: $${bestStrike} (OI+Vol=${bestOI})`);
+                }
+                console.log(`[OPTIONS] Loaded ${sortedStrikes.length} strikes, stock_price=${data.stock_price}, estimated_atm=${underlyingPrice}`);
+                
+                if (sortedStrikes.length > 0) {
+                    strikeCache[cacheKey] = { strikes: sortedStrikes, underlying: underlyingPrice };
+                    populateStrikes(row, sortedStrikes, underlyingPrice);
+                } else {
+                    strikeSelect.innerHTML = '<option value="">No strikes found</option>';
+                }
+            } catch (error) {
+                console.error('[OPTIONS] Error loading strikes:', error);
+                strikeSelect.innerHTML = '<option value="">Error loading</option>';
+            }
+        }
+
+        function populateStrikes(row, strikes, underlyingPrice = null) {
+            const strikeSelect = document.getElementById(`strike${row}`);
+            strikeSelect.innerHTML = '<option value="">Strike...</option>';
+            
+            let atmIndex = 0;
+            if (underlyingPrice && strikes.length > 0) {
+                let minDiff = Infinity;
+                strikes.forEach((strike, idx) => {
+                    const diff = Math.abs(strike - underlyingPrice);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        atmIndex = idx;
+                    }
+                });
+            }
+            
+            strikes.forEach((strike, idx) => {
+                const option = document.createElement('option');
+                option.value = strike;
+                const isATM = (idx === atmIndex && underlyingPrice);
+                option.textContent = isATM ? `$${strike.toFixed(strike % 1 === 0 ? 0 : 2)} (ATM)` : `$${strike.toFixed(strike % 1 === 0 ? 0 : 2)}`;
+                strikeSelect.appendChild(option);
+            });
+            
+            if (underlyingPrice && strikes.length > 0) {
+                strikeSelect.selectedIndex = atmIndex + 1;
+            }
+        }
+
+        for (let i = 1; i <= 4; i++) {
+            document.getElementById(`symbol${i}`).addEventListener('blur', () => loadExpirations(i));
+            document.getElementById(`symbol${i}`).addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') loadExpirations(i);
+            });
+            document.getElementById(`expiry${i}`).addEventListener('change', () => loadStrikes(i));
+        }
+
+        document.getElementById('brokerSelect').addEventListener('change', () => {
+            expiryCache = {};
+            strikeCache = {};
+            for (let i = 1; i <= 4; i++) {
+                const symbol = document.getElementById(`symbol${i}`).value.trim();
+                if (symbol) {
+                    loadExpirations(i);
+                }
+                document.getElementById(`strike${i}`).innerHTML = '<option value="">Strike...</option>';
+            }
+        });
+
+        async function loadQuote(row) {
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = document.getElementById(`strike${row}`).value.trim();
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const type = rowData[row].type;
+            const broker = document.getElementById('brokerSelect').value;
+
+            if (!symbol || !strike || !expiry) {
+                showToast('Please fill in Symbol, Strike, and Expiry', 'error');
+                return;
+            }
+
+            const quoteSection = document.getElementById(`quoteSection${row}`);
+            quoteSection.innerHTML = `<span class="quote-placeholder">Loading from ${broker}...</span>`;
+
+            try {
+                const response = await fetch('/api/options/strike-quote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        strike: parseFloat(strike),
+                        expiry: expiry,
+                        option_type: type,
+                        broker: broker
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    quoteSection.innerHTML = `<span class="quote-placeholder" style="color: var(--danger);">${data.error}</span>`;
+                    return;
+                }
+
+                rowData[row].quote = data;
+                rowData[row].optionId = data.option_id || '';
+
+                const optionRow = document.getElementById(`optionRow${row}`);
+                optionRow.classList.add('has-data');
+
+                const dataSource = data.data_source || 'Unknown';
+                const sourceClass = dataSource === 'Webull' ? 'webull' : 'alpaca';
+                
+                quoteSection.innerHTML = `
+                    <div class="quote-box clickable" onclick="setPrice(${row}, 'bid')" title="Click to use Bid price">
+                        <div class="quote-label">BID</div>
+                        <div class="quote-value bid">$${data.bid.toFixed(2)}</div>
+                    </div>
+                    <div class="quote-box clickable" onclick="setPrice(${row}, 'ask')" title="Click to use Ask price">
+                        <div class="quote-label">ASK</div>
+                        <div class="quote-value ask">$${data.ask.toFixed(2)}</div>
+                    </div>
+                    <div class="quote-box clickable selected mid-selected" onclick="setPrice(${row}, 'mid')" title="Click to use Mid price">
+                        <div class="quote-label">MID</div>
+                        <div class="quote-value mid">$${data.mid.toFixed(2)}</div>
+                    </div>
+                    <div class="greeks-inline">
+                        <div class="greek-item"><span class="greek-label">IV:</span><span class="greek-value">${data.iv ? (data.iv * 100).toFixed(1) + '%' : 'N/A'}</span></div>
+                        <div class="greek-item"><span class="greek-label">Δ:</span><span class="greek-value">${data.delta ? data.delta.toFixed(3) : 'N/A'}</span></div>
+                    </div>
+                    <span class="data-source-badge ${sourceClass}">${dataSource}</span>
+                `;
+
+                document.getElementById(`limitPrice${row}`).value = data.mid.toFixed(2);
+                document.getElementById(`divider${row}`).style.display = 'block';
+                document.getElementById(`orderSection${row}`).style.display = 'flex';
+                updateTotal(row);
+
+            } catch (error) {
+                console.error('Error loading quote:', error);
+                quoteSection.innerHTML = `<span class="quote-placeholder" style="color: var(--danger);">Error: ${error.message}</span>`;
+            }
+        }
+
+        // Auto-refresh quotes - rate varies by broker to respect API limits
+        const brokerRefreshRates = {
+            'webull': 3000,           // 3 sec - Webull: 10 req/30 sec limit
+            'webull_paper': 3000,
+            'alpaca_live': 1000,      // 1 sec - Alpaca: 200 req/min
+            'alpaca_paper': 1000,
+            'tastytrade_paper': 2000, // 2 sec - Tastytrade: ~60 req/min estimated
+            'tastytrade_live': 2000,
+            'ibkr': 1000,             // 1 sec - IBKR: 50 req/sec
+            'robinhood': 2000,        // 2 sec - conservative default
+            'trading212': 6000,      // 6 sec - T212: 1 req/5s strict limit
+            'trading212_paper': 6000
+        };
+        let refreshTimer = null;
+        
+        function getRefreshInterval() {
+            const broker = document.getElementById('brokerSelect').value.toLowerCase();
+            return brokerRefreshRates[broker] || 2000; // Default 2 sec
+        }
+        
+        async function refreshQuoteSilent(row) {
+            const data = rowData[row];
+            if (!data.quote) return; // Only refresh if already loaded
+            
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = document.getElementById(`strike${row}`).value.trim();
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const type = data.type;
+            const broker = document.getElementById('brokerSelect').value;
+            
+            if (!symbol || !strike || !expiry) return;
+            
+            try {
+                const response = await fetch('/api/options/strike-quote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        strike: parseFloat(strike),
+                        expiry: expiry,
+                        option_type: type,
+                        broker: broker
+                    })
+                });
+                
+                const newData = await response.json();
+                if (newData.error) return;
+                
+                // Update stored quote data
+                rowData[row].quote = newData;
+                
+                // Update displayed prices (preserve current selection)
+                const quoteSection = document.getElementById(`quoteSection${row}`);
+                const bidEl = quoteSection.querySelector('.quote-value.bid');
+                const askEl = quoteSection.querySelector('.quote-value.ask');
+                const midEl = quoteSection.querySelector('.quote-value.mid');
+                
+                if (bidEl) bidEl.textContent = '$' + newData.bid.toFixed(2);
+                if (askEl) askEl.textContent = '$' + newData.ask.toFixed(2);
+                if (midEl) midEl.textContent = '$' + newData.mid.toFixed(2);
+                
+                // Flash animation to show update
+                quoteSection.style.transition = 'opacity 0.2s';
+                quoteSection.style.opacity = '0.7';
+                setTimeout(() => { quoteSection.style.opacity = '1'; }, 200);
+                
+            } catch (error) {
+                console.error('Silent refresh error:', error);
+            }
+        }
+        
+        function startAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            const interval = getRefreshInterval();
+            refreshTimer = setInterval(() => {
+                for (let i = 1; i <= 4; i++) {
+                    if (rowData[i] && rowData[i].quote) {
+                        refreshQuoteSilent(i);
+                    }
+                }
+            }, interval);
+            console.log(`Auto-refresh started: ${interval}ms interval`);
+        }
+        
+        // Start auto-refresh when page loads
+        startAutoRefresh();
+        
+        // Restart auto-refresh when broker changes (different rate limits)
+        document.getElementById('brokerSelect').addEventListener('change', startAutoRefresh);
+
+        function setPrice(row, priceType) {
+            const data = rowData[row];
+            if (!data.quote) return;
+            
+            let price;
+            if (priceType === 'bid') price = data.quote.bid;
+            else if (priceType === 'ask') price = data.quote.ask;
+            else price = data.quote.mid;
+            
+            document.getElementById(`limitPrice${row}`).value = price.toFixed(2);
+            updateTotal(row);
+            
+            const boxes = document.querySelectorAll(`#quoteSection${row} .quote-box.clickable`);
+            boxes.forEach(box => {
+                box.classList.remove('selected', 'bid-selected', 'ask-selected', 'mid-selected');
+            });
+            const selectedBox = document.querySelectorAll(`#quoteSection${row} .quote-box.clickable`)[priceType === 'bid' ? 0 : priceType === 'ask' ? 1 : 2];
+            if (selectedBox) {
+                selectedBox.classList.add('selected', `${priceType}-selected`);
+            }
+        }
+
+        function adjustPrice(row, delta) {
+            const input = document.getElementById(`limitPrice${row}`);
+            let value = parseFloat(input.value) || 0;
+            value = Math.max(0.01, value + delta);
+            input.value = value.toFixed(2);
+            updateTotal(row);
+            
+            const boxes = document.querySelectorAll(`#quoteSection${row} .quote-box.clickable`);
+            boxes.forEach(box => {
+                box.classList.remove('selected', 'bid-selected', 'ask-selected', 'mid-selected');
+            });
+        }
+
+        function adjustQty(row, delta) {
+            const input = document.getElementById(`qty${row}`);
+            let value = parseInt(input.value) || 1;
+            value = Math.max(1, value + delta);
+            input.value = value;
+            updateTotal(row);
+        }
+
+        function updateTotal(row) {
+            const price = parseFloat(document.getElementById(`limitPrice${row}`).value) || 0;
+            const qty = parseInt(document.getElementById(`qty${row}`).value) || 1;
+            const total = price * qty * 100;
+            document.getElementById(`totalCost${row}`).textContent = '$' + total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        }
+
+        for (let i = 1; i <= 4; i++) {
+            document.getElementById(`limitPrice${i}`).addEventListener('input', () => updateTotal(i));
+            document.getElementById(`qty${i}`).addEventListener('input', () => updateTotal(i));
+        }
+
+        function clearRow(row) {
+            document.getElementById(`symbol${row}`).value = '';
+            document.getElementById(`strike${row}`).innerHTML = '<option value="">Strike...</option>';
+            document.getElementById(`expiry${row}`).innerHTML = '<option value="">Expiry...</option>';
+            document.getElementById(`quoteSection${row}`).innerHTML = '<span class="quote-placeholder">Enter details & click Load</span>';
+            document.getElementById(`divider${row}`).style.display = 'none';
+            document.getElementById(`orderSection${row}`).style.display = 'none';
+            document.getElementById(`optionRow${row}`).classList.remove('has-data');
+            setType(row, 'CALL');
+            rowData[row] = { type: 'CALL', quote: null, optionId: '' };
+        }
+
+        async function placeOrder(row, side) {
+            const data = rowData[row];
+            if (!data.quote) {
+                showToast('Please load a quote first', 'error');
+                return;
+            }
+
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = parseFloat(document.getElementById(`strike${row}`).value);
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const price = parseFloat(document.getElementById(`limitPrice${row}`).value);
+            const qty = parseInt(document.getElementById(`qty${row}`).value);
+            const broker = document.getElementById('brokerSelect').value;
+            const trackingChannel = document.getElementById('trackingChannelSelect').value;
+
+            try {
+                const response = await fetch('/api/options/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        strike: strike,
+                        expiry: expiry,
+                        option_type: data.type,
+                        side: side,
+                        quantity: qty,
+                        price: price,
+                        option_id: data.optionId,
+                        broker: broker,
+                        tracking_channel_id: trackingChannel || null
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const trackMsg = result.tracked ? ` (Tracked)` : '';
+                    showToast(`${side} order placed: ${qty}x ${symbol} $${strike}${data.type[0]} @ $${price}${trackMsg}`, 'success');
+                } else {
+                    showToast(result.error || 'Order failed', 'error');
+                }
+            } catch (error) {
+                showToast('Order failed: ' + error.message, 'error');
+            }
+        }
+
+        async function sendToDiscord(row, action) {
+            const data = rowData[row];
+            if (!data.quote) {
+                showToast('Please load a quote first', 'error');
+                return;
+            }
+
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = parseFloat(document.getElementById(`strike${row}`).value);
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const price = parseFloat(document.getElementById(`limitPrice${row}`).value);
+            const qty = parseInt(document.getElementById(`qty${row}`).value);
+            const optionType = data.type[0].toLowerCase(); // 'c' or 'p'
+
+            // Format expiry: "2025-12-19" → "12/19"
+            let expiryFormatted = expiry;
+            if (expiry && expiry.includes('-')) {
+                const parts = expiry.split('-');
+                if (parts.length === 3) {
+                    expiryFormatted = `${parts[1]}/${parts[2]}`;
+                }
+            }
+
+            // Build signal: "BTO 10 NKE 70c 12/19 @ 1.17"
+            const signal = `${action} ${qty} ${symbol} ${Math.round(strike)}${optionType} ${expiryFormatted} @ ${price.toFixed(2)}`;
+
+            try {
+                const response = await fetch('/api/discord/send-signal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ signal: signal })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`Signal sent to Discord: ${signal}`, 'success');
+                } else {
+                    showToast(result.error || 'Failed to send to Discord', 'error');
+                }
+            } catch (error) {
+                showToast('Discord send failed: ' + error.message, 'error');
+            }
+        }
+
+        // ============ WEBHOOK CHANNELS FUNCTIONS ============
+        
+        let webhookChannels = [];
+        
+        async function loadWebhookChannels() {
+            try {
+                const response = await fetch('/api/webhook/channels');
+                const data = await response.json();
+                
+                if (data.success && data.channels) {
+                    webhookChannels = data.channels;
+                    renderWebhookChannels();
+                    updateChannelDropdowns();
+                }
+            } catch (error) {
+                console.error('Error loading webhook channels:', error);
+            }
+        }
+        
+        function renderWebhookChannels() {
+            const container = document.getElementById('webhookChannelsList');
+            
+            if (webhookChannels.length === 0) {
+                container.innerHTML = '<div class="webhook-channels-empty">No webhook channels configured. Add one to start posting signals.</div>';
+                return;
+            }
+            
+            container.innerHTML = webhookChannels.map(channel => `
+                <div class="webhook-channel-item" data-id="${channel.id}">
+                    <div class="webhook-channel-color" style="background: ${channel.color || '#FF6B35'}"></div>
+                    <div class="webhook-channel-info">
+                        <div class="webhook-channel-name">${escapeHtml(channel.name)}</div>
+                        <div class="webhook-channel-bot">${escapeHtml(channel.bot_name || 'Trade Echo Bot')}</div>
+                    </div>
+                    <div class="webhook-channel-actions">
+                        <button class="action-btn" onclick="testWebhookChannel(${channel.id})">Test</button>
+                        <button class="action-btn delete" onclick="deleteWebhookChannel(${channel.id})">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function updateChannelDropdowns() {
+            for (let i = 1; i <= 4; i++) {
+                const select = document.getElementById(`webhookChannel${i}`);
+                if (select) {
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">Channel...</option>';
+                    webhookChannels.forEach(channel => {
+                        const option = document.createElement('option');
+                        option.value = channel.id;
+                        option.textContent = channel.name;
+                        select.appendChild(option);
+                    });
+                    if (currentValue && webhookChannels.find(c => c.id == currentValue)) {
+                        select.value = currentValue;
+                    }
+                }
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function toggleAddChannelForm() {
+            const form = document.getElementById('webhookAddForm');
+            form.classList.toggle('show');
+            if (form.classList.contains('show')) {
+                document.getElementById('newChannelName').focus();
+            }
+        }
+        
+        async function addWebhookChannel() {
+            const name = document.getElementById('newChannelName').value.trim();
+            const webhookUrl = document.getElementById('newChannelUrl').value.trim();
+            const botName = document.getElementById('newChannelBot').value.trim() || 'Trade Echo Bot';
+            const color = document.getElementById('newChannelColor').value;
+            
+            if (!name) {
+                showToast('Please enter a channel name', 'error');
+                return;
+            }
+            if (!webhookUrl) {
+                showToast('Please enter a webhook URL', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/webhook/channels', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, webhook_url: webhookUrl, bot_name: botName, color })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(`Channel "${name}" added successfully`, 'success');
+                    document.getElementById('newChannelName').value = '';
+                    document.getElementById('newChannelUrl').value = '';
+                    document.getElementById('newChannelBot').value = 'Trade Echo Bot';
+                    document.getElementById('newChannelColor').value = '#FF6B35';
+                    toggleAddChannelForm();
+                    loadWebhookChannels();
+                } else {
+                    showToast(result.error || 'Failed to add channel', 'error');
+                }
+            } catch (error) {
+                showToast('Failed to add channel: ' + error.message, 'error');
+            }
+        }
+        
+        async function testWebhookChannel(channelId) {
+            try {
+                const response = await fetch(`/api/webhook/channels/${channelId}/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Webhook test successful!', 'success');
+                } else {
+                    showToast(result.message || result.error || 'Webhook test failed', 'error');
+                }
+            } catch (error) {
+                showToast('Webhook test failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function deleteWebhookChannel(channelId) {
+            if (!confirm('Are you sure you want to delete this webhook channel?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/webhook/channels/${channelId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Channel deleted successfully', 'success');
+                    loadWebhookChannels();
+                } else {
+                    showToast(result.error || 'Failed to delete channel', 'error');
+                }
+            } catch (error) {
+                showToast('Failed to delete channel: ' + error.message, 'error');
+            }
+        }
+        
+        function getSelectedChannel(row) {
+            const select = document.getElementById(`webhookChannel${row}`);
+            const channelId = select ? select.value : '';
+            if (!channelId) return null;
+            return webhookChannels.find(c => c.id == channelId);
+        }
+        
+        async function postWebhookBTO(row) {
+            const data = rowData[row];
+            if (!data.quote) {
+                showToast('Please load a quote first', 'error');
+                return;
+            }
+            
+            const channel = getSelectedChannel(row);
+            if (!channel) {
+                showToast('Please select a webhook channel first', 'error');
+                return;
+            }
+            
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = parseFloat(document.getElementById(`strike${row}`).value);
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const price = parseFloat(document.getElementById(`limitPrice${row}`).value);
+            const qty = parseInt(document.getElementById(`qty${row}`).value);
+            const callPut = data.type === 'CALL' ? 'C' : 'P';
+            
+            let expiryFormatted = expiry;
+            if (expiry && expiry.includes('-')) {
+                const parts = expiry.split('-');
+                if (parts.length === 3) {
+                    expiryFormatted = `${parts[1]}/${parts[2]}`;
+                }
+            }
+            
+            const tradeType = document.getElementById(`tradeType${row}`).value || 'Swing';
+            
+            try {
+                const response = await fetch('/api/webhook/post_bto', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        webhook_url: channel.webhook_url,
+                        symbol: symbol,
+                        strike: strike,
+                        expiry: expiryFormatted,
+                        call_put: callPut,
+                        qty: qty,
+                        price: price,
+                        trade_type: tradeType,
+                        bot_name: channel.bot_name || 'Trade Echo Bot'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(`BTO posted to ${channel.name}: ${qty}x ${symbol} $${strike}${callPut} @ $${price.toFixed(2)}`, 'success');
+                } else {
+                    showToast(result.error || 'Failed to post BTO', 'error');
+                }
+            } catch (error) {
+                showToast('BTO post failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function postWebhookSTC(row) {
+            const data = rowData[row];
+            if (!data.quote) {
+                showToast('Please load a quote first', 'error');
+                return;
+            }
+            
+            const channel = getSelectedChannel(row);
+            if (!channel) {
+                showToast('Please select a webhook channel first', 'error');
+                return;
+            }
+            
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = parseFloat(document.getElementById(`strike${row}`).value);
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const closePrice = parseFloat(document.getElementById(`limitPrice${row}`).value);
+            const qty = parseInt(document.getElementById(`qty${row}`).value);
+            const callPut = data.type === 'CALL' ? 'C' : 'P';
+            
+            let expiryFormatted = expiry;
+            if (expiry && expiry.includes('-')) {
+                const parts = expiry.split('-');
+                if (parts.length === 3) {
+                    expiryFormatted = `${parts[1]}/${parts[2]}`;
+                }
+            }
+            
+            const tradeType = document.getElementById(`tradeType${row}`).value || 'Swing';
+            
+            try {
+                const response = await fetch('/api/webhook/post_stc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        webhook_url: channel.webhook_url,
+                        symbol: symbol,
+                        strike: strike,
+                        expiry: expiryFormatted,
+                        call_put: callPut,
+                        qty: qty,
+                        close_price: closePrice,
+                        trade_type: tradeType,
+                        bot_name: channel.bot_name || 'Trade Echo Bot'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const pnlStr = result.pnl ? ` | P&L: ${result.pnl.pnl_percent >= 0 ? '+' : ''}${result.pnl.pnl_percent.toFixed(1)}%` : '';
+                    showToast(`STC posted to ${channel.name}: ${qty}x ${symbol} $${strike}${callPut} @ $${closePrice.toFixed(2)}${pnlStr}`, 'success');
+                } else {
+                    showToast(result.error || result.message || 'Failed to post STC - no matching open position', 'error');
+                }
+            } catch (error) {
+                showToast('STC post failed: ' + error.message, 'error');
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', loadWebhookChannels);
+
+        function showToast(message, type) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 4000);
+        }
+    </script>
+</body>
+</html>

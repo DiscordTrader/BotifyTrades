@@ -1,0 +1,1081 @@
+{% extends "base.html" %}
+
+{% block title %}PNL Tracker - BotifyTrades{% endblock %}
+
+{% block content %}
+<div id="signal-pnl-view">
+
+<!-- Hero Stats Card -->
+<div class="pnl-hero-wrap">
+    <div class="pnl-hero">
+        <div class="pnl-hero-glow"></div>
+        <div class="pnl-hero-inner">
+            <div class="pnl-hero-top">
+                <div class="pnl-hero-title">
+                    <div class="pnl-hero-icon-wrap">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#heroGrad)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <defs><linearGradient id="heroGrad" x1="0" y1="0" x2="24" y2="24"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#7c3aed"/></linearGradient></defs>
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    </div>
+                    <div>
+                        <h1 class="pnl-hero-h1">P&L Tracker</h1>
+                        <span class="pnl-hero-period" id="dateRangeDisplay">All Time</span>
+                    </div>
+                </div>
+                <div class="pnl-hero-actions">
+                    <button onclick="loadPNLData()" class="pnl-btn pnl-btn-primary" title="Refresh Data">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    </button>
+                    <button onclick="showPurgeModal()" class="pnl-btn pnl-btn-warn" title="Selective Purge">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                    </button>
+                    <button onclick="resetPNLData()" class="pnl-btn pnl-btn-danger" title="Reset All Data">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="pnl-hero-metrics">
+                <div class="pnl-kpi pnl-kpi-primary">
+                    <span class="pnl-kpi-label">Total P/L</span>
+                    <span class="pnl-kpi-value" id="totalPNL">$0.00</span>
+                </div>
+                <div class="pnl-kpi">
+                    <span class="pnl-kpi-label">Positions</span>
+                    <span class="pnl-kpi-value pnl-kpi-white" id="totalPositions">0</span>
+                </div>
+                <div class="pnl-kpi">
+                    <span class="pnl-kpi-label">Avg Return</span>
+                    <span class="pnl-kpi-value" id="avgReturn">0%</span>
+                </div>
+                <div class="pnl-kpi">
+                    <span class="pnl-kpi-label">Win Rate</span>
+                    <span class="pnl-kpi-value pnl-kpi-white" id="winRate">—</span>
+                </div>
+                <div class="pnl-kpi">
+                    <span class="pnl-kpi-label">Avg Speed</span>
+                    <span class="pnl-kpi-value pnl-kpi-white" id="avgSpeed">—</span>
+                </div>
+                <div class="pnl-kpi pnl-kpi-dir" id="directionBreakdown" style="display:none;">
+                    <span class="pnl-kpi-label">By Type</span>
+                    <div id="dirBreakdownContent" class="pnl-dir-row"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="pnl-filters">
+    <div class="pnl-filter-group">
+        <select id="dateFilter" class="pnl-select">
+            <option value="all">All Time</option>
+            <option value="today">Today</option>
+            <option value="7days">Last 7 Days</option>
+            <option value="30days">Last 30 Days</option>
+            <option value="yearly">This Year</option>
+            <option value="custom">Custom Range</option>
+        </select>
+        <div id="customDateRange" style="display:none;gap:6px;align-items:center;">
+            <input type="date" id="startDate" class="pnl-input">
+            <span style="color:#555;">–</span>
+            <input type="date" id="endDate" class="pnl-input">
+        </div>
+    </div>
+    <div class="pnl-filter-group">
+        <select id="channelFilter" class="pnl-select" style="min-width:160px;">
+            <option value="">All Channels</option>
+        </select>
+        <select id="userFilter" class="pnl-select" style="min-width:130px;">
+            <option value="">All Users</option>
+        </select>
+        <select id="statusFilter" class="pnl-select">
+            <option value="">All Status</option>
+            <option value="OPEN">Open</option>
+            <option value="PARTIAL">Partial</option>
+            <option value="CLOSED">Closed</option>
+        </select>
+    </div>
+</div>
+
+<!-- Selective Purge Modal -->
+<div id="purgeModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: #2C2C2E; border-radius: 16px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #fff;">Selective Data Purge</h3>
+            <button onclick="hidePurgeModal()" style="background: none; border: none; color: #888; font-size: 24px; cursor: pointer;">&times;</button>
+        </div>
+        <div style="background: #1C1C1E; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+            <h4 style="color: #ff8800; margin: 0 0 12px 0;">Purge by Date</h4>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+                <input type="date" id="purgeStartDate" class="pnl-input">
+                <span style="color: #888;">to</span>
+                <input type="date" id="purgeEndDate" class="pnl-input">
+            </div>
+            <button onclick="purgeByDate()" style="padding: 8px 16px; background: #ff4444; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%;">
+                Delete Data for Selected Dates
+            </button>
+            <div id="datesList" style="margin-top: 12px; max-height: 150px; overflow-y: auto;"></div>
+        </div>
+        <div style="background: #1C1C1E; border-radius: 12px; padding: 16px;">
+            <h4 style="color: #ff8800; margin: 0 0 12px 0;">Purge by Person</h4>
+            <select id="purgeAuthorSelect" style="width: 100%; padding: 10px; border-radius: 8px; background: #3A3A3C; color: #fff; border: 1px solid #555; font-size: 14px; margin-bottom: 12px;">
+                <option value="">Select a person to remove...</option>
+            </select>
+            <button onclick="purgeByAuthor()" style="padding: 8px 16px; background: #ff4444; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%;">
+                Delete All Data for Selected Person
+            </button>
+            <div id="authorsList" style="margin-top: 12px; max-height: 200px; overflow-y: auto;"></div>
+        </div>
+    </div>
+</div>
+
+<div id="loading" style="text-align: center; padding: 40px; color: #888; display: none;">
+    <div style="font-size: 48px;">⏳</div>
+    <p>Loading PNL data...</p>
+</div>
+
+<div id="pnl-container"></div>
+</div>
+
+
+<style>
+/* ── Hero Card ── */
+@keyframes heroShimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+@keyframes pulseGlow {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
+}
+.pnl-hero-wrap {
+    margin-bottom: 16px;
+    position: relative;
+}
+.pnl-hero {
+    position: relative;
+    border-radius: 20px;
+    overflow: hidden;
+    background: #0d0f14;
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow:
+        0 1px 0 0 rgba(255,255,255,0.03) inset,
+        0 20px 60px -12px rgba(0,0,0,0.5),
+        0 0 0 1px rgba(0,0,0,0.3);
+}
+.pnl-hero-glow {
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    background:
+        radial-gradient(ellipse 60% 50% at 15% 0%, rgba(0,212,255,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 60% at 85% 100%, rgba(124,58,237,0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+}
+.pnl-hero-inner {
+    position: relative;
+    z-index: 1;
+    padding: 24px 28px 22px;
+}
+.pnl-hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+.pnl-hero-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.pnl-hero-icon-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(0,212,255,0.1) 0%, rgba(124,58,237,0.1) 100%);
+    border: 1px solid rgba(0,212,255,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.pnl-hero-h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.3px;
+    line-height: 1.3;
+}
+.pnl-hero-period {
+    font-size: 11px;
+    color: #636366;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+}
+.pnl-hero-actions {
+    display: flex;
+    gap: 6px;
+}
+.pnl-btn {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+}
+.pnl-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+.pnl-btn:active { transform: translateY(0); }
+.pnl-btn-primary { background: rgba(0,212,255,0.08); color: #00d4ff; }
+.pnl-btn-primary:hover { background: rgba(0,212,255,0.15); border-color: rgba(0,212,255,0.2); }
+.pnl-btn-warn { background: rgba(255,159,10,0.08); color: #FF9F0A; }
+.pnl-btn-warn:hover { background: rgba(255,159,10,0.15); border-color: rgba(255,159,10,0.2); }
+.pnl-btn-danger { background: rgba(255,59,48,0.08); color: #FF453A; }
+.pnl-btn-danger:hover { background: rgba(255,59,48,0.15); border-color: rgba(255,59,48,0.2); }
+
+.pnl-hero-metrics {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.pnl-kpi {
+    flex: 1;
+    min-width: 110px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+}
+.pnl-kpi::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%);
+}
+.pnl-kpi:hover {
+    background: rgba(255,255,255,0.035);
+    border-color: rgba(255,255,255,0.07);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px -8px rgba(0,0,0,0.3);
+}
+.pnl-kpi-primary {
+    background: linear-gradient(135deg, rgba(0,212,255,0.06) 0%, rgba(124,58,237,0.04) 100%);
+    border-color: rgba(0,212,255,0.1);
+    min-width: 140px;
+    flex: 1.3;
+}
+.pnl-kpi-primary::before {
+    background: linear-gradient(90deg, transparent 0%, rgba(0,212,255,0.2) 50%, transparent 100%);
+}
+.pnl-kpi-label {
+    font-size: 10px;
+    color: #555;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.pnl-kpi-value {
+    font-size: 24px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.8px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+.pnl-kpi-white { color: rgba(255,255,255,0.85); }
+.pnl-kpi-dir {
+    flex: 1.2;
+    justify-content: space-between;
+}
+.pnl-dir-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.pnl-dir-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    letter-spacing: -0.2px;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+}
+.pnl-dir-pill:hover {
+    transform: scale(1.05);
+}
+
+/* ── Filters ── */
+.pnl-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 10px 16px;
+    background: #1C1C1E;
+    border: 1px solid #2C2C2E;
+    border-radius: 12px;
+    flex-wrap: wrap;
+}
+.pnl-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.pnl-select, .pnl-input {
+    padding: 7px 12px;
+    border-radius: 8px;
+    background: #2C2C2E;
+    color: #fff;
+    border: 1px solid #3A3A3C;
+    font-size: 13px;
+    transition: border-color 0.2s;
+    outline: none;
+}
+.pnl-select:focus, .pnl-input:focus {
+    border-color: #00d4ff;
+}
+
+/* ── Position Cards ── */
+.position-card {
+    background: #1C1C1E;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    border-left: 3px solid #2C2C2E;
+    transition: all 0.2s;
+}
+.position-card.profit { border-left-color: #30D158; }
+.position-card.loss { border-left-color: #FF453A; }
+.position-header {
+    padding: 14px 20px;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr auto;
+    gap: 16px;
+    align-items: center;
+    transition: background 0.15s;
+}
+.position-header:hover { background: #252528; }
+.position-header .col { color: #fff; }
+.position-header .label {
+    font-size: 10px;
+    color: #636366;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 3px;
+}
+.position-header .value { font-size: 14px; font-weight: 600; }
+.profit-text { color: #30D158 !important; }
+.loss-text { color: #FF453A !important; }
+.neutral-text { color: #FF9F0A !important; }
+.closures-detail {
+    display: none;
+    background: #141416;
+    padding: 0;
+    border-top: 1px solid #2C2C2E;
+}
+.closures-detail.expanded { display: block; }
+.closure-row {
+    display: grid;
+    grid-template-columns: 0.5fr 1fr 1fr 1fr 1fr 1fr;
+    gap: 16px;
+    padding: 10px 20px;
+    border-bottom: 1px solid #1C1C1E;
+    align-items: center;
+    font-size: 13px;
+}
+.closure-row:last-child { border-bottom: none; }
+.closure-row .stc-badge {
+    background: rgba(255,149,0,0.15);
+    color: #FF9F0A;
+    padding: 3px 10px;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 11px;
+    text-align: center;
+}
+.expand-icon { font-size: 18px; transition: transform 0.25s; color: #636366; }
+.expand-icon.expanded { transform: rotate(90deg); }
+.user-badge {
+    background: rgba(0,212,255,0.12);
+    color: #00d4ff;
+    padding: 3px 10px;
+    border-radius: 5px;
+    font-weight: 600;
+    font-size: 11px;
+    display: inline-block;
+}
+.broker-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-left: 4px;
+}
+.broker-badge.webull { background: #00b386; color: #fff; }
+.broker-badge.schwab { background: #0072ce; color: #fff; }
+.broker-badge.alpaca, .broker-badge.alpaca_paper, .broker-badge.alpaca_live { background: #f5c518; color: #1a1a1a; }
+.broker-badge.ibkr, .broker-badge.ibkr_paper { background: #dc143c; color: #fff; }
+.broker-badge.tastytrade, .broker-badge.tastytrade_live, .broker-badge.tastytrade_paper { background: #ff6600; color: #fff; }
+.broker-badge.robinhood { background: #00c805; color: #1a1a1a; }
+.broker-badge.trading212, .broker-badge.trading212_paper { background: #2962ff; color: #fff; }
+.broker-badge.zerodha { background: #387ed1; color: #fff; }
+.broker-badge.upstox { background: #7b1fa2; color: #fff; }
+.broker-badge.dhanq { background: #1565c0; color: #fff; }
+.status-badge {
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.status-open { background: rgba(0,212,255,0.15); color: #00d4ff; }
+.status-partial { background: rgba(255,159,10,0.15); color: #FF9F0A; }
+.status-closed { background: rgba(48,209,88,0.15); color: #30D158; }
+.aggregate-footer {
+    background: #1C1C1E;
+    padding: 10px 20px;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr auto;
+    gap: 16px;
+    align-items: center;
+    font-weight: 700;
+    font-size: 13px;
+    border-top: 1px solid rgba(0,212,255,0.15);
+}
+.no-data { text-align: center; padding: 60px; color: #636366; }
+.no-data-icon { font-size: 56px; margin-bottom: 12px; opacity: 0.6; }
+.fill-indicator {
+    display: inline-block;
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+    font-weight: 600;
+}
+.fill-indicator.filled { background: rgba(48,209,88,0.12); color: #30D158; }
+.fill-indicator.signal { background: rgba(99,99,102,0.12); color: #8E8E93; }
+@media (max-width: 768px) {
+    .pnl-hero-inner { padding: 16px; }
+    .pnl-hero-metrics { gap: 8px; }
+    .pnl-kpi { min-width: 80px; padding: 12px 14px; }
+    .pnl-kpi-value { font-size: 18px; }
+    .pnl-kpi-primary { flex: 1; min-width: 100px; }
+    .pnl-kpi-dir { display: none; }
+    .position-header { grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; font-size: 12px; }
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let positionsData = [];
+let channelsData = [];
+function formatCurrency(amount) {
+    return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Get date range based on filter selection
+function getDateRange() {
+    const dateFilter = document.getElementById('dateFilter').value;
+    const today = new Date();
+    let startDate = null;
+    let endDate = null;
+    
+    switch(dateFilter) {
+        case 'today':
+            startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+            break;
+        case '7days':
+            startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - 7);
+            endDate = today;
+            break;
+        case '30days':
+            startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - 30);
+            endDate = today;
+            break;
+        case 'yearly':
+            startDate = new Date(today.getFullYear(), 0, 1);
+            endDate = today;
+            break;
+        case 'custom':
+            const startInput = document.getElementById('startDate').value;
+            const endInput = document.getElementById('endDate').value;
+            if (startInput) startDate = new Date(startInput);
+            if (endInput) {
+                endDate = new Date(endInput);
+                endDate.setHours(23, 59, 59);
+            }
+            break;
+        default:
+            return { startDate: null, endDate: null };
+    }
+    
+    return {
+        startDate: startDate ? startDate.toISOString().split('T')[0] : null,
+        endDate: endDate ? endDate.toISOString().split('T')[0] : null
+    };
+}
+
+// Update date range display
+function updateDateRangeDisplay() {
+    const dateFilter = document.getElementById('dateFilter').value;
+    const el = document.getElementById('dateRangeDisplay');
+    const labels = {
+        'all': 'All Time',
+        'today': 'Today',
+        '7days': 'Last 7 Days',
+        '30days': 'Last 30 Days',
+        'yearly': 'This Year',
+        'custom': 'Custom Range'
+    };
+    if (dateFilter === 'custom') {
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+        el.textContent = (start && end) ? `${start} to ${end}` : 'Custom Range';
+    } else {
+        el.textContent = labels[dateFilter] || 'All Time';
+    }
+}
+
+// Toggle custom date inputs visibility
+function toggleCustomDateInputs() {
+    const dateFilter = document.getElementById('dateFilter').value;
+    const customRange = document.getElementById('customDateRange');
+    customRange.style.display = dateFilter === 'custom' ? 'flex' : 'none';
+    updateDateRangeDisplay();
+}
+
+// Load channels for filter
+async function loadChannels() {
+    try {
+        const response = await fetch('/api/channels');
+        const channels = await response.json();
+        const select = document.getElementById('channelFilter');
+        
+        channels.forEach(channel => {
+            const option = document.createElement('option');
+            option.value = channel.id;
+            option.textContent = channel.name;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading channels:', error);
+    }
+}
+
+// Load unique users for filter
+async function loadUsers() {
+    try {
+        const response = await fetch('/api/pnl/users');
+        const data = await response.json();
+        const select = document.getElementById('userFilter');
+        
+        if (data.success && data.users) {
+            data.users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading users:', error);
+    }
+}
+
+let _pnlAutoRefreshTimer = null;
+
+async function loadPNLData() {
+    const channelId = document.getElementById('channelFilter').value;
+    const userFilter = document.getElementById('userFilter').value;
+    const statusFilter = document.getElementById('statusFilter').value;
+    const { startDate, endDate } = getDateRange();
+    const loading = document.getElementById('loading');
+    const container = document.getElementById('pnl-container');
+
+    loading.style.display = 'block';
+    container.innerHTML = '';
+    updateDateRangeDisplay();
+
+    try {
+        let url = '/api/pnl/detailed?';
+        const params = [];
+        if (channelId) params.push(`channel_id=${channelId}`);
+        if (userFilter) params.push(`author=${encodeURIComponent(userFilter)}`);
+        if (statusFilter) params.push(`status=${statusFilter}`);
+        if (startDate) params.push(`start_date=${startDate}`);
+        if (endDate) params.push(`end_date=${endDate}`);
+        params.push(`market=US`);
+        url += params.join('&');
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to load PNL data');
+        }
+
+        positionsData = data.positions;
+        renderPNLData(positionsData);
+        updateSummaryStats(positionsData);
+
+    } catch (error) {
+        console.error('Error loading PNL data:', error);
+        container.innerHTML = `<div class="no-data"><div class="no-data-icon">⚠️</div><p>Error loading PNL data: ${error.message}</p></div>`;
+    } finally {
+        loading.style.display = 'none';
+        _scheduleSummaryRefresh();
+    }
+}
+
+function _scheduleSummaryRefresh() {
+    if (_pnlAutoRefreshTimer) clearTimeout(_pnlAutoRefreshTimer);
+    _pnlAutoRefreshTimer = setTimeout(async () => {
+        try {
+            const channelId = document.getElementById('channelFilter').value;
+            const userFilter = document.getElementById('userFilter').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+            const { startDate, endDate } = getDateRange();
+            let url = '/api/pnl/detailed?';
+            const params = [];
+            if (channelId) params.push(`channel_id=${channelId}`);
+            if (userFilter) params.push(`author=${encodeURIComponent(userFilter)}`);
+            if (statusFilter) params.push(`status=${statusFilter}`);
+            if (startDate) params.push(`start_date=${startDate}`);
+            if (endDate) params.push(`end_date=${endDate}`);
+            params.push(`market=US`);
+            url += params.join('&');
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.success) {
+                positionsData = data.positions;
+                updateSummaryStats(positionsData);
+            }
+        } catch (e) {}
+        _scheduleSummaryRefresh();
+    }, 60000);
+}
+
+function formatHoldTime(days) {
+    if (!days || days <= 0) return '<span style="color: #555; font-size: 11px;">—</span>';
+    let text, color;
+    if (days < 0.003) { text = '< 1m'; color = '#E040FB'; }
+    else if (days < 0.042) { text = Math.round(days * 1440) + 'm'; color = '#E040FB'; }
+    else if (days < 1) {
+        const h = Math.floor(days * 24), m = Math.round((days * 24 - h) * 60);
+        text = h + 'h' + (m > 0 ? ' ' + m + 'm' : ''); color = '#00d4ff';
+    } else if (days < 7) {
+        const d = Math.floor(days), h = Math.round((days - d) * 24);
+        text = d + 'd' + (h > 0 ? ' ' + h + 'h' : ''); color = '#FF9F0A';
+    } else { text = Math.round(days) + 'd'; color = '#30D158'; }
+    return `<span style="background: ${color}20; color: ${color}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${text}</span>`;
+}
+
+function formatLatency(ms) {
+    if (!ms || ms <= 0) return '<span style="color: #555; font-size: 11px;">—</span>';
+    let color = '#10B981';
+    if (ms > 3000) color = '#EF4444';
+    else if (ms > 1500) color = '#F59E0B';
+    const text = ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms';
+    return `<span style="background: ${color}20; color: ${color}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${text}</span>`;
+}
+
+// Render PNL data
+function renderPNLData(positions) {
+    const container = document.getElementById('pnl-container');
+    
+    if (!positions || positions.length === 0) {
+        container.innerHTML = '<div class="no-data"><div class="no-data-icon">📊</div><p>No positions found. Start trading to see PNL data!</p></div>';
+        return;
+    }
+    
+    container.innerHTML = positions.map((pos, index) => {
+        const profitClass = pos.total_pnl > 0 ? 'profit' : (pos.total_pnl < 0 ? 'loss' : '');
+        const profitTextClass = pos.total_pnl > 0 ? 'profit-text' : (pos.total_pnl < 0 ? 'loss-text' : 'neutral-text');
+        const statusClass = `status-${pos.status.toLowerCase()}`;
+        
+        const brokerName = pos.entry_fill_broker || '';
+        const brokerClass = brokerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const entryLabel = pos.has_fill_data ? 'Fill' : 'Signal';
+        const entryIndicatorClass = pos.has_fill_data ? 'filled' : 'signal';
+        
+        return `
+            <div class="position-card ${profitClass}">
+                <div class="position-header" onclick="toggleClosures(${index})">
+                    <div class="col">
+                        <div class="label">Position</div>
+                        <div class="value">${pos.description}</div>
+                        <span class="user-badge">${pos.author}</span>
+                        ${brokerName ? `<span class="broker-badge ${brokerClass}">${brokerName}</span>` : ''}
+                    </div>
+                    <div class="col">
+                        <div class="label">BTO Qty</div>
+                        <div class="value">${pos.bto_qty}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Entry Price</div>
+                        <div class="value">$${pos.entry_price.toFixed(2)} <span class="fill-indicator ${entryIndicatorClass}">${entryLabel}</span></div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Closed Qty</div>
+                        <div class="value">${pos.total_closed_qty} / ${pos.bto_qty}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Total P/L</div>
+                        <div class="value ${profitTextClass}">$${pos.total_pnl.toFixed(2)}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Avg Return</div>
+                        <div class="value ${profitTextClass}">${pos.avg_pnl_percent.toFixed(1)}%</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Hold Time</div>
+                        <div class="value">${formatHoldTime(pos.total_holding_days)}</div>
+                    </div>
+                    <div class="col" title="Signal detected → order submitted (bot reaction time)">
+                        <div class="label">Speed</div>
+                        <div class="value">${formatLatency(pos.latency_ms)}</div>
+                    </div>
+                    <div class="col">
+                        <span class="status-badge ${statusClass}">${pos.status}</span>
+                        <span class="expand-icon" id="expand-${index}">▶</span>
+                    </div>
+                </div>
+                
+                <div class="closures-detail" id="closures-${index}">
+                    ${pos.closures.length > 0 ? `
+                        <div style="padding: 16px 20px; background: #2C2C2E; font-weight: 700; font-size: 13px; color: #8E8E93; text-transform: uppercase;">
+                            Individual STC Closures (${pos.closures.length})
+                        </div>
+                        ${pos.closures.map((closure, cIndex) => {
+                            const cProfitClass = closure.pnl > 0 ? 'profit-text' : (closure.pnl < 0 ? 'loss-text' : 'neutral-text');
+                            const closedDate = new Date(closure.closed_at).toLocaleString();
+                            const exitReason = closure.exit_reason || 'MANUAL';
+                            const reasonColor = exitReason.includes('PT') ? '#30D158' : 
+                                               (exitReason.includes('STOP') ? '#FF453A' : 
+                                               (exitReason.includes('TRAIL') ? '#FF9F0A' :
+                                               (exitReason === 'EMA' ? '#00CED1' :
+                                               (exitReason === 'GIVEBACK' ? '#E040FB' :
+                                               (exitReason === 'RISK' ? '#FF6B6B' : '#8E8E93')))));
+                            const exitLabel = closure.has_fill_data ? 'Fill' : 'Signal';
+                            const exitIndicatorClass = closure.has_fill_data ? 'filled' : 'signal';
+                            const exitBroker = closure.exit_fill_broker || '';
+                            const exitBrokerClass = exitBroker.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            return `
+                                <div class="closure-row">
+                                    <div><span class="stc-badge">STC #${cIndex + 1}</span></div>
+                                    <div style="color: #fff;">Qty: <strong>${closure.stc_qty}</strong></div>
+                                    <div style="color: #fff;">Exit: <strong>$${closure.exit_price.toFixed(2)}</strong> <span class="fill-indicator ${exitIndicatorClass}">${exitLabel}</span>
+                                        ${exitBroker ? `<span class="broker-badge ${exitBrokerClass}" style="margin-left:4px;">${exitBroker}</span>` : ''}
+                                    </div>
+                                    <div class="${cProfitClass}"><strong>$${closure.pnl.toFixed(2)}</strong></div>
+                                    <div class="${cProfitClass}"><strong>${closure.pnl_percent.toFixed(1)}%</strong></div>
+                                    <div><span style="background: ${reasonColor}20; color: ${reasonColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${exitReason}</span></div>
+                                    <div style="color: #8E8E93; font-size: 12px;">${closedDate}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                        
+                        <div class="aggregate-footer">
+                            <div style="color: #00d4ff;">AGGREGATE TOTALS</div>
+                            <div></div>
+                            <div></div>
+                            <div style="color: #fff;">Total Closed: ${pos.total_closed_qty}</div>
+                            <div class="${profitTextClass}">$${pos.total_pnl.toFixed(2)}</div>
+                            <div class="${profitTextClass}">${pos.avg_pnl_percent.toFixed(1)}%</div>
+                            <div></div>
+                            <div></div>
+                        </div>
+                    ` : '<div style="padding: 20px; text-align: center; color: #8E8E93;">No closures yet</div>'}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Toggle closures expansion
+function toggleClosures(index) {
+    const closures = document.getElementById(`closures-${index}`);
+    const icon = document.getElementById(`expand-${index}`);
+    
+    closures.classList.toggle('expanded');
+    icon.classList.toggle('expanded');
+}
+
+function updateSummaryStats(positions) {
+    const totalPositions = positions.length;
+    const totalPNL = positions.reduce((sum, pos) => sum + pos.total_pnl, 0);
+    const closedPositions = positions.filter(pos => pos.total_closed_qty > 0);
+    const avgReturn = closedPositions.length > 0
+        ? closedPositions.reduce((sum, pos) => sum + pos.avg_pnl_percent, 0) / closedPositions.length
+        : 0;
+    const winningTrades = closedPositions.filter(pos => pos.total_pnl > 0).length;
+    const winRate = closedPositions.length > 0 ? (winningTrades / closedPositions.length * 100) : 0;
+
+    document.getElementById('totalPositions').textContent = totalPositions;
+    const pnlEl = document.getElementById('totalPNL');
+    pnlEl.textContent = formatCurrency(totalPNL);
+    pnlEl.className = 'pnl-kpi-value ' + (totalPNL > 0 ? 'profit-text' : (totalPNL < 0 ? 'loss-text' : ''));
+    const avgEl = document.getElementById('avgReturn');
+    avgEl.textContent = `${avgReturn.toFixed(1)}%`;
+    avgEl.className = 'pnl-kpi-value ' + (avgReturn > 0 ? 'profit-text' : (avgReturn < 0 ? 'loss-text' : ''));
+    const wrEl = document.getElementById('winRate');
+    wrEl.textContent = closedPositions.length > 0 ? `${winRate.toFixed(1)}%` : '—';
+    wrEl.className = 'pnl-kpi-value ' + (winRate >= 50 ? 'profit-text' : (closedPositions.length > 0 ? 'loss-text' : ''));
+
+    const latencyValues = positions.filter(p => p.latency_ms && p.latency_ms > 0).map(p => p.latency_ms);
+    const speedEl = document.getElementById('avgSpeed');
+    if (latencyValues.length > 0) {
+        const avgMs = Math.round(latencyValues.reduce((a, b) => a + b, 0) / latencyValues.length);
+        speedEl.textContent = avgMs >= 1000 ? (avgMs / 1000).toFixed(1) + 's' : avgMs + 'ms';
+        speedEl.className = 'pnl-kpi-value ' + (avgMs <= 1500 ? 'profit-text' : (avgMs <= 3000 ? '' : 'loss-text'));
+    } else {
+        speedEl.textContent = '—';
+        speedEl.className = 'pnl-kpi-value pnl-kpi-white';
+    }
+
+    const dirBreakdown = {};
+    closedPositions.forEach(pos => {
+        let dir = 'stocks';
+        if (pos.asset_type === 'option' && pos.call_put === 'C') dir = 'calls';
+        else if (pos.asset_type === 'option' && pos.call_put === 'P') dir = 'puts';
+        if (!dirBreakdown[dir]) dirBreakdown[dir] = {trades: 0, wins: 0, losses: 0, pnl: 0};
+        dirBreakdown[dir].trades++;
+        dirBreakdown[dir].pnl += pos.total_pnl;
+        if (pos.total_pnl > 0) dirBreakdown[dir].wins++;
+        else dirBreakdown[dir].losses++;
+    });
+    const dirEl = document.getElementById('directionBreakdown');
+    const dirContent = document.getElementById('dirBreakdownContent');
+    const dirs = Object.keys(dirBreakdown);
+    if (dirs.length > 0) {
+        dirEl.style.display = 'flex';
+        const icons = {stocks:'S', calls:'C', puts:'P'};
+        const colors = {stocks:'#00d4ff', calls:'#30D158', puts:'#FF453A'};
+        let html = '';
+        ['stocks','calls','puts'].forEach(dir => {
+            const d = dirBreakdown[dir];
+            if (!d) return;
+            const wr = (d.wins / d.trades * 100).toFixed(0);
+            const c = colors[dir];
+            html += `<span class="pnl-dir-pill" style="background:${c}10;color:${c};border-color:${c}20;" title="${dir}: ${d.wins}W/${d.losses}L  $${d.pnl.toFixed(2)}">${icons[dir]} ${wr}%</span>`;
+        });
+        dirContent.innerHTML = html;
+    } else {
+        dirEl.style.display = 'none';
+    }
+}
+
+// Reset all PNL data
+async function resetPNLData() {
+    if (!confirm('⚠️ WARNING: This will permanently delete ALL PNL tracking data including signals, positions, and closures.\n\nThis action cannot be undone. Are you sure?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/reset/pnl', {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('✅ All PNL data has been reset successfully!');
+            loadPNLData();
+        } else {
+            alert('❌ Error: ' + (data.error || 'Failed to reset data'));
+        }
+    } catch (error) {
+        console.error('Error resetting PNL data:', error);
+        alert('❌ Error resetting data. Check console for details.');
+    }
+}
+
+// Show/Hide Purge Modal
+function showPurgeModal() {
+    document.getElementById('purgeModal').style.display = 'flex';
+    loadPurgeData();
+}
+
+function hidePurgeModal() {
+    document.getElementById('purgeModal').style.display = 'none';
+}
+
+// Load purge data (dates and authors)
+async function loadPurgeData() {
+    try {
+        // Load dates with trade data
+        const datesResponse = await fetch('/api/pnl/dates');
+        const datesData = await datesResponse.json();
+        
+        if (datesData.success && datesData.dates.length > 0) {
+            const datesList = document.getElementById('datesList');
+            datesList.innerHTML = '<div style="color: #888; font-size: 12px; margin-bottom: 8px;">Recent dates with data:</div>' +
+                datesData.dates.slice(0, 10).map(d => {
+                    const pnlColor = d.total_pnl >= 0 ? '#00ff88' : '#ff3b30';
+                    return `<div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #2C2C2E; border-radius: 4px; margin-bottom: 4px; font-size: 12px;">
+                        <span style="color: #fff;">${d.date}</span>
+                        <span style="color: #888;">${d.trade_count} trades</span>
+                        <span style="color: ${pnlColor};">$${d.total_pnl.toFixed(2)}</span>
+                    </div>`;
+                }).join('');
+        }
+        
+        // Load authors with trade data
+        const authorsResponse = await fetch('/api/pnl/authors');
+        const authorsData = await authorsResponse.json();
+        
+        if (authorsData.success && authorsData.authors.length > 0) {
+            const select = document.getElementById('purgeAuthorSelect');
+            select.innerHTML = '<option value="">Select a person to remove...</option>';
+            
+            authorsData.authors.forEach(a => {
+                const pnlColor = a.total_pnl >= 0 ? '🟢' : '🔴';
+                select.innerHTML += `<option value="${a.author_name}">${a.author_name} (${a.trade_count} trades, ${pnlColor} $${a.total_pnl.toFixed(2)})</option>`;
+            });
+            
+            const authorsList = document.getElementById('authorsList');
+            authorsList.innerHTML = '<div style="color: #888; font-size: 12px; margin-bottom: 8px;">People with PNL data:</div>' +
+                authorsData.authors.map(a => {
+                    const pnlColor = a.total_pnl >= 0 ? '#00ff88' : '#ff3b30';
+                    return `<div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #2C2C2E; border-radius: 4px; margin-bottom: 4px; font-size: 12px;">
+                        <span style="color: #fff;">${a.author_name}</span>
+                        <span style="color: #888;">${a.trade_count} trades</span>
+                        <span style="color: ${pnlColor};">$${a.total_pnl.toFixed(2)}</span>
+                    </div>`;
+                }).join('');
+        }
+    } catch (error) {
+        console.error('Error loading purge data:', error);
+    }
+}
+
+// Purge by date
+async function purgeByDate() {
+    const startDate = document.getElementById('purgeStartDate').value;
+    const endDate = document.getElementById('purgeEndDate').value || startDate;
+    
+    if (!startDate) {
+        alert('Please select a start date.');
+        return;
+    }
+    
+    if (!confirm(`⚠️ WARNING: This will permanently delete ALL PNL data from ${startDate} to ${endDate}.\n\nThis action cannot be undone. Are you sure?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/pnl/purge/by-date', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start_date: startDate, end_date: endDate })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ Deleted data from ${startDate} to ${endDate}:\n• ${data.deleted.closures} P/L records\n• ${data.deleted.lots} positions\n• ${data.deleted.signals} signals`);
+            hidePurgeModal();
+            loadPNLData();
+        } else {
+            alert('❌ Error: ' + (data.error || 'Failed to purge data'));
+        }
+    } catch (error) {
+        console.error('Error purging by date:', error);
+        alert('❌ Error purging data. Check console for details.');
+    }
+}
+
+// Purge by author
+async function purgeByAuthor() {
+    const authorName = document.getElementById('purgeAuthorSelect').value;
+    
+    if (!authorName) {
+        alert('Please select a person to remove.');
+        return;
+    }
+    
+    if (!confirm(`⚠️ WARNING: This will permanently delete ALL PNL data for "${authorName}".\n\nThis action cannot be undone. Are you sure?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/pnl/purge/by-author', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ author_name: authorName })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ Deleted all data for "${authorName}":\n• ${data.deleted.closures} P/L records\n• ${data.deleted.lots} positions\n• ${data.deleted.signals} signals`);
+            hidePurgeModal();
+            loadPNLData();
+        } else {
+            alert('❌ Error: ' + (data.error || 'Failed to purge data'));
+        }
+    } catch (error) {
+        console.error('Error purging by author:', error);
+        alert('❌ Error purging data. Check console for details.');
+    }
+}
+
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadChannels();
+    loadUsers();
+    loadPNLData();
+    
+    // Set default dates for custom range
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    document.getElementById('endDate').value = today;
+    document.getElementById('startDate').value = thirtyDaysAgo;
+    
+});
+
+// Filter change event listeners
+document.getElementById('channelFilter').addEventListener('change', loadPNLData);
+document.getElementById('userFilter').addEventListener('change', loadPNLData);
+document.getElementById('statusFilter').addEventListener('change', loadPNLData);
+document.getElementById('dateFilter').addEventListener('change', () => {
+    toggleCustomDateInputs();
+    loadPNLData();
+});
+document.getElementById('startDate').addEventListener('change', loadPNLData);
+document.getElementById('endDate').addEventListener('change', loadPNLData);
+</script>
+{% endblock %}

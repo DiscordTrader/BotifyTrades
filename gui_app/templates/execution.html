@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Channel Management - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<!-- Channel Type Tabs -->
+<div class="table-container" style="margin-bottom: 32px;">
+    <div class="table-header">
+        <div style="display: flex; gap: 16px; align-items: center;">
+            <h3 class="table-title">📡 Channel Management</h3>
+            <div style="display: flex; background: rgba(0, 212, 255, 0.05); border: 1px solid var(--border-color); border-radius: 8px; padding: 4px; gap: 4px;">
+                <button id="channel-type-execute" class="channel-type-tab active" onclick="switchChannelType('EXECUTE')" style="padding: 6px 14px; border: none; border-radius: 6px; background: var(--accent-gradient); color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    🎯 Execution Channels
+                </button>
+                <button id="channel-type-track" class="channel-type-tab" onclick="switchChannelType('TRACK')" style="padding: 6px 14px; border: none; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    📊 Tracking Channels
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="channels-list">
+        <div style="text-align: center; padding: 40px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary);">Loading channels...</div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/channels.js') }}?v={{ range(1, 999999) | random }}"></script>
+<script>
+// Current channel type (EXECUTE or TRACK)
+let currentChannelType = 'EXECUTE';
+
+// Initialize with EXECUTE channels
+initChannelManagement(currentChannelType);
+
+// Switch between Execution and Tracking channels
+function switchChannelType(type) {
+    currentChannelType = type;
+    channelCategory = type; // Update global variable in channels.js
+    
+    // Update tab button styles
+    document.getElementById('channel-type-execute').style.background = type === 'EXECUTE' ? 'var(--accent-gradient)' : 'transparent';
+    document.getElementById('channel-type-execute').style.color = type === 'EXECUTE' ? 'white' : 'var(--text-secondary)';
+    document.getElementById('channel-type-track').style.background = type === 'TRACK' ? 'var(--accent-gradient)' : 'transparent';
+    document.getElementById('channel-type-track').style.color = type === 'TRACK' ? 'white' : 'var(--text-secondary)';
+    
+    // Reload channels
+    loadChannels();
+}
+
+
+</script>
+{% endblock %}

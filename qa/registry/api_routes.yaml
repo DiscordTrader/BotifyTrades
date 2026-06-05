@@ -1,0 +1,284 @@
+# BotifyTrades API Routes Registry
+# Version: 1.0.0
+# Last Updated: 2026-01-08
+#
+# This registry defines all API endpoints for contract validation.
+
+schema_version: "1.0"
+
+api_version: "1.0"
+base_path: "/api"
+
+routes:
+  # ============================================
+  # CHANNEL MANAGEMENT
+  # ============================================
+  
+  channels:
+    path: /channels
+    methods:
+      GET:
+        description: "Get all channels"
+        auth_required: true
+        response_schema: channels_list
+        query_params:
+          - name: category
+            type: string
+            required: false
+            values: [EXECUTE, TRACK]
+          - name: market
+            type: string
+            required: false
+            values: [US, IN, CA]
+      POST:
+        description: "Add new channel"
+        auth_required: true
+        request_schema: channel_create
+        response_schema: channel_response
+
+  channel_detail:
+    path: /channels/<channel_id>
+    methods:
+      GET:
+        description: "Get channel by ID"
+        auth_required: true
+        response_schema: channel_detail
+      PUT:
+        description: "Update channel settings"
+        auth_required: true
+        request_schema: channel_update
+        response_schema: success_response
+        critical_fields:
+          - execute_enabled
+          - track_enabled
+          - enabled_brokers
+          - risk_management_enabled
+          - trade_summary_enabled
+      DELETE:
+        description: "Delete channel"
+        auth_required: true
+        response_schema: success_response
+
+  # ============================================
+  # TRADING SETTINGS
+  # ============================================
+
+  trading_settings:
+    path: /settings/trading
+    methods:
+      GET:
+        description: "Get trading settings"
+        auth_required: true
+        response_schema: trading_settings
+      PUT:
+        description: "Update trading settings"
+        auth_required: true
+        request_schema: trading_settings_update
+        response_schema: success_response
+        critical_fields:
+          - max_position_size
+          - trade_summary_enabled
+
+  risk_management_settings:
+    path: /settings/risk-management
+    methods:
+      GET:
+        description: "Get risk management settings"
+        auth_required: true
+        response_schema: risk_settings
+      PUT:
+        description: "Update risk management settings"
+        auth_required: true
+        request_schema: risk_settings_update
+        response_schema: success_response
+
+  conditional_order_settings:
+    path: /settings/conditional-orders
+    methods:
+      GET:
+        description: "Get conditional order settings"
+        auth_required: true
+        response_schema: conditional_order_settings
+      PUT:
+        description: "Update conditional order settings"
+        auth_required: true
+        request_schema: conditional_order_settings_update
+        response_schema: success_response
+
+  # ============================================
+  # BROKER APIs
+  # ============================================
+
+  webull_balance:
+    path: /brokers/webull/balance
+    methods:
+      GET:
+        description: "Get Webull account balance"
+        auth_required: true
+        response_schema: broker_balance
+
+  alpaca_balance:
+    path: /brokers/alpaca/balance
+    methods:
+      GET:
+        description: "Get Alpaca account balance"
+        auth_required: true
+        response_schema: broker_balance
+
+  all_broker_accounts:
+    path: /brokers/all_accounts
+    methods:
+      GET:
+        description: "Get all broker account summaries"
+        auth_required: true
+        response_schema: all_accounts
+
+  # ============================================
+  # TRADES & SIGNALS
+  # ============================================
+
+  trades:
+    path: /trades
+    methods:
+      GET:
+        description: "Get trade history"
+        auth_required: true
+        response_schema: trades_list
+        query_params:
+          - name: limit
+            type: integer
+            required: false
+            default: 50
+          - name: broker
+            type: string
+            required: false
+          - name: status
+            type: string
+            required: false
+
+  signals:
+    path: /signals
+    methods:
+      GET:
+        description: "Get signal history"
+        auth_required: true
+        response_schema: signals_list
+
+  # ============================================
+  # CONDITIONAL ORDERS
+  # ============================================
+
+  conditional_orders:
+    path: /conditional-orders
+    methods:
+      GET:
+        description: "Get all conditional orders"
+        auth_required: true
+        response_schema: conditional_orders_list
+
+  conditional_order_detail:
+    path: /conditional-orders/<order_id>
+    methods:
+      GET:
+        description: "Get conditional order details"
+        auth_required: true
+        response_schema: conditional_order_detail
+      DELETE:
+        description: "Cancel conditional order"
+        auth_required: true
+        response_schema: success_response
+
+  # ============================================
+  # SYSTEM HEALTH
+  # ============================================
+
+  diagnostics:
+    path: /diagnostics
+    methods:
+      GET:
+        description: "Run system diagnostics"
+        auth_required: true
+        response_schema: diagnostics_result
+
+  health_diagnostics:
+    path: /health/diagnostics
+    methods:
+      GET:
+        description: "Get health diagnostics"
+        auth_required: false
+        response_schema: health_result
+
+  run_tests:
+    path: /health/run-tests
+    methods:
+      POST:
+        description: "Run runtime validation tests"
+        auth_required: true
+        response_schema: test_results
+
+  consistency_check:
+    path: /system/consistency-check
+    methods:
+      GET:
+        description: "Run settings consistency validation"
+        auth_required: true
+        response_schema: consistency_result
+
+  # ============================================
+  # BOT STATUS
+  # ============================================
+
+  bot_status:
+    path: /bot/status
+    methods:
+      GET:
+        description: "Get bot connection status"
+        auth_required: true
+        response_schema: bot_status
+
+# Response schemas for validation
+schemas:
+  success_response:
+    type: object
+    required: [success]
+    properties:
+      success:
+        type: boolean
+      message:
+        type: string
+      error:
+        type: string
+
+  channel_detail:
+    type: object
+    required: [id, discord_channel_id, name]
+    properties:
+      id:
+        type: integer
+      discord_channel_id:
+        type: string
+      name:
+        type: string
+      execute_enabled:
+        type: integer
+      track_enabled:
+        type: integer
+      enabled_brokers:
+        type: array
+      risk_management_enabled:
+        type: integer
+      trade_summary_enabled:
+        type: boolean
+
+  trading_settings:
+    type: object
+    required: [max_position_size]
+    properties:
+      max_position_size:
+        type: integer
+      max_position_size_enabled:
+        type: boolean
+      global_default_quantity:
+        type: integer
+      trade_summary_enabled:
+        type: boolean

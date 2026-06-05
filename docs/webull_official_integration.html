@@ -1,0 +1,1765 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Webull Official API Integration &mdash; BotifyTrades v10.1.5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#0f172a; --ink-2:#1e293b; --ink-3:#334155;
+  --muted:#64748b; --muted-2:#94a3b8; --muted-3:#cbd5e1;
+  --line:#e2e8f0; --line-2:#f1f5f9;
+  --bg:#fafbfd; --bg-soft:#f8fafc; --bg-card:#ffffff;
+  --brand:#1e40af; --brand-light:#dbeafe; --brand-dark:#1e3a8a;
+  --accent:#7c3aed; --accent-light:#ede9fe;
+  --teal:#0d9488; --teal-light:#ccfbf1;
+  --orange:#ea580c; --orange-light:#fff7ed;
+  --good:#15803d; --good-bg:#dcfce7; --good-border:#86efac;
+  --warn:#a16207; --warn-bg:#fef3c7; --warn-border:#fcd34d;
+  --bad:#b91c1c; --bad-bg:#fee2e2; --bad-border:#fca5a5;
+  --info:#1d4ed8; --info-bg:#dbeafe; --info-border:#93c5fd;
+  --shadow-xs: 0 1px 2px rgba(15,23,42,.04);
+  --shadow-sm: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+  --shadow-md: 0 4px 6px -1px rgba(15,23,42,.07), 0 2px 4px -2px rgba(15,23,42,.05);
+  --shadow-lg: 0 10px 25px -3px rgba(15,23,42,.08), 0 4px 6px -4px rgba(15,23,42,.04);
+  --shadow-xl: 0 20px 40px -5px rgba(15,23,42,.1), 0 8px 10px -6px rgba(15,23,42,.05);
+  --radius: 12px; --radius-lg: 16px; --radius-xl: 20px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--ink); background: var(--bg);
+  font-size: 15px; line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; }
+
+/* HERO */
+.hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1a1a4e 35%, #2d1069 60%, #ea580c 100%);
+  color: #fff; padding: 64px 0 56px; position: relative; overflow: hidden;
+}
+.hero::after {
+  content: ''; position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.hero .wrap { max-width: 1140px; margin: 0 auto; padding: 0 32px; position: relative; z-index: 1; }
+.hero-eyebrow { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .15em; color: rgba(255,255,255,.5); margin-bottom: 12px; }
+.hero h1 { font-size: 2.8rem; font-weight: 900; letter-spacing: -0.04em; line-height: 1.1; }
+.hero h1 span { background: linear-gradient(135deg, #fb923c, #f97316, #ea580c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.hero .subtitle { font-size: 1.15rem; color: rgba(255,255,255,.65); margin-top: 14px; font-weight: 400; max-width: 720px; line-height: 1.6; }
+.hero-chips { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+.hero-chips .chip { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.1); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 7px 16px; font-size: .82rem; font-weight: 500; color: rgba(255,255,255,.9); transition: background .2s; }
+.hero-chips .chip:hover { background: rgba(255,255,255,.18); }
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.chip .dot.green { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.5); }
+.chip .dot.orange { background: #f97316; box-shadow: 0 0 8px rgba(249,115,22,.5); }
+.chip .dot.blue { background: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,.5); }
+
+/* NAV */
+.sticky-nav { position: sticky; top: 0; z-index: 100; background: rgba(255,255,255,.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+.sticky-nav .wrap { display: flex; gap: 0; overflow-x: auto; padding-top: 0; padding-bottom: 0; }
+.sticky-nav a { display: block; padding: 14px 18px; font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; transition: all .2s; }
+.sticky-nav a:hover, .sticky-nav a.active { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* LAYOUT */
+.wrap { max-width: 1140px; margin: 0 auto; padding: 0 32px; }
+section { padding: 56px 0; }
+section + section { border-top: 1px solid var(--line); }
+.section-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--brand); margin-bottom: 6px; }
+.section-title { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.03em; color: var(--ink); line-height: 1.2; }
+.section-desc { font-size: 1rem; color: var(--muted); margin-top: 8px; max-width: 720px; line-height: 1.65; }
+
+/* SCORE GRID */
+.score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 32px; }
+@media (max-width: 900px) { .score-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .score-grid { grid-template-columns: 1fr; } }
+.score-card { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow-sm); position: relative; overflow: hidden; transition: transform .15s, box-shadow .15s; }
+.score-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.score-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.score-card.ok::before { background: #22c55e; }
+.score-card.accent::before { background: var(--accent); }
+.score-card.brand::before { background: var(--brand); }
+.score-card.orange::before { background: var(--orange); }
+.score-card .label { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.score-card .value { font-size: 2rem; font-weight: 800; margin-top: 4px; letter-spacing: -0.02em; }
+.score-card .detail { font-size: .8rem; color: var(--muted-2); margin-top: 6px; line-height: 1.5; }
+
+/* CARDS */
+.card { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; }
+.card-header { padding: 20px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+.card-header h3 { font-size: 1.05rem; font-weight: 700; }
+.card-header .badge { font-size: .68rem; font-weight: 700; padding: 3px 10px; border-radius: 6px; text-transform: uppercase; letter-spacing: .05em; }
+.badge-green { background: var(--good-bg); color: var(--good); border: 1px solid var(--good-border); }
+.badge-blue { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
+.badge-orange { background: var(--orange-light); color: var(--orange); border: 1px solid #fed7aa; }
+.badge-purple { background: var(--accent-light); color: var(--accent); border: 1px solid #c4b5fd; }
+.card-body { padding: 24px; }
+
+/* TABLES */
+.tbl-wrap { overflow-x: auto; margin-top: 20px; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+thead { background: var(--line-2); }
+th { text-align: left; padding: 10px 14px; font-weight: 700; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 2px solid var(--line); }
+td { padding: 11px 14px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+tr:hover td { background: var(--line-2); }
+td code { font-family: 'JetBrains Mono', monospace; font-size: .82em; background: #f1f5f9; padding: 2px 7px; border-radius: 4px; color: var(--ink-2); }
+.method-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; }
+.method-get { background: #dbeafe; color: #1d4ed8; }
+.method-post { background: #dcfce7; color: #15803d; }
+
+/* CODE BLOCKS */
+.code-block { background: #0f172a; border-radius: 10px; padding: 20px 24px; margin-top: 16px; overflow-x: auto; }
+.code-block code { font-family: 'JetBrains Mono', monospace; font-size: .82rem; color: #e2e8f0; line-height: 1.7; white-space: pre; }
+.code-block .comment { color: #64748b; }
+.code-block .keyword { color: #c084fc; }
+.code-block .string { color: #86efac; }
+.code-block .func { color: #93c5fd; }
+.code-block .type { color: #67e8f9; }
+.code-block .num { color: #fbbf24; }
+
+/* PIPELINE DIAGRAM */
+.pipeline { display: flex; align-items: stretch; gap: 0; margin: 28px 0; flex-wrap: wrap; }
+.pipe-node { flex: 1; min-width: 160px; background: var(--bg-card); border: 1px solid var(--line); padding: 18px 16px; text-align: center; position: relative; }
+.pipe-node:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.pipe-node:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.pipe-node .pipe-icon { font-size: 1.6rem; margin-bottom: 6px; }
+.pipe-node .pipe-title { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); }
+.pipe-node .pipe-desc { font-size: .72rem; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+.pipe-arrow { display: flex; align-items: center; font-size: 1.2rem; color: var(--muted-3); padding: 0 4px; }
+
+/* ARCHITECTURE DIAGRAM */
+.arch-diagram { background: #0f172a; border-radius: var(--radius-lg); padding: 32px; margin: 28px 0; overflow-x: auto; }
+.arch-diagram pre { font-family: 'JetBrains Mono', monospace; font-size: .72rem; line-height: 1.55; color: #94a3b8; white-space: pre; }
+.arch-diagram .hl-orange { color: #fb923c; font-weight: 700; }
+.arch-diagram .hl-green { color: #4ade80; }
+.arch-diagram .hl-blue { color: #60a5fa; }
+.arch-diagram .hl-purple { color: #c084fc; }
+.arch-diagram .hl-teal { color: #2dd4bf; }
+.arch-diagram .hl-dim { color: #475569; }
+
+/* GRID LAYOUTS */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 24px; }
+@media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+/* FEATURE LIST */
+.feature-list { list-style: none; margin-top: 16px; }
+.feature-list li { padding: 10px 0; border-bottom: 1px solid var(--line-2); display: flex; gap: 10px; align-items: flex-start; font-size: .9rem; }
+.feature-list li:last-child { border-bottom: none; }
+.feature-list .check { color: #22c55e; font-weight: 700; flex-shrink: 0; font-size: 1rem; }
+
+/* TIMELINE */
+.timeline { margin-top: 24px; position: relative; padding-left: 28px; }
+.timeline::before { content: ''; position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: var(--line); }
+.timeline-item { position: relative; padding-bottom: 24px; }
+.timeline-item:last-child { padding-bottom: 0; }
+.timeline-item::before { content: ''; position: absolute; left: -24px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--brand); border: 3px solid var(--brand-light); }
+.timeline-item.done::before { background: #22c55e; border-color: #bbf7d0; }
+.timeline-item h4 { font-size: .92rem; font-weight: 700; }
+.timeline-item p { font-size: .82rem; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+
+/* COLLAPSIBLE */
+details { margin-top: 16px; }
+details summary { cursor: pointer; font-weight: 700; font-size: .9rem; padding: 12px 16px; background: var(--line-2); border-radius: 8px; list-style: none; display: flex; align-items: center; gap: 8px; transition: background .15s; }
+details summary:hover { background: var(--line); }
+details summary::before { content: '▸'; font-size: .85em; transition: transform .2s; }
+details[open] summary::before { transform: rotate(90deg); }
+details .detail-body { padding: 16px 20px; border: 1px solid var(--line); border-top: none; border-radius: 0 0 8px 8px; background: var(--bg-card); }
+
+/* STATUS INDICATORS */
+.status-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line-2); }
+.status-row:last-child { border-bottom: none; }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.green { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.4); }
+.status-dot.gray { background: #94a3b8; }
+.status-label { font-size: .85rem; font-weight: 500; flex: 1; }
+.status-value { font-size: .8rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+/* TOC FLOATING */
+.toc { position: fixed; right: 24px; top: 80px; width: 200px; background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-md); z-index: 50; max-height: calc(100vh - 120px); overflow-y: auto; }
+.toc h4 { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 10px; }
+.toc a { display: block; font-size: .76rem; color: var(--muted); text-decoration: none; padding: 3px 0; transition: color .15s; }
+.toc a:hover { color: var(--brand); }
+@media (max-width: 1400px) { .toc { display: none; } }
+
+/* INTEGRATION MAP */
+.int-map { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 20px; }
+.int-row { display: grid; grid-template-columns: 200px 1fr 120px; gap: 16px; padding: 14px 18px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 8px; align-items: center; transition: transform .1s; }
+.int-row:hover { transform: translateX(4px); }
+.int-row .int-name { font-weight: 700; font-size: .88rem; }
+.int-row .int-desc { font-size: .82rem; color: var(--muted); }
+.int-row .int-status { text-align: right; }
+
+/* FOOTER */
+.footer { background: #0f172a; color: rgba(255,255,255,.5); padding: 40px 0; text-align: center; font-size: .8rem; }
+.footer strong { color: rgba(255,255,255,.8); }
+
+/* PRINT */
+@media print {
+  .sticky-nav, .toc { display: none !important; }
+  .hero { padding: 30px 0; }
+  section { padding: 30px 0; }
+  .score-card:hover { transform: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== HERO ===== -->
+<div class="hero">
+  <div class="wrap">
+    <div class="hero-eyebrow">BotifyTrades v10.1.5 &mdash; Broker Integration Report</div>
+    <h1>Webull Official <span>API Integration</span></h1>
+    <p class="subtitle">
+      Complete production-ready integration of Webull's Official Open API (v2) into BotifyTrades&rsquo;
+      multi-broker trading infrastructure &mdash; covering authentication, order execution, streaming,
+      risk management, and remote control.
+    </p>
+    <div class="hero-chips">
+      <span class="chip"><span class="dot green"></span> Production Ready</span>
+      <span class="chip"><span class="dot orange"></span> 11 API Endpoints</span>
+      <span class="chip"><span class="dot blue"></span> HMAC-SHA1 Auth</span>
+      <span class="chip"><span class="dot green"></span> 12 Files &bull; 539 Tests</span>
+      <span class="chip"><span class="dot blue"></span> MQTT Streaming</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== NAV ===== -->
+<nav class="sticky-nav">
+  <div class="wrap">
+    <a href="#overview">Overview</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#modules">Core Modules</a>
+    <a href="#endpoints">API Endpoints</a>
+    <a href="#auth">Authentication</a>
+    <a href="#orders">Order Types</a>
+    <a href="#streaming">Streaming</a>
+    <a href="#pipelines">Pipelines</a>
+    <a href="#ui">Settings UI</a>
+    <a href="#wiring">System Wiring</a>
+    <a href="#tests">Test Coverage</a>
+  </div>
+</nav>
+
+<!-- ===== TOC ===== -->
+<div class="toc">
+  <h4>On This Page</h4>
+  <a href="#overview">Overview</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#modules">Core Modules</a>
+  <a href="#endpoints">API Endpoints</a>
+  <a href="#auth">Authentication</a>
+  <a href="#orders">Order Types</a>
+  <a href="#streaming">Streaming</a>
+  <a href="#pipelines">Pipelines</a>
+  <a href="#ui">Settings UI</a>
+  <a href="#wiring">System Wiring</a>
+  <a href="#tests">Test Coverage</a>
+</div>
+
+<!-- ===== SECTION: OVERVIEW ===== -->
+<section id="overview">
+  <div class="wrap">
+    <div class="section-label">Executive Summary</div>
+    <h2 class="section-title">Integration at a Glance</h2>
+    <p class="section-desc">
+      The Webull Official API broker is fully integrated into every layer of the BotifyTrades platform &mdash;
+      from credential management and order execution to real-time streaming, risk monitoring, and mobile remote control.
+    </p>
+
+    <div class="score-grid">
+      <div class="score-card ok">
+        <div class="label">Core Modules</div>
+        <div class="value">9</div>
+        <div class="detail">Auth, Client, Config, Accounts, Orders, Positions, Models, Streaming, Broker</div>
+      </div>
+      <div class="score-card brand">
+        <div class="label">API Endpoints</div>
+        <div class="value">11</div>
+        <div class="detail">REST + MQTT streaming across accounts, trading, and market data</div>
+      </div>
+      <div class="score-card accent">
+        <div class="label">Integration Points</div>
+        <div class="value">12</div>
+        <div class="detail">Wired into UPH, Relay, Risk, Conditional Orders, BrokerSync, GUI, and more</div>
+      </div>
+      <div class="score-card orange">
+        <div class="label">Test Cases</div>
+        <div class="value">539</div>
+        <div class="detail">Unit + integration tests across 3 QA test files with full wiring verification</div>
+      </div>
+    </div>
+
+    <!-- Status dashboard -->
+    <div class="card" style="margin-top: 32px;">
+      <div class="card-header">
+        <h3>Integration Status Dashboard</h3>
+        <span class="badge badge-green">All Systems Go</span>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Credential Management</span><span class="status-value">save / load / clear</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Account Authentication</span><span class="status-value">HMAC-SHA1 v2</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Account Selection</span><span class="status-value">Margin, Cash, IRA</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Stock Order Execution</span><span class="status-value">MKT / LMT / STP</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Option Order Execution</span><span class="status-value">BTO / STC / STO / BTC</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Bracket Orders</span><span class="status-value">TP + SL combo</span></div>
+          </div>
+          <div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Trailing Stop Orders</span><span class="status-value">TRAILING_STOP_LOSS</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Order Cancel / Replace</span><span class="status-value">modify &amp; cancel</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">MQTT Market Streaming</span><span class="status-value">snapshot / quote / tick</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Trade Event Polling</span><span class="status-value">3s interval fills</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Multi-Broker Dispatch</span><span class="status-value">asyncio.gather()</span></div>
+            <div class="status-row"><span class="status-dot green"></span><span class="status-label">Mobile Remote Control</span><span class="status-value">RelayClient WSS</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: ARCHITECTURE ===== -->
+<section id="architecture">
+  <div class="wrap">
+    <div class="section-label">System Design</div>
+    <h2 class="section-title">Architecture Overview</h2>
+    <p class="section-desc">
+      The integration follows BotifyTrades&rsquo; established broker pattern: a dedicated module under
+      <code>src/brokers/webull_official/</code> implementing the unified broker interface, wired into
+      every downstream pipeline.
+    </p>
+
+    <div class="arch-diagram">
+      <pre>
+<span class="hl-dim">┌──────────────────────────────────────────────────────────────────────────────────────┐</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">BotifyTrades v10.1.5</span>                                                              <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>                                                                                      <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-blue">┌─────────────────────────────────────────────────────────────────────────────┐</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-blue">│  GUI Layer (Flask)</span>                                                        <span class="hl-blue">│</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-blue">│  ├─ /api/brokers/credentials/webull_official  [GET/POST]</span>                  <span class="hl-blue">│</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-blue">│  ├─ /api/brokers/connect/webull_official      [POST]</span>                      <span class="hl-blue">│</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-blue">│  ├─ /api/brokers/status                      (includes webull_official)</span>   <span class="hl-blue">│</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-blue">│  ├─ /api/webull_official/balance              [GET]</span>                       <span class="hl-blue">│</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-blue">│  └─ templates/settings.html  (credential form + account selector)</span>        <span class="hl-blue">│</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-blue">└─────────────────────────────────────────────────────────────────────────────┘</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>           <span class="hl-dim">▲</span>                                          <span class="hl-dim">▲</span>                              <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>           <span class="hl-dim">│</span>                                          <span class="hl-dim">│</span>                              <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-purple">┌────────┴──────────────────────────────────────┴─────────────────────────────┐</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-purple">│  Credential &amp; Status Service</span>                                               <span class="hl-purple">│</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-purple">│  broker_credentials_service.py</span>                                              <span class="hl-purple">│</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-purple">│  ├─ get_webull_official_credentials()    → Encrypted DB</span>                    <span class="hl-purple">│</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-purple">│  ├─ save_webull_official_credentials()   → Encrypted DB</span>                    <span class="hl-purple">│</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-purple">│  └─ set_broker_status('webull_official')  → Status Badge</span>                   <span class="hl-purple">│</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-purple">└──────────────────────────────────────────────────────────────────────────────┘</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>           <span class="hl-dim">▲</span>                                                                        <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>           <span class="hl-dim">│</span>  <span class="hl-dim">(async)</span>                                                                <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-green">┌────────┴──────────────────────────────────────────────────────────────────┐</span>    <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-green">│  Core Bot — SelfClient (selfbot_webull.py)</span>                               <span class="hl-green">│</span>    <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-green">│  ├─ self.webull_official_broker = WebullOfficialBroker(...)</span>                <span class="hl-green">│</span>    <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-green">│  ├─ get_broker_instance('webull_official')  → resolves BEFORE 'webull'</span>   <span class="hl-green">│</span>    <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-green">│  ├─ BrokerManager(webull_official_broker=...)</span>                            <span class="hl-green">│</span>    <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-green">│  └─ Multi-Broker Dispatch → asyncio.gather(webull_official, ...)</span>         <span class="hl-green">│</span>    <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-green">└───────┬──────────────────────────────────────────────────────────┬────────┘</span>    <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>          <span class="hl-dim">│</span>                                                          <span class="hl-dim">│</span>              <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>          <span class="hl-dim">▼</span>                                                          <span class="hl-dim">▼</span>              <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">┌───────────────────────────┐</span>    <span class="hl-teal">┌──────────────────────────────────────┐</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  WebullOfficialBroker     │</span>    <span class="hl-teal">│  Downstream Services                 │</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  ├─ connect()             │</span>    <span class="hl-teal">│  ├─ UnifiedPriceHub (market data)    │</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  ├─ place_stock_order()   │</span>    <span class="hl-teal">│  ├─ RelayClient (mobile control)     │</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  ├─ place_option_order()  │</span>    <span class="hl-teal">│  ├─ BrokerSyncService (position sync)│</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  ├─ place_bracket_order() │</span>    <span class="hl-teal">│  ├─ ConditionalOrders (triggers)     │</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  ├─ get_positions()       │</span>    <span class="hl-teal">│  └─ PositionMonitor (risk mgmt)      │</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  ├─ get_account_info()    │</span>    <span class="hl-teal">└──────────────────────────────────────┘</span>   <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  ├─ start_streaming()     │</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  └─ cancel_order()        │</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│                           │</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  ┌───────────────────────┐│</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  │  Internal Layers      ││</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  │  WebullAuth (HMAC)    ││</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  │  WebullClient (httpx) ││</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  │  RateLimiter          ││</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  │  AccountsAPI          ││</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  │  OrdersAPI            ││</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  │  PositionsAPI         ││</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  │  MarketStream (MQTT)  ││</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  │  TradeEventPoller     ││</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">│  └───────────────────────┘│</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-orange">└───────────────────────────┘</span>                                                  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>           <span class="hl-dim">▲</span>                                                                        <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>           <span class="hl-dim">│</span>  <span class="hl-dim">HTTPS (HMAC-SHA1) + MQTT (TCP 1883)</span>                                    <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>           <span class="hl-dim">▼</span>                                                                        <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-dim">┌──────────────────────────────────────────────────────────────────────────────┐</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-dim">│  Webull Official API Servers                                                │</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-dim">│  ├─ api.webull.com             (production REST)</span>                           <span class="hl-dim">│</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-dim">│  ├─ us-openapi-alb.uat...      (test/UAT REST)</span>                            <span class="hl-dim">│</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-dim">│  └─ data-api.webull.com:1883   (MQTT streaming)</span>                           <span class="hl-dim">│</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">│</span>  <span class="hl-dim">└──────────────────────────────────────────────────────────────────────────────┘</span>  <span class="hl-dim">│</span>
+<span class="hl-dim">└──────────────────────────────────────────────────────────────────────────────────────┘</span>
+      </pre>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: CORE MODULES ===== -->
+<section id="modules">
+  <div class="wrap">
+    <div class="section-label">Module Breakdown</div>
+    <h2 class="section-title">Core Module Architecture</h2>
+    <p class="section-desc">
+      Nine purpose-built modules under <code>src/brokers/webull_official/</code>, each with a single responsibility.
+    </p>
+
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-header"><h3>config.py</h3><span class="badge badge-blue">Config</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--muted)">WebullConfig dataclass holding API credentials, environment routing, and MQTT connection details.</p>
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> <code>app_key</code> &amp; <code>app_secret</code></li>
+            <li><span class="check">&#10003;</span> Environment: <code>production</code> / <code>test</code></li>
+            <li><span class="check">&#10003;</span> Base URL routing (prod vs UAT)</li>
+            <li><span class="check">&#10003;</span> MQTT host &amp; port properties</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>auth.py</h3><span class="badge badge-orange">Security</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--muted)">HMAC-SHA1 per-request signing engine for Webull v2 API specification.</p>
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> UTC timestamp generation</li>
+            <li><span class="check">&#10003;</span> UUID nonce per request</li>
+            <li><span class="check">&#10003;</span> Canonical header sorting</li>
+            <li><span class="check">&#10003;</span> MD5 body hash for POST</li>
+            <li><span class="check">&#10003;</span> Base64-encoded HMAC signature</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>client.py</h3><span class="badge badge-purple">HTTP</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--muted)">Async HTTP client wrapping httpx with automatic signing and rate limiting.</p>
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> httpx.AsyncClient (30s timeout)</li>
+            <li><span class="check">&#10003;</span> 20 max connections, 10 keepalive</li>
+            <li><span class="check">&#10003;</span> Auto sign_request() on every call</li>
+            <li><span class="check">&#10003;</span> Rate limiter acquire before send</li>
+            <li><span class="check">&#10003;</span> Error-class routing (401/order/generic)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>rate_limiter.py</h3><span class="badge badge-orange">Throttle</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--muted)">Per-category sliding-window rate limiter matching Webull's published limits.</p>
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> Orders: 600 req / 60s</li>
+            <li><span class="check">&#10003;</span> Account data: 2 req / 2s</li>
+            <li><span class="check">&#10003;</span> Token: 10 req / 30s</li>
+            <li><span class="check">&#10003;</span> Subscribe: 600 req / 60s</li>
+            <li><span class="check">&#10003;</span> Async lock + monotonic clock</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>accounts.py</h3><span class="badge badge-green">API</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--muted)">Account discovery and balance queries. Returns typed models.</p>
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> <code>list_accounts()</code> &rarr; WebullAccount[]</li>
+            <li><span class="check">&#10003;</span> <code>get_balance()</code> &rarr; WebullBalance</li>
+            <li><span class="check">&#10003;</span> Multi-format response parsing</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>orders.py</h3><span class="badge badge-green">API</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--muted)">Complete order lifecycle: place, cancel, replace, query — for stocks, options, and brackets.</p>
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> Stock / Option / Bracket / Trailing</li>
+            <li><span class="check">&#10003;</span> Cancel &amp; Replace (modify)</li>
+            <li><span class="check">&#10003;</span> Open orders &amp; history queries</li>
+            <li><span class="check">&#10003;</span> UUID client_order_id generation</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>positions.py</h3><span class="badge badge-green">API</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--muted)">Position fetching with option leg parsing.</p>
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> <code>get_positions()</code> &rarr; WebullPosition[]</li>
+            <li><span class="check">&#10003;</span> Equity &amp; option position support</li>
+            <li><span class="check">&#10003;</span> Strike, expiry, type extraction</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>models.py</h3><span class="badge badge-blue">Data</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--muted)">Typed dataclasses for all API response structures.</p>
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> WebullAccount (id, type, class, label)</li>
+            <li><span class="check">&#10003;</span> WebullBalance (12 financial fields)</li>
+            <li><span class="check">&#10003;</span> WebullPosition (14 fields + option data)</li>
+            <li><span class="check">&#10003;</span> WebullOrder (16 fields + combo type)</li>
+            <li><span class="check">&#10003;</span> PlaceOrderResult (order IDs)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>streaming.py</h3><span class="badge badge-purple">Real-time</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--muted)">MQTT market data streaming and trade event polling for fill detection.</p>
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> WebullMarketStream (MQTT)</li>
+            <li><span class="check">&#10003;</span> TradeEventPoller (3s fill detection)</li>
+            <li><span class="check">&#10003;</span> Batch subscribe (100 symbols/batch)</li>
+            <li><span class="check">&#10003;</span> Event callbacks (fill, terminal)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: API ENDPOINTS ===== -->
+<section id="endpoints">
+  <div class="wrap">
+    <div class="section-label">API Reference</div>
+    <h2 class="section-title">Webull REST &amp; MQTT Endpoints</h2>
+    <p class="section-desc">
+      All 11 REST endpoints consumed by the integration, plus the MQTT streaming connection.
+    </p>
+
+    <div class="card" style="margin-top:28px;">
+      <div class="card-header"><h3>REST API Endpoints</h3><span class="badge badge-blue">v2</span></div>
+      <div class="card-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>Method</th><th>Endpoint</th><th>Purpose</th><th>Rate Limit</th><th>Module</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/openapi/account/list</code></td>
+                <td>List all user accounts (Margin, Cash, IRA)</td>
+                <td>10 req / 30s</td>
+                <td>accounts.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/openapi/assets/balance</code></td>
+                <td>Account balance, buying power, NLV</td>
+                <td>2 req / 2s</td>
+                <td>accounts.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/openapi/assets/positions</code></td>
+                <td>Current positions (stocks + options)</td>
+                <td>2 req / 2s</td>
+                <td>positions.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-post">POST</span></td>
+                <td><code>/openapi/trade/order/place</code></td>
+                <td>Place stock, option, bracket, trailing stop orders</td>
+                <td>600 req / 60s</td>
+                <td>orders.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-post">POST</span></td>
+                <td><code>/openapi/trade/order/cancel</code></td>
+                <td>Cancel an open order by client_order_id</td>
+                <td>600 req / 60s</td>
+                <td>orders.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-post">POST</span></td>
+                <td><code>/openapi/trade/order/replace</code></td>
+                <td>Modify order price, quantity, or TIF</td>
+                <td>600 req / 60s</td>
+                <td>orders.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/openapi/trade/order/open</code></td>
+                <td>Get all open/pending orders</td>
+                <td>2 req / 2s</td>
+                <td>orders.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/openapi/trade/order/detail</code></td>
+                <td>Get single order details</td>
+                <td>2 req / 2s</td>
+                <td>orders.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/openapi/trade/order/history</code></td>
+                <td>Order history with date range filtering</td>
+                <td>2 req / 2s</td>
+                <td>orders.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-post">POST</span></td>
+                <td><code>/openapi/market-data/streaming/subscribe</code></td>
+                <td>Subscribe to market data (SNAPSHOT, QUOTE, TICK)</td>
+                <td>600 req / 60s</td>
+                <td>streaming.py</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-post">POST</span></td>
+                <td><code>/openapi/market-data/streaming/unsubscribe</code></td>
+                <td>Unsubscribe from market data</td>
+                <td>600 req / 60s</td>
+                <td>streaming.py</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><h3>MQTT Streaming Connection</h3><span class="badge badge-purple">Real-time</span></div>
+      <div class="card-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>Parameter</th><th>Value</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Host</td><td><code>data-api.webull.com</code></td><td>Same for prod &amp; test</td></tr>
+              <tr><td>Port</td><td><code>1883</code> (TCP)</td><td>MQTTv311 protocol</td></tr>
+              <tr><td>WSS URL</td><td><code>wss://data-api.webull.com:8883/mqtt</code></td><td>WebSocket alternative</td></tr>
+              <tr><td>Auth</td><td>Username: <code>app_key</code>, Password: <code>"password"</code></td><td>Basic auth on connect</td></tr>
+              <tr><td>Client ID</td><td>UUID hex (session-unique)</td><td>Prevents collision</td></tr>
+              <tr><td>Topics</td><td><code>snapshot</code>, <code>quote</code>, <code>notice</code>, <code>echo</code></td><td>Subscribed on connect</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: AUTHENTICATION ===== -->
+<section id="auth">
+  <div class="wrap">
+    <div class="section-label">Security</div>
+    <h2 class="section-title">HMAC-SHA1 Request Signing</h2>
+    <p class="section-desc">
+      Every REST request is authenticated via HMAC-SHA1 per Webull's v2 specification. The signing
+      process generates 7 authentication headers per request.
+    </p>
+
+    <!-- Signing pipeline -->
+    <div class="pipeline">
+      <div class="pipe-node">
+        <div class="pipe-icon">&#9201;</div>
+        <div class="pipe-title">Timestamp</div>
+        <div class="pipe-desc">Generate UTC ISO timestamp<br><code>YYYY-MM-DDTHH:MM:SSZ</code></div>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-node">
+        <div class="pipe-icon">&#128273;</div>
+        <div class="pipe-title">Nonce</div>
+        <div class="pipe-desc">UUID hex string<br>unique per request</div>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-node">
+        <div class="pipe-icon">&#128220;</div>
+        <div class="pipe-title">Canonical String</div>
+        <div class="pipe-desc">Sort headers + params<br>MD5 body hash (POST)</div>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-node">
+        <div class="pipe-icon">&#128274;</div>
+        <div class="pipe-title">HMAC-SHA1</div>
+        <div class="pipe-desc">Key: <code>secret + "&amp;"</code><br>Base64 encode result</div>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-node">
+        <div class="pipe-icon">&#128232;</div>
+        <div class="pipe-title">Send</div>
+        <div class="pipe-desc">Attach 7 auth headers<br>to HTTP request</div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:28px;">
+      <div class="card">
+        <div class="card-header"><h3>Request Headers</h3></div>
+        <div class="card-body">
+          <div class="code-block"><code><span class="comment">// Generated per request by WebullAuth.sign_request()</span>
+{
+  <span class="string">"x-app-key"</span>:               <span class="string">"&lt;app_key&gt;"</span>,
+  <span class="string">"x-timestamp"</span>:              <span class="string">"2026-05-10T14:30:00Z"</span>,
+  <span class="string">"x-signature"</span>:              <span class="string">"&lt;Base64(HMAC-SHA1)&gt;"</span>,
+  <span class="string">"x-signature-algorithm"</span>:    <span class="string">"HMAC-SHA1"</span>,
+  <span class="string">"x-signature-version"</span>:      <span class="string">"1.0"</span>,
+  <span class="string">"x-signature-nonce"</span>:        <span class="string">"&lt;uuid-hex&gt;"</span>,
+  <span class="string">"x-version"</span>:                <span class="string">"v2"</span>,
+  <span class="string">"Content-Type"</span>:             <span class="string">"application/json"</span>
+}</code></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Signing String Format</h3></div>
+        <div class="card-body">
+          <div class="code-block"><code><span class="comment">// Canonical string construction</span>
+
+<span class="comment">// 1. Collect all headers + query params</span>
+<span class="comment">// 2. Sort alphabetically by key</span>
+<span class="comment">// 3. Join as path&amp;key=value&amp;key=value...</span>
+
+<span class="keyword">signing_string</span> = <span class="string">"/openapi/trade/order/place"</span>
+  + <span class="string">"&amp;host=api.webull.com"</span>
+  + <span class="string">"&amp;x-app-key=ABC123"</span>
+  + <span class="string">"&amp;x-signature-algorithm=HMAC-SHA1"</span>
+  + <span class="string">"&amp;x-signature-nonce=..."</span>
+  + <span class="string">"&amp;x-signature-version=1.0"</span>
+  + <span class="string">"&amp;x-timestamp=..."</span>
+  + <span class="string">"&amp;&lt;MD5(JSON body)&gt;"</span>   <span class="comment">// POST only</span>
+
+<span class="comment">// URL-encode → HMAC-SHA1 → Base64</span></code></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><h3>Credential Storage</h3><span class="badge badge-green">Encrypted</span></div>
+      <div class="card-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Field</th><th>Storage</th><th>UI Display</th><th>Default</th></tr></thead>
+            <tbody>
+              <tr><td><code>app_key</code></td><td>Encrypted SQLite</td><td>Masked (****...last4)</td><td>&mdash;</td></tr>
+              <tr><td><code>app_secret</code></td><td>Encrypted SQLite</td><td>Masked (****...last4)</td><td>&mdash;</td></tr>
+              <tr><td><code>environment</code></td><td>Encrypted SQLite</td><td>Dropdown</td><td><code>production</code></td></tr>
+              <tr><td><code>account_type</code></td><td>Encrypted SQLite</td><td>Dropdown (6 options)</td><td><code>MARGIN</code></td></tr>
+              <tr><td><code>account_id</code></td><td>Encrypted SQLite</td><td>Populated after connect</td><td>&mdash;</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: ORDER TYPES ===== -->
+<section id="orders">
+  <div class="wrap">
+    <div class="section-label">Trading</div>
+    <h2 class="section-title">Supported Order Types</h2>
+    <p class="section-desc">
+      Full order lifecycle support: place, cancel, replace &mdash; across stocks, options, bracket orders, and trailing stops.
+    </p>
+
+    <div class="grid-2" style="margin-top:28px;">
+      <!-- Stock Orders -->
+      <div class="card">
+        <div class="card-header"><h3>Stock Orders</h3><span class="badge badge-green">Equity</span></div>
+        <div class="card-body">
+          <p style="font-size:.82rem;color:var(--muted);margin-bottom:16px;"><code>place_stock_order(symbol, quantity, action, order_type, ...)</code></p>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Action Input</th><th>Webull Side</th></tr></thead>
+              <tbody>
+                <tr><td><code>BUY</code> / <code>BTO</code></td><td>BUY</td></tr>
+                <tr><td><code>SELL</code> / <code>STC</code></td><td>SELL</td></tr>
+                <tr><td><code>SHORT</code></td><td>SHORT</td></tr>
+                <tr><td><code>COVER</code></td><td>BUY</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tbl-wrap" style="margin-top:12px;">
+            <table>
+              <thead><tr><th>Order Type</th><th>Webull Type</th></tr></thead>
+              <tbody>
+                <tr><td><code>MARKET</code></td><td>MARKET</td></tr>
+                <tr><td><code>LIMIT</code></td><td>LIMIT</td></tr>
+                <tr><td><code>STOP</code></td><td>STOP_LOSS</td></tr>
+                <tr><td><code>STOP_LIMIT</code></td><td>STOP_LOSS_LIMIT</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tbl-wrap" style="margin-top:12px;">
+            <table>
+              <thead><tr><th>Duration</th><th>Webull TIF</th></tr></thead>
+              <tbody>
+                <tr><td><code>DAY</code></td><td>DAY</td></tr>
+                <tr><td><code>GTC</code></td><td>GTC</td></tr>
+                <tr><td><code>IOC</code></td><td>IOC</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Option Orders -->
+      <div class="card">
+        <div class="card-header"><h3>Option Orders</h3><span class="badge badge-purple">Derivatives</span></div>
+        <div class="card-body">
+          <p style="font-size:.82rem;color:var(--muted);margin-bottom:16px;"><code>place_option_order(symbol, quantity, action, option_type, strike, expiry, ...)</code></p>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Action</th><th>Position Intent</th><th>Side</th></tr></thead>
+              <tbody>
+                <tr><td><code>BTO</code></td><td>BUY_TO_OPEN</td><td>BUY</td></tr>
+                <tr><td><code>STC</code></td><td>SELL_TO_CLOSE</td><td>SELL</td></tr>
+                <tr><td><code>STO</code></td><td>SELL_TO_OPEN</td><td>SELL</td></tr>
+                <tr><td><code>BTC</code></td><td>BUY_TO_CLOSE</td><td>BUY</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="font-size:.82rem;color:var(--muted);margin-top:16px;">Option legs include: <code>strike_price</code>, <code>option_expire_date</code> (YYYYMMDD), <code>option_type</code> (CALL/PUT), <code>option_strategy</code> (SINGLE), <code>instrument_type</code> (OPTION)</p>
+        </div>
+      </div>
+
+      <!-- Bracket Orders -->
+      <div class="card">
+        <div class="card-header"><h3>Bracket Orders</h3><span class="badge badge-orange">Risk Mgmt</span></div>
+        <div class="card-body">
+          <p style="font-size:.82rem;color:var(--muted);margin-bottom:16px;">
+            Three-order combo submitted atomically via single API call. Implements the MASTER + STOP_PROFIT + STOP_LOSS pattern.
+          </p>
+          <div class="code-block"><code><span class="comment">// Bracket order structure</span>
+{
+  <span class="string">"client_combo_order_id"</span>: <span class="string">"uuid-hex"</span>,
+  <span class="string">"new_orders"</span>: [
+    { <span class="comment">// MASTER — entry order</span>
+      <span class="string">"combo_type"</span>: <span class="string">"MASTER"</span>,
+      <span class="string">"order_type"</span>: <span class="string">"MARKET"</span> | <span class="string">"LIMIT"</span>
+    },
+    { <span class="comment">// STOP_PROFIT — take-profit exit</span>
+      <span class="string">"combo_type"</span>: <span class="string">"STOP_PROFIT"</span>,
+      <span class="string">"order_type"</span>: <span class="string">"LIMIT"</span>,
+      <span class="string">"time_in_force"</span>: <span class="string">"GTC"</span>
+    },
+    { <span class="comment">// STOP_LOSS — stop-loss exit</span>
+      <span class="string">"combo_type"</span>: <span class="string">"STOP_LOSS"</span>,
+      <span class="string">"order_type"</span>: <span class="string">"STOP_LOSS"</span>,
+      <span class="string">"time_in_force"</span>: <span class="string">"GTC"</span>
+    }
+  ]
+}</code></div>
+        </div>
+      </div>
+
+      <!-- Trailing Stop -->
+      <div class="card">
+        <div class="card-header"><h3>Trailing Stop</h3><span class="badge badge-orange">Risk Mgmt</span></div>
+        <div class="card-body">
+          <p style="font-size:.82rem;color:var(--muted);margin-bottom:16px;">
+            Dynamic stop-loss that follows price movement by a configurable trail amount.
+          </p>
+          <div class="code-block"><code><span class="comment">// Trailing stop order</span>
+{
+  <span class="string">"order_type"</span>:          <span class="string">"TRAILING_STOP_LOSS"</span>,
+  <span class="string">"trailing_type"</span>:       <span class="string">"AMOUNT"</span> | <span class="string">"PERCENTAGE"</span>,
+  <span class="string">"trailing_stop_step"</span>:  <span class="string">"2.50"</span>,
+  <span class="string">"instrument_type"</span>:     <span class="string">"EQUITY"</span>,
+  <span class="string">"time_in_force"</span>:       <span class="string">"DAY"</span>
+}</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Order Lifecycle -->
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><h3>Order Lifecycle Management</h3></div>
+      <div class="card-body">
+        <div class="pipeline">
+          <div class="pipe-node" style="background: var(--info-bg);">
+            <div class="pipe-icon">&#128221;</div>
+            <div class="pipe-title">Place</div>
+            <div class="pipe-desc">/order/place<br>Returns client_order_id</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node" style="background: var(--warn-bg);">
+            <div class="pipe-icon">&#9203;</div>
+            <div class="pipe-title">Pending</div>
+            <div class="pipe-desc">/order/open<br>Monitor status</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node" style="background: var(--accent-light);">
+            <div class="pipe-icon">&#9998;</div>
+            <div class="pipe-title">Modify</div>
+            <div class="pipe-desc">/order/replace<br>Price, qty, TIF</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node" style="background: var(--good-bg);">
+            <div class="pipe-icon">&#10003;</div>
+            <div class="pipe-title">Filled</div>
+            <div class="pipe-desc">TradeEventPoller<br>detects fill</div>
+          </div>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted);margin-top:12px;">
+          Order statuses tracked: <code>SUBMITTED</code> &rarr; <code>PENDING</code> &rarr; <code>FILLED</code> | <code>CANCELLED</code> | <code>FAILED</code>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: STREAMING ===== -->
+<section id="streaming">
+  <div class="wrap">
+    <div class="section-label">Real-Time Data</div>
+    <h2 class="section-title">Market Streaming &amp; Trade Event Polling</h2>
+    <p class="section-desc">
+      Dual-channel real-time data: MQTT for market prices and a 3-second polling loop for trade fill detection.
+    </p>
+
+    <div class="grid-2" style="margin-top:28px;">
+      <div class="card">
+        <div class="card-header"><h3>WebullMarketStream</h3><span class="badge badge-purple">MQTT</span></div>
+        <div class="card-body">
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> <strong>Protocol:</strong> MQTT v3.1.1 over TCP:1883</li>
+            <li><span class="check">&#10003;</span> <strong>Topics:</strong> snapshot, quote, notice, echo</li>
+            <li><span class="check">&#10003;</span> <strong>Sub types:</strong> SNAPSHOT, QUOTE, TICK</li>
+            <li><span class="check">&#10003;</span> <strong>Batch size:</strong> 100 symbols per subscribe call</li>
+            <li><span class="check">&#10003;</span> <strong>Session ID:</strong> UUID hex, unique per connection</li>
+            <li><span class="check">&#10003;</span> <strong>Callbacks:</strong> on(event, callback) pattern</li>
+            <li><span class="check">&#10003;</span> <strong>Auto-reconnect:</strong> Disconnect event emitted</li>
+          </ul>
+
+          <div class="code-block" style="margin-top:16px;"><code><span class="comment">// Subscribe request body</span>
+{
+  <span class="string">"session_id"</span>:  <span class="string">"a1b2c3d4..."</span>,
+  <span class="string">"symbols"</span>:     [<span class="string">"AAPL"</span>, <span class="string">"MSFT"</span>, ...],
+  <span class="string">"category"</span>:    <span class="string">"US_STOCK"</span>,
+  <span class="string">"sub_types"</span>:   [<span class="string">"SNAPSHOT"</span>],
+  <span class="string">"grab"</span>:        <span class="keyword">true</span>
+}</code></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>TradeEventPoller</h3><span class="badge badge-orange">Fills</span></div>
+        <div class="card-body">
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> <strong>Interval:</strong> 3.0 seconds (configurable)</li>
+            <li><span class="check">&#10003;</span> <strong>Fill detection:</strong> Compares filled_quantity against tracked state</li>
+            <li><span class="check">&#10003;</span> <strong>De-duplication:</strong> _known_fills dict prevents re-emit</li>
+            <li><span class="check">&#10003;</span> <strong>Terminal events:</strong> FILLED, CANCELLED, FAILED</li>
+            <li><span class="check">&#10003;</span> <strong>Error resilience:</strong> Catches exceptions, continues polling</li>
+            <li><span class="check">&#10003;</span> <strong>Graceful stop:</strong> CancelledError suppression</li>
+          </ul>
+
+          <div class="code-block" style="margin-top:16px;"><code><span class="comment">// Fill event emitted</span>
+{
+  <span class="string">"client_order_id"</span>: <span class="string">"..."</span>,
+  <span class="string">"symbol"</span>:          <span class="string">"AAPL"</span>,
+  <span class="string">"side"</span>:            <span class="string">"BUY"</span>,
+  <span class="string">"filled_qty"</span>:      <span class="num">50</span>,
+  <span class="string">"filled_price"</span>:    <span class="num">150.25</span>,
+  <span class="string">"status"</span>:          <span class="string">"FILLED"</span>,
+  <span class="string">"new_fills"</span>:       <span class="num">50</span>
+}</code></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: PIPELINES ===== -->
+<section id="pipelines">
+  <div class="wrap">
+    <div class="section-label">Data Pipelines</div>
+    <h2 class="section-title">Integration Pipelines &amp; Data Flows</h2>
+    <p class="section-desc">
+      How the Webull Official broker plugs into every major BotifyTrades pipeline.
+    </p>
+
+    <!-- Entry Pipeline -->
+    <div class="card" style="margin-top:28px;">
+      <div class="card-header"><h3>Signal Entry Pipeline</h3><span class="badge badge-green">Entry</span></div>
+      <div class="card-body">
+        <div class="pipeline">
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128172;</div>
+            <div class="pipe-title">Discord Signal</div>
+            <div class="pipe-desc">Channel message parsed<br>by signal parser</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#9878;</div>
+            <div class="pipe-title">Risk Engine</div>
+            <div class="pipe-desc">Position sizing<br>risk validation</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128256;</div>
+            <div class="pipe-title">Multi-Broker<br>Dispatch</div>
+            <div class="pipe-desc">Queue webull_official<br>+ other brokers</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node" style="background:var(--orange-light);">
+            <div class="pipe-icon">&#128293;</div>
+            <div class="pipe-title">Webull Official</div>
+            <div class="pipe-desc">place_stock_order()<br>place_option_order()</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128200;</div>
+            <div class="pipe-title">Position Monitor</div>
+            <div class="pipe-desc">PT/SL/trailing<br>bracket management</div>
+          </div>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted);margin-top:12px;">
+          Multi-broker dispatch uses <code>asyncio.gather()</code> for parallel execution across all enabled brokers.
+          Webull Official is identified by names: <code>webull_official</code>, <code>webull_official_live</code>, <code>webull_official_paper</code>.
+        </p>
+      </div>
+    </div>
+
+    <!-- Exit Pipeline -->
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><h3>Position Exit Pipeline</h3><span class="badge badge-orange">Exit</span></div>
+      <div class="card-body">
+        <div class="pipeline">
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128200;</div>
+            <div class="pipe-title">Position Monitor</div>
+            <div class="pipe-desc">Evaluates PT/SL<br>trailing stops</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#9878;</div>
+            <div class="pipe-title">Risk Engine</div>
+            <div class="pipe-desc">ExitDecision<br>evaluation</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128269;</div>
+            <div class="pipe-title">Broker Instance</div>
+            <div class="pipe-desc">get_broker_instance()<br>'webull_official'</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node" style="background:var(--orange-light);">
+            <div class="pipe-icon">&#128293;</div>
+            <div class="pipe-title">Webull Official</div>
+            <div class="pipe-desc">place_stock_order(SELL)<br>cancel_order()</div>
+          </div>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted);margin-top:12px;">
+          <code>get_broker_instance('webull_official')</code> resolves <strong>before</strong> generic <code>'webull'</code>, ensuring official API takes priority when configured.
+        </p>
+      </div>
+    </div>
+
+    <!-- UPH Pipeline -->
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><h3>Unified Price Hub Pipeline</h3><span class="badge badge-blue">Market Data</span></div>
+      <div class="card-body">
+        <div class="pipeline">
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128226;</div>
+            <div class="pipe-title">Price Request</div>
+            <div class="pipe-desc">Symbol quote needed<br>by risk/conditional</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#127760;</div>
+            <div class="pipe-title">Unified Price Hub</div>
+            <div class="pipe-desc">Broker name mapping<br>WEBULL_OFFICIAL → hub</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node" style="background:var(--orange-light);">
+            <div class="pipe-icon">&#128200;</div>
+            <div class="pipe-title">Webull Data Hub</div>
+            <div class="pipe-desc">Shared with legacy<br>webull integration</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128176;</div>
+            <div class="pipe-title">Quote Cache</div>
+            <div class="pipe-desc">Cached prices<br>for all consumers</div>
+          </div>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted);margin-top:12px;">
+          UPH maps <code>WEBULL_OFFICIAL</code>, <code>WEBULL_OFFICIAL_LIVE</code>, and <code>WEBULL_OFFICIAL_PAPER</code> to the shared <code>webull_official</code> hub key.
+        </p>
+      </div>
+    </div>
+
+    <!-- Conditional Orders -->
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><h3>Conditional Orders Pipeline</h3><span class="badge badge-purple">Triggers</span></div>
+      <div class="card-body">
+        <div class="pipeline">
+          <div class="pipe-node">
+            <div class="pipe-icon">&#9889;</div>
+            <div class="pipe-title">Trigger Condition</div>
+            <div class="pipe-desc">Price reaches target<br>or custom condition</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128269;</div>
+            <div class="pipe-title">QOT Resolution</div>
+            <div class="pipe-desc">get_option_quote()<br>via broker instance</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128256;</div>
+            <div class="pipe-title">Route to Broker</div>
+            <div class="pipe-desc">Resolve webull_official<br>before generic webull</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node" style="background:var(--orange-light);">
+            <div class="pipe-icon">&#128293;</div>
+            <div class="pipe-title">Execute Order</div>
+            <div class="pipe-desc">Stock or option<br>order placement</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Relay / Mobile -->
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><h3>Mobile Remote Control Pipeline</h3><span class="badge badge-blue">Relay</span></div>
+      <div class="card-body">
+        <div class="pipeline">
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128241;</div>
+            <div class="pipe-title">Mobile App</div>
+            <div class="pipe-desc">User sends command<br>via WSS relay</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128268;</div>
+            <div class="pipe-title">RelayClient</div>
+            <div class="pipe-desc">WSS connection<br>to relay server</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128270;</div>
+            <div class="pipe-title">Broker Lookup</div>
+            <div class="pipe-desc">WEBULL_OFFICIAL →<br>webull_official_broker</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node" style="background:var(--orange-light);">
+            <div class="pipe-icon">&#128293;</div>
+            <div class="pipe-title">Emergency Stop</div>
+            <div class="pipe-desc">Cancel orders<br>close positions</div>
+          </div>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted);margin-top:12px;">
+          RelayClient broker map: <code>{'WEBULL_OFFICIAL': 'webull_official_broker'}</code> — enables cancel, close, and status operations from mobile.
+        </p>
+      </div>
+    </div>
+
+    <!-- Broker Sync -->
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><h3>Broker Sync Pipeline</h3><span class="badge badge-green">Reconciliation</span></div>
+      <div class="card-body">
+        <div class="pipeline">
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128337;</div>
+            <div class="pipe-title">Sync Timer</div>
+            <div class="pipe-desc">Periodic or<br>event-driven</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128230;</div>
+            <div class="pipe-title">BrokerManager</div>
+            <div class="pipe-desc">webull_official_broker<br>attribute access</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node" style="background:var(--orange-light);">
+            <div class="pipe-icon">&#128200;</div>
+            <div class="pipe-title">Get Positions</div>
+            <div class="pipe-desc">Fetch live state<br>from Webull API</div>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-node">
+            <div class="pipe-icon">&#128203;</div>
+            <div class="pipe-title">Reconcile</div>
+            <div class="pipe-desc">Sync with local<br>position cache</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: SETTINGS UI ===== -->
+<section id="ui">
+  <div class="wrap">
+    <div class="section-label">User Interface</div>
+    <h2 class="section-title">Settings &amp; Dashboard Integration</h2>
+    <p class="section-desc">
+      Full admin UI for credential management, account selection, connection testing, and live status monitoring.
+    </p>
+
+    <div class="grid-2" style="margin-top:28px;">
+      <div class="card">
+        <div class="card-header"><h3>Settings Card (Admin &rarr; Settings)</h3></div>
+        <div class="card-body">
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> <strong>App Key</strong> &mdash; Password input, masked on load</li>
+            <li><span class="check">&#10003;</span> <strong>App Secret</strong> &mdash; Password input, masked on load</li>
+            <li><span class="check">&#10003;</span> <strong>Environment</strong> &mdash; Dropdown: Production / Test (UAT)</li>
+            <li><span class="check">&#10003;</span> <strong>Account Type</strong> &mdash; Always-visible dropdown: Auto, Margin, Cash, Traditional IRA, Roth IRA, Rollover IRA</li>
+            <li><span class="check">&#10003;</span> <strong>Account Selector</strong> &mdash; Populated after Connect with live account list</li>
+            <li><span class="check">&#10003;</span> <strong>Save Button</strong> &mdash; Persists credentials to encrypted DB</li>
+            <li><span class="check">&#10003;</span> <strong>Connect Button</strong> &mdash; Tests connection, shows balance</li>
+            <li><span class="check">&#10003;</span> <strong>Status Badge</strong> &mdash; Real-time connected/disconnected</li>
+            <li><span class="check">&#10003;</span> <strong>Account Info</strong> &mdash; Balance, buying power after connect</li>
+            <li><span class="check">&#10003;</span> <strong>Help Button</strong> &mdash; Admin help overlay for setup</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Dashboard Integration</h3></div>
+        <div class="card-body">
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> <strong>Status Badge</strong> &mdash; <code>webull-official-status-badge</code> in nav</li>
+            <li><span class="check">&#10003;</span> <strong>Balance Routing</strong> &mdash; <code>/api/webull_official/balance</code></li>
+            <li><span class="check">&#10003;</span> <strong>Status Polling</strong> &mdash; Periodic <code>updateStatusBadge('webull_official')</code></li>
+            <li><span class="check">&#10003;</span> <strong>Connection Display</strong> &mdash; <code>updateBrokerConnectionDisplay()</code></li>
+            <li><span class="check">&#10003;</span> <strong>Broker Dropdown</strong> &mdash; Webull Official option in selector</li>
+            <li><span class="check">&#10003;</span> <strong>Health Monitor</strong> &mdash; <code>WEBULL_OFFICIAL</code> in broker_map</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- GUI Routes Table -->
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><h3>Flask API Routes</h3><span class="badge badge-blue">REST</span></div>
+      <div class="card-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Method</th><th>Route</th><th>Purpose</th><th>Auth</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/api/brokers/credentials/webull_official</code></td>
+                <td>Load masked credentials + status</td>
+                <td>Admin</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-post">POST</span></td>
+                <td><code>/api/brokers/credentials/webull_official</code></td>
+                <td>Save credentials (app_key, secret, env, account_type)</td>
+                <td>Admin</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-post">POST</span></td>
+                <td><code>/api/brokers/connect/webull_official</code></td>
+                <td>Test connection, return account info + list</td>
+                <td>Admin</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/api/webull_official/balance</code></td>
+                <td>Live balance from running broker instance</td>
+                <td>Session</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/api/brokers/status</code></td>
+                <td>Includes webull_official connection state</td>
+                <td>Session</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: SYSTEM WIRING ===== -->
+<section id="wiring">
+  <div class="wrap">
+    <div class="section-label">Integration Map</div>
+    <h2 class="section-title">Full System Wiring</h2>
+    <p class="section-desc">
+      Every integration point where Webull Official connects to the BotifyTrades infrastructure.
+    </p>
+
+    <div class="int-map" style="margin-top:28px;">
+      <div class="int-row">
+        <div class="int-name">selfbot_webull.py</div>
+        <div class="int-desc">Import flag, broker init, get_broker_instance(), BrokerManager, multi-broker dispatch, QOT resolution</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">unified_price_hub.py</div>
+        <div class="int-desc">Hub registry entry + WEBULL_OFFICIAL / _LIVE / _PAPER broker name mappings</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">relay_client.py</div>
+        <div class="int-desc">Broker map: WEBULL_OFFICIAL → webull_official_broker for mobile emergency stop</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">broker_sync_service.py</div>
+        <div class="int-desc">Accessed via BrokerManager.webull_official_broker for position reconciliation</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">conditional_orders/</div>
+        <div class="int-desc">Trigger routing via multi-broker dispatch + QOT quote resolution</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">position_monitor.py</div>
+        <div class="int-desc">Risk management via unified broker interface — PT/SL/trailing stop exits</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">risk_engine.py</div>
+        <div class="int-desc">ExitDecision evaluation — broker-agnostic, works through get_broker_instance()</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">routes.py</div>
+        <div class="int-desc">5 API endpoints: credentials GET/POST, connect, balance, status</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">broker_credentials_service.py</div>
+        <div class="int-desc">get/save/clear credentials + enabled_brokers + API key export</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">settings.html</div>
+        <div class="int-desc">Full settings card with credential form, account type dropdown, connect/save buttons</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">index.html</div>
+        <div class="int-desc">Dashboard balance routing, status badge polling, broker dropdown option</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+      <div class="int-row">
+        <div class="int-name">exceptions.py</div>
+        <div class="int-desc">Custom exception hierarchy: AuthError, RateLimitError, OrderError, ConnectionError</div>
+        <div class="int-status"><span class="badge badge-green">Wired</span></div>
+      </div>
+    </div>
+
+    <!-- Account Selection Logic -->
+    <div class="card" style="margin-top:28px;">
+      <div class="card-header"><h3>Account Selection Logic</h3><span class="badge badge-purple">Smart Routing</span></div>
+      <div class="card-body">
+        <div class="code-block"><code><span class="comment"># broker.py connect() — Account type preference routing</span>
+
+<span class="keyword">if</span> account_id:
+    <span class="comment"># Exact match by ID → highest priority</span>
+    matched = [a <span class="keyword">for</span> a <span class="keyword">in</span> accounts <span class="keyword">if</span> a.account_id == account_id]
+
+<span class="keyword">elif</span> account_type <span class="keyword">and</span> account_type != <span class="string">"AUTO"</span>:
+    <span class="comment"># Type preference mapping</span>
+    type_map = {
+        <span class="string">"MARGIN"</span>:          <span class="string">"MARGIN"</span>,
+        <span class="string">"CASH"</span>:            <span class="string">"CASH"</span>,
+        <span class="string">"TRADITIONAL IRA"</span>: <span class="string">"IRA"</span>,  <span class="comment"># + label filter</span>
+        <span class="string">"ROTH IRA"</span>:        <span class="string">"IRA"</span>,  <span class="comment"># + label filter</span>
+        <span class="string">"ROLLOVER IRA"</span>:    <span class="string">"IRA"</span>,  <span class="comment"># + label filter</span>
+    }
+    <span class="comment"># IRA subtypes disambiguated by account_label</span>
+
+<span class="keyword">else</span>:  <span class="comment"># Auto-select</span>
+    <span class="comment"># Prefer MARGIN account → fallback to first</span></code></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: TESTS ===== -->
+<section id="tests">
+  <div class="wrap">
+    <div class="section-label">Quality Assurance</div>
+    <h2 class="section-title">Test Coverage &amp; QA Gates</h2>
+    <p class="section-desc">
+      Three dedicated test files with 539 passing tests across authentication, trading, streaming, and system wiring.
+    </p>
+
+    <div class="grid-3" style="margin-top:28px;">
+      <div class="card">
+        <div class="card-header"><h3>test_auth.py</h3><span class="badge badge-green">384 lines</span></div>
+        <div class="card-body">
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> HMAC-SHA1 signature generation</li>
+            <li><span class="check">&#10003;</span> Config URL routing (prod/test)</li>
+            <li><span class="check">&#10003;</span> Rate limiter category mapping</li>
+            <li><span class="check">&#10003;</span> All data model constructors</li>
+            <li><span class="check">&#10003;</span> WebullBalance.from_api() parsing</li>
+            <li><span class="check">&#10003;</span> Exception hierarchy verification</li>
+            <li><span class="check">&#10003;</span> Nonce uniqueness validation</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>test_trading.py</h3><span class="badge badge-green">600 lines</span></div>
+        <div class="card-body">
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> Stock order placement (all types)</li>
+            <li><span class="check">&#10003;</span> Option order placement (BTO/STC/STO/BTC)</li>
+            <li><span class="check">&#10003;</span> Bracket order 3-leg construction</li>
+            <li><span class="check">&#10003;</span> Order cancellation flow</li>
+            <li><span class="check">&#10003;</span> Position fetching &amp; formatting</li>
+            <li><span class="check">&#10003;</span> Account info retrieval</li>
+            <li><span class="check">&#10003;</span> Action/type mapping tables</li>
+            <li><span class="check">&#10003;</span> Error handling paths</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>test_streaming.py</h3><span class="badge badge-green">379 lines</span></div>
+        <div class="card-body">
+          <ul class="feature-list">
+            <li><span class="check">&#10003;</span> MQTT subscribe batching (100/batch)</li>
+            <li><span class="check">&#10003;</span> Unsubscribe symbol tracking</li>
+            <li><span class="check">&#10003;</span> Callback registration &amp; invocation</li>
+            <li><span class="check">&#10003;</span> Fill event detection</li>
+            <li><span class="check">&#10003;</span> Terminal event (FILLED/CANCELLED)</li>
+            <li><span class="check">&#10003;</span> De-duplication (no double-emit)</li>
+            <li><span class="check">&#10003;</span> Credential service defaults</li>
+            <li><span class="check">&#10003;</span> get_broker_instance() priority</li>
+            <li><span class="check">&#10003;</span> Relay client broker map</li>
+            <li><span class="check">&#10003;</span> UPH mapping verification</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Implementation Timeline -->
+    <div class="card" style="margin-top:28px;">
+      <div class="card-header"><h3>Implementation Phases</h3></div>
+      <div class="card-body">
+        <div class="timeline">
+          <div class="timeline-item done">
+            <h4>Phase 1 &mdash; Core Module</h4>
+            <p>Config, Auth (HMAC-SHA1), Client (httpx), RateLimiter, Models, Exceptions, AccountsAPI, OrdersAPI, PositionsAPI</p>
+          </div>
+          <div class="timeline-item done">
+            <h4>Phase 2 &mdash; Unit Tests + Streaming</h4>
+            <p>WebullMarketStream (MQTT), TradeEventPoller (3s fill detection), 384-line auth test suite, 600-line trading test suite</p>
+          </div>
+          <div class="timeline-item done">
+            <h4>Phase 3 &mdash; System Integration</h4>
+            <p>selfbot_webull.py wiring, routes.py endpoints, credential service, settings UI, dashboard balance routing, UPH + relay + sync</p>
+          </div>
+          <div class="timeline-item done">
+            <h4>Phase 4 &mdash; QA &amp; Polish</h4>
+            <p>Integration wiring tests, 6 UI bugs found &amp; fixed, account type preference dropdown, status badge polling, 539 total tests passing</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: DATA MODELS ===== -->
+<section id="models-detail" style="background: var(--bg-soft);">
+  <div class="wrap">
+    <div class="section-label">Data Models</div>
+    <h2 class="section-title">Typed Dataclass Reference</h2>
+    <p class="section-desc">
+      All API response structures are parsed into typed Python dataclasses for safety and IntelliSense support.
+    </p>
+
+    <div class="grid-2" style="margin-top:28px;">
+      <div class="card">
+        <div class="card-header"><h3>WebullAccount</h3></div>
+        <div class="card-body">
+          <div class="code-block"><code><span class="keyword">@dataclass</span>
+<span class="keyword">class</span> <span class="type">WebullAccount</span>:
+    account_id:    <span class="type">str</span>
+    account_type:  <span class="type">str</span>   <span class="comment"># MARGIN, CASH, IRA</span>
+    account_class: <span class="type">str</span>   <span class="comment"># e.g. individual</span>
+    account_label: <span class="type">str</span>   <span class="comment"># IRA subtype text</span>
+    user_id:       <span class="type">str</span> = <span class="string">""</span></code></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>WebullBalance</h3></div>
+        <div class="card-body">
+          <div class="code-block"><code><span class="keyword">@dataclass</span>
+<span class="keyword">class</span> <span class="type">WebullBalance</span>:
+    total_cash_balance:     <span class="type">float</span>
+    total_market_value:     <span class="type">float</span>
+    total_unrealized_pnl:   <span class="type">float</span>
+    total_net_liquidation:  <span class="type">float</span>
+    total_day_pnl:          <span class="type">float</span>
+    buying_power:           <span class="type">float</span>
+    settled_cash:           <span class="type">float</span>
+    unsettled_cash:         <span class="type">float</span>
+    day_trades_left:        <span class="type">str</span>
+    option_buying_power:    <span class="type">float</span>
+    day_buying_power:       <span class="type">float</span>
+    overnight_buying_power: <span class="type">float</span></code></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>WebullPosition</h3></div>
+        <div class="card-body">
+          <div class="code-block"><code><span class="keyword">@dataclass</span>
+<span class="keyword">class</span> <span class="type">WebullPosition</span>:
+    position_id:     <span class="type">str</span>
+    symbol:          <span class="type">str</span>
+    quantity:        <span class="type">float</span>
+    cost_price:      <span class="type">float</span>
+    last_price:      <span class="type">float</span>
+    unrealized_pnl:  <span class="type">float</span>
+    instrument_type: <span class="type">str</span>    <span class="comment"># EQUITY | OPTION</span>
+    currency:        <span class="type">str</span> = <span class="string">"USD"</span>
+    option_type:     <span class="type">str</span> = <span class="string">""</span>   <span class="comment"># CALL | PUT</span>
+    strike_price:    <span class="type">float</span> = <span class="num">0.0</span>
+    expiry_date:     <span class="type">str</span> = <span class="string">""</span>   <span class="comment"># YYYYMMDD</span>
+    option_strategy: <span class="type">str</span> = <span class="string">""</span>
+    multiplier:      <span class="type">int</span> = <span class="num">100</span></code></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>WebullOrder</h3></div>
+        <div class="card-body">
+          <div class="code-block"><code><span class="keyword">@dataclass</span>
+<span class="keyword">class</span> <span class="type">WebullOrder</span>:
+    client_order_id: <span class="type">str</span>
+    order_id:        <span class="type">str</span>
+    symbol:          <span class="type">str</span>
+    side:            <span class="type">str</span>    <span class="comment"># BUY | SELL | SHORT</span>
+    status:          <span class="type">str</span>    <span class="comment"># FILLED | PENDING ...</span>
+    order_type:      <span class="type">str</span>    <span class="comment"># MARKET | LIMIT ...</span>
+    instrument_type: <span class="type">str</span>    <span class="comment"># EQUITY | OPTION</span>
+    quantity:        <span class="type">float</span>
+    filled_quantity: <span class="type">float</span>
+    filled_price:    <span class="type">float</span>
+    limit_price:     <span class="type">float</span> = <span class="num">0.0</span>
+    stop_price:      <span class="type">float</span> = <span class="num">0.0</span>
+    time_in_force:   <span class="type">str</span> = <span class="string">"DAY"</span>
+    place_time:      <span class="type">str</span> = <span class="string">""</span>
+    filled_time:     <span class="type">str</span> = <span class="string">""</span>
+    combo_type:      <span class="type">str</span> = <span class="string">"NORMAL"</span></code></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: ERROR HANDLING ===== -->
+<section id="errors">
+  <div class="wrap">
+    <div class="section-label">Reliability</div>
+    <h2 class="section-title">Error Handling &amp; Exception Hierarchy</h2>
+
+    <div class="grid-2" style="margin-top:28px;">
+      <div class="card">
+        <div class="card-header"><h3>Exception Classes</h3></div>
+        <div class="card-body">
+          <div class="code-block"><code><span class="type">WebullAPIError</span>(Exception)
+  ├─ status_code: <span class="type">int</span>
+  ├─ error_code:  <span class="type">str</span>
+  └─ message:     <span class="type">str</span>
+
+<span class="type">WebullAuthError</span>(WebullAPIError)
+  <span class="comment"># HTTP 401 — invalid credentials</span>
+
+<span class="type">WebullRateLimitError</span>(WebullAPIError)
+  <span class="comment"># Rate limit exceeded</span>
+
+<span class="type">WebullOrderError</span>(WebullAPIError)
+  <span class="comment"># Order-specific failures</span>
+
+<span class="type">WebullConnectionError</span>(Exception)
+  <span class="comment"># Network / timeout issues</span></code></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Error Routing</h3></div>
+        <div class="card-body">
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Condition</th><th>Exception Raised</th></tr></thead>
+              <tbody>
+                <tr><td>HTTP 401 response</td><td><code>WebullAuthError</code></td></tr>
+                <tr><td>Path contains "order"</td><td><code>WebullOrderError</code></td></tr>
+                <tr><td>Any other HTTP error</td><td><code>WebullAPIError</code></td></tr>
+                <tr><td>JSON parse failure</td><td><code>WebullAPIError(UNKNOWN)</code></td></tr>
+                <tr><td>Connection timeout</td><td><code>asyncio.TimeoutError</code> (30s)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="font-size:.82rem;color:var(--muted);margin-top:16px;">
+            All broker-level methods wrap exceptions and return safe defaults:
+            <code>get_positions()</code> → <code>[]</code>,
+            <code>get_account_info()</code> → <code>{}</code>,
+            <code>place_*_order()</code> → <code>OrderResult(success=False)</code>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: RATE LIMITING ===== -->
+<section id="rate-limits" style="background: var(--bg-soft);">
+  <div class="wrap">
+    <div class="section-label">Throttling</div>
+    <h2 class="section-title">Rate Limiting Configuration</h2>
+
+    <div class="card" style="margin-top:28px;">
+      <div class="card-header"><h3>Per-Category Sliding Window</h3><span class="badge badge-orange">Async</span></div>
+      <div class="card-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Category</th><th>Max Requests</th><th>Window</th><th>Endpoints</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>order</strong></td>
+                <td>600</td>
+                <td>60 seconds</td>
+                <td><code>/trade/order/place</code>, <code>/cancel</code>, <code>/replace</code>, <code>/batch-place</code>, <code>/preview</code></td>
+              </tr>
+              <tr>
+                <td><strong>account_data</strong></td>
+                <td>2</td>
+                <td>2 seconds</td>
+                <td><code>/assets/balance</code>, <code>/assets/positions</code>, <code>/order/history</code>, <code>/order/open</code>, <code>/order/detail</code></td>
+              </tr>
+              <tr>
+                <td><strong>account_list</strong></td>
+                <td>10</td>
+                <td>30 seconds</td>
+                <td><code>/account/list</code></td>
+              </tr>
+              <tr>
+                <td><strong>token</strong></td>
+                <td>10</td>
+                <td>30 seconds</td>
+                <td><code>/auth/token/create</code>, <code>/auth/token/check</code></td>
+              </tr>
+              <tr>
+                <td><strong>subscribe</strong></td>
+                <td>600</td>
+                <td>60 seconds</td>
+                <td><code>/streaming/subscribe</code>, <code>/streaming/unsubscribe</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted);margin-top:16px;">
+          Implementation uses <code>asyncio.Lock</code> + <code>time.monotonic()</code> for thread-safe sliding window.
+          When limit is reached, the caller <code>await</code>s a calculated sleep before proceeding.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION: FILE MAP ===== -->
+<section id="files">
+  <div class="wrap">
+    <div class="section-label">Source Files</div>
+    <h2 class="section-title">Complete File Map</h2>
+
+    <div class="card" style="margin-top:28px;">
+      <div class="card-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>File</th><th>Purpose</th><th>Category</th></tr></thead>
+            <tbody>
+              <tr><td><code>src/brokers/webull_official/__init__.py</code></td><td>Package export: WebullOfficialBroker</td><td>Core</td></tr>
+              <tr><td><code>src/brokers/webull_official/broker.py</code></td><td>Main broker class — unified interface</td><td>Core</td></tr>
+              <tr><td><code>src/brokers/webull_official/client.py</code></td><td>Async HTTP client with signing</td><td>Core</td></tr>
+              <tr><td><code>src/brokers/webull_official/config.py</code></td><td>Configuration dataclass</td><td>Core</td></tr>
+              <tr><td><code>src/brokers/webull_official/auth.py</code></td><td>HMAC-SHA1 request signing</td><td>Security</td></tr>
+              <tr><td><code>src/brokers/webull_official/accounts.py</code></td><td>Account list &amp; balance API</td><td>API</td></tr>
+              <tr><td><code>src/brokers/webull_official/orders.py</code></td><td>Order placement, cancel, replace, query</td><td>API</td></tr>
+              <tr><td><code>src/brokers/webull_official/positions.py</code></td><td>Position fetching</td><td>API</td></tr>
+              <tr><td><code>src/brokers/webull_official/models.py</code></td><td>Typed dataclasses for all responses</td><td>Data</td></tr>
+              <tr><td><code>src/brokers/webull_official/streaming.py</code></td><td>MQTT stream + trade event poller</td><td>Real-time</td></tr>
+              <tr><td><code>src/brokers/webull_official/rate_limiter.py</code></td><td>Per-category rate limiting</td><td>Throttle</td></tr>
+              <tr><td><code>src/brokers/webull_official/exceptions.py</code></td><td>Custom exception hierarchy</td><td>Error</td></tr>
+              <tr style="background: var(--line-2);"><td colspan="3" style="font-weight:700;color:var(--muted);">Integration Files</td></tr>
+              <tr><td><code>src/selfbot_webull.py</code></td><td>Import, init, dispatch, BrokerManager wiring</td><td>Wiring</td></tr>
+              <tr><td><code>src/services/unified_price_hub.py</code></td><td>Hub registry + broker name mapping</td><td>Wiring</td></tr>
+              <tr><td><code>src/services/relay_client.py</code></td><td>Mobile remote control broker map</td><td>Wiring</td></tr>
+              <tr><td><code>gui_app/routes.py</code></td><td>5 Flask API routes</td><td>GUI</td></tr>
+              <tr><td><code>gui_app/broker_credentials_service.py</code></td><td>Credential CRUD + status</td><td>GUI</td></tr>
+              <tr><td><code>gui_app/templates/settings.html</code></td><td>Settings card + JavaScript</td><td>GUI</td></tr>
+              <tr><td><code>gui_app/templates/index.html</code></td><td>Dashboard integration</td><td>GUI</td></tr>
+              <tr style="background: var(--line-2);"><td colspan="3" style="font-weight:700;color:var(--muted);">Test Files</td></tr>
+              <tr><td><code>tests/unit/test_webull_official_auth.py</code></td><td>Auth, config, models, rate limiter tests</td><td>QA</td></tr>
+              <tr><td><code>tests/unit/test_webull_official_trading.py</code></td><td>Order, position, account tests</td><td>QA</td></tr>
+              <tr><td><code>tests/unit/test_webull_official_streaming.py</code></td><td>Streaming, polling, wiring tests</td><td>QA</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<div class="footer">
+  <div class="wrap">
+    <p><strong>BotifyTrades v10.1.5</strong> &mdash; Webull Official API Integration Report</p>
+    <p style="margin-top:6px;">Generated May 2026 &bull; 12 core files &bull; 12 integration points &bull; 11 API endpoints &bull; 539 tests passing</p>
+  </div>
+</div>
+
+<script>
+// Sticky nav active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.sticky-nav a');
+const tocLinks = document.querySelectorAll('.toc a');
+
+function updateActiveNav() {
+  let current = '';
+  sections.forEach(s => {
+    const top = s.offsetTop - 80;
+    if (window.scrollY >= top) current = s.id;
+  });
+  navLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+  });
+  tocLinks.forEach(a => {
+    a.style.color = a.getAttribute('href') === '#' + current ? 'var(--brand)' : '';
+    a.style.fontWeight = a.getAttribute('href') === '#' + current ? '600' : '';
+  });
+}
+window.addEventListener('scroll', updateActiveNav);
+updateActiveNav();
+</script>
+</body>
+</html>

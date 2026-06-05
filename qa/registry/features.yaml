@@ -1,0 +1,361 @@
+# BotifyTrades Feature Registry
+# Version: 1.0.0
+# Last Updated: 2026-01-08
+# 
+# This registry tracks all features with their components for validation.
+# Any change to a feature must update this file.
+
+schema_version: "1.0"
+
+features:
+  # ============================================
+  # CORE TRADING FEATURES
+  # ============================================
+  
+  signal_execution:
+    version: "2.0"
+    description: "Parse and execute trading signals from Discord/Telegram"
+    status: active
+    added_date: "2025-01-01"
+    components:
+      database:
+        - table: channels
+          fields: [execute_enabled, track_enabled, enabled_brokers, broker_override]
+        - table: trades
+          fields: [symbol, direction, quantity, executed_price, broker, status]
+        - table: signals
+          fields: [symbol, direction, channel_id]
+      api_routes:
+        - route: /api/channels
+          methods: [GET, POST]
+        - route: /api/channels/<id>
+          methods: [GET, PUT, DELETE]
+      selfbot_functions:
+        - process_signal
+        - execute_order
+        - parse_option_signal
+        - parse_stock_signal
+      js_files:
+        - channels.js
+    dependencies:
+      - webull_broker
+      - alpaca_broker
+      - signal_parsing
+
+  risk_management:
+    version: "2.0"
+    description: "Automated profit targets, stop losses, trailing stops"
+    status: active
+    added_date: "2025-06-01"
+    components:
+      database:
+        - table: channels
+          fields: 
+            - risk_management_enabled
+            - profit_target_1_pct
+            - profit_target_2_pct
+            - profit_target_3_pct
+            - profit_target_4_pct
+            - stop_loss_pct
+            - trailing_stop_pct
+            - trailing_activation_pct
+      api_routes:
+        - route: /api/settings/risk-management
+          methods: [GET, PUT]
+        - route: /api/channels/<id>
+          methods: [PUT]
+      selfbot_functions:
+        - RiskManager
+        - monitor_positions
+        - execute_trim
+      js_files:
+        - channels.js
+        - settings.js
+    dependencies:
+      - signal_execution
+
+  leave_runner:
+    version: "1.0"
+    description: "Keep percentage of position after profit targets"
+    status: active
+    added_date: "2025-12-15"
+    components:
+      database:
+        - table: channels
+          fields: [leave_runner_enabled, leave_runner_pct]
+      api_routes:
+        - route: /api/channels/<id>
+          methods: [PUT]
+      selfbot_functions:
+        - execute_leave_runner
+        - calculate_runner_qty
+      js_files:
+        - channels.js
+    dependencies:
+      - risk_management
+
+  trade_summary:
+    version: "1.0"
+    description: "Post P/L summary to Discord when positions close"
+    status: active
+    added_date: "2026-01-08"
+    components:
+      database:
+        - table: trading_settings
+          fields: [trade_summary_enabled]
+      api_routes:
+        - route: /api/settings/trading
+          methods: [GET, PUT]
+      selfbot_functions:
+        - is_trade_summary_enabled
+        - post_trade_summary
+      js_files:
+        - channels.js
+    dependencies:
+      - signal_execution
+
+  exit_strategy_mode:
+    version: "1.0"
+    description: "Configure exit strategy per channel (signal/risk/hybrid)"
+    status: active
+    added_date: "2026-01-01"
+    components:
+      database:
+        - table: channels
+          fields: [conditional_order_enabled]
+      api_routes:
+        - route: /api/channels/<id>
+          methods: [PUT]
+      selfbot_functions:
+        - get_exit_strategy_mode
+        - should_follow_signal_exit
+      js_files:
+        - channels.js
+    dependencies:
+      - risk_management
+
+  conditional_orders:
+    version: "1.0"
+    description: "Price-triggered order execution"
+    status: active
+    added_date: "2025-11-01"
+    components:
+      database:
+        - table: conditional_orders
+          fields: [symbol, trigger_type, trigger_price, status, broker_primary]
+      api_routes:
+        - route: /api/conditional_orders
+          methods: [GET, POST]
+        - route: /api/conditional_orders/<id>
+          methods: [GET, DELETE]
+      selfbot_functions:
+        - ConditionalOrderService
+        - monitor_price_conditions
+        - execute_triggered_order
+      js_files:
+        - conditional.js
+    dependencies:
+      - signal_execution
+
+  # ============================================
+  # BROKER INTEGRATIONS
+  # ============================================
+
+  webull_broker:
+    version: "2.5"
+    description: "Webull broker integration for US markets"
+    status: active
+    added_date: "2025-01-01"
+    components:
+      database:
+        - table: broker_credentials
+          fields: [broker_name, credentials_encrypted]
+      api_routes:
+        - route: /api/brokers/credentials/webull
+          methods: [GET, POST]
+        - route: /api/brokers/connect/webull_live
+          methods: [POST]
+        - route: /api/brokers/connect/webull_paper
+          methods: [POST]
+      selfbot_functions:
+        - WebullAuth
+        - webull_execute_order
+        - get_webull_positions
+      js_files:
+        - settings.js
+    dependencies: []
+
+  alpaca_broker:
+    version: "1.5"
+    description: "Alpaca broker integration for US markets"
+    status: active
+    added_date: "2025-03-01"
+    components:
+      database:
+        - table: broker_credentials
+          fields: [broker_name, credentials_encrypted]
+      api_routes:
+        - route: /api/brokers/credentials/alpaca
+          methods: [GET, POST]
+        - route: /api/brokers/connect/alpaca_paper
+          methods: [POST]
+        - route: /api/brokers/connect/alpaca_live
+          methods: [POST]
+      selfbot_functions:
+        - AlpacaBroker
+        - alpaca_execute_order
+        - get_alpaca_positions
+      js_files:
+        - settings.js
+    dependencies: []
+
+  upstox_broker:
+    version: "1.0"
+    description: "Upstox broker integration for Indian markets"
+    status: active
+    added_date: "2025-09-01"
+    components:
+      database:
+        - table: broker_credentials
+          fields: [broker_name, credentials_encrypted]
+        - table: upstox_pending_orders
+          fields: [pending_order_id, status, created_at]
+      api_routes:
+        - route: /api/brokers/credentials/upstox
+          methods: [GET, POST]
+        - route: /api/upstox/pending-orders
+          methods: [GET, POST, DELETE]
+      selfbot_functions:
+        - UpstoxBroker
+        - upstox_execute_order
+        - process_pending_orders
+      js_files:
+        - settings.js
+        - upstox.js
+    dependencies: []
+
+  # ============================================
+  # PLATFORM INTEGRATIONS
+  # ============================================
+
+  discord_integration:
+    version: "2.0"
+    description: "Discord selfbot for signal monitoring"
+    status: active
+    added_date: "2025-01-01"
+    components:
+      database:
+        - table: channels
+          fields: [discord_channel_id, name]
+        - table: channel_allowed_users
+          fields: [channel_id]
+      api_routes:
+        - route: /api/settings/discord
+          methods: [GET, POST]
+        - route: /api/status
+          methods: [GET]
+      selfbot_functions:
+        - DiscordSelfbot
+        - on_message
+        - process_discord_signal
+      js_files:
+        - settings.js
+    dependencies: []
+
+  telegram_integration:
+    version: "1.0"
+    description: "Telegram client for signal monitoring"
+    status: active
+    added_date: "2025-07-01"
+    components:
+      database:
+        - table: telegram_settings
+          fields: [api_id, api_hash, session_string]
+      api_routes:
+        - route: /api/settings/telegram
+          methods: [GET, POST]
+        - route: /api/telegram/connect
+          methods: [POST]
+        - route: /api/telegram/disconnect
+          methods: [POST]
+      selfbot_functions:
+        - TelegramListener
+        - process_telegram_signal
+        - connect_telegram
+      js_files:
+        - settings.js
+        - telegram.js
+    dependencies: []
+
+  # ============================================
+  # ANALYTICS FEATURES
+  # ============================================
+
+  pnl_tracking:
+    version: "1.0"
+    description: "FIFO-based P&L calculation and tracking"
+    status: active
+    added_date: "2025-05-01"
+    components:
+      database:
+        - table: signal_lots
+          fields: [signal_id, channel_id, open_price, original_qty]
+        - table: lot_closures
+          fields: [lot_id, close_price, pnl]
+        - table: trades
+          fields: [pnl, pnl_percent]
+      api_routes:
+        - route: /api/pnl
+          methods: [GET]
+        - route: /api/trades
+          methods: [GET]
+      selfbot_functions:
+        - calculate_pnl
+        - close_lot
+        - get_fifo_lots
+      js_files:
+        - pnl.js
+        - dashboard.js
+    dependencies:
+      - signal_execution
+
+  system_health:
+    version: "1.0"
+    description: "System diagnostics and health monitoring"
+    status: active
+    added_date: "2026-01-01"
+    components:
+      database: []
+      api_routes:
+        - route: /health
+          methods: [GET]
+        - route: /api/system/diagnostics
+          methods: [GET, POST]
+        - route: /api/system/consistency-check
+          methods: [GET]
+      selfbot_functions:
+        - run_diagnostics
+        - check_broker_connections
+      js_files:
+        - health.js
+    dependencies: []
+
+  signal_parsing:
+    version: "2.0"
+    description: "Multi-format signal parsing with AI fallback"
+    status: active
+    added_date: "2025-01-01"
+    components:
+      database:
+        - table: signal_formats
+          fields: [name, regex_pattern, example_signal]
+      api_routes:
+        - route: /api/settings/discord
+          methods: [GET, POST]
+      selfbot_functions:
+        - parse_option_signal
+        - parse_stock_signal
+        - ai_parse_signal
+      js_files:
+        - settings.js
+    dependencies: []

@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Agreement - BotifyTrades</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
+            min-height: 100vh;
+            color: #e2e8f0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 20px;
+        }
+        
+        .consent-container {
+            max-width: 800px;
+            width: 100%;
+            background: #1e293b;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+        
+        .consent-header {
+            background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+            padding: 32px;
+            text-align: center;
+        }
+        
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+        }
+        
+        .consent-header h1 {
+            color: #fff;
+            font-size: 24px;
+            font-weight: 700;
+        }
+        
+        .consent-header p {
+            color: rgba(255,255,255,0.8);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .version-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            color: #fff;
+            margin-top: 8px;
+        }
+        
+        .consent-body {
+            padding: 32px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .consent-body::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .consent-body::-webkit-scrollbar-track {
+            background: #334155;
+            border-radius: 3px;
+        }
+        
+        .consent-body::-webkit-scrollbar-thumb {
+            background: #64748b;
+            border-radius: 3px;
+        }
+        
+        .consent-body::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        .alert-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 10px;
+            margin-bottom: 24px;
+        }
+        
+        .alert-banner .icon {
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        
+        .alert-banner .text {
+            font-size: 14px;
+            color: #fca5a5;
+            font-weight: 500;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin-bottom: 10px;
+        }
+        
+        .section-title .num {
+            width: 28px;
+            height: 28px;
+            background: #334155;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            flex-shrink: 0;
+        }
+        
+        .section-title .num.special {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #fff;
+        }
+        
+        .section-content {
+            padding: 16px;
+            background: #0f172a;
+            border-radius: 10px;
+            border-left: 3px solid #3b82f6;
+        }
+        
+        .section-content.warning {
+            border-left-color: #f59e0b;
+        }
+        
+        .section-content.danger {
+            border-left-color: #ef4444;
+        }
+        
+        .section-content.special {
+            border-left-color: #8b5cf6;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(15, 23, 42, 1) 100%);
+        }
+        
+        .section-content p {
+            font-size: 13px;
+            color: #cbd5e1;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        
+        .section-content p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .section-content ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        
+        .section-content li {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.6;
+            margin-bottom: 4px;
+        }
+        
+        .subsection {
+            margin-top: 12px;
+            padding: 12px;
+            background: rgba(51, 65, 85, 0.5);
+            border-radius: 8px;
+        }
+        
+        .subsection-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #a78bfa;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .highlight {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+        
+        .highlight-red {
+            color: #f87171;
+            font-weight: 600;
+        }
+        
+        .highlight-purple {
+            color: #a78bfa;
+            font-weight: 600;
+        }
+        
+        .final-box {
+            margin-top: 24px;
+            padding: 20px;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .final-box h3 {
+            font-size: 16px;
+            color: #f87171;
+            margin-bottom: 12px;
+        }
+        
+        .final-box ul {
+            text-align: left;
+            padding-left: 24px;
+            margin: 0;
+        }
+        
+        .final-box li {
+            font-size: 13px;
+            color: #e2e8f0;
+            line-height: 1.7;
+        }
+        
+        .checkbox-section {
+            padding: 0 32px 24px;
+        }
+        
+        .checkbox-wrapper {
+            display: block;
+            padding: 20px 24px;
+            background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+            border: 2px solid #3b82f6;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        
+        .checkbox-wrapper:hover {
+            background: linear-gradient(135deg, #234b7a 0%, #263548 100%);
+            border-color: #60a5fa;
+            transform: translateY(-1px);
+        }
+        
+        .checkbox-wrapper:active {
+            transform: translateY(0);
+        }
+        
+        .checkbox-wrapper.checked {
+            background: linear-gradient(135deg, #166534 0%, #14532d 100%);
+            border-color: #22c55e;
+        }
+        
+        .checkbox-inner {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .custom-checkbox {
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            border: 2px solid #64748b;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            background: #0f172a;
+        }
+        
+        .checkbox-wrapper:hover .custom-checkbox {
+            border-color: #94a3b8;
+        }
+        
+        .checkbox-wrapper.checked .custom-checkbox {
+            background: #22c55e;
+            border-color: #22c55e;
+        }
+        
+        .custom-checkbox svg {
+            width: 16px;
+            height: 16px;
+            stroke: #fff;
+            stroke-width: 3;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .checkbox-wrapper.checked .custom-checkbox svg {
+            opacity: 1;
+        }
+        
+        .checkbox-label {
+            font-size: 14px;
+            color: #e2e8f0;
+            line-height: 1.5;
+            font-weight: 500;
+        }
+        
+        .checkbox-wrapper.checked .checkbox-label {
+            color: #bbf7d0;
+        }
+        
+        input[type="checkbox"] {
+            display: none;
+        }
+        
+        .consent-footer {
+            padding: 24px 32px;
+            background: #0f172a;
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+        }
+        
+        .btn {
+            padding: 14px 32px;
+            border: none;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-agree {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: white;
+            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);
+        }
+        
+        .btn-agree:hover:not(:disabled) {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(34, 197, 94, 0.5);
+        }
+        
+        .btn-agree:disabled {
+            background: #334155;
+            color: #64748b;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+        
+        .btn-decline {
+            background: transparent;
+            color: #94a3b8;
+            border: 1px solid #475569;
+        }
+        
+        .btn-decline:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+            color: #f87171;
+        }
+        
+        .version-info {
+            text-align: center;
+            padding: 16px;
+            color: #475569;
+            font-size: 11px;
+            background: #0f172a;
+        }
+        
+        @media (max-width: 600px) {
+            body {
+                padding: 20px 12px;
+            }
+            
+            .consent-header {
+                padding: 24px 20px;
+            }
+            
+            .consent-body {
+                padding: 24px 20px;
+            }
+            
+            .checkbox-section {
+                padding: 0 20px 20px;
+            }
+            
+            .consent-footer {
+                padding: 20px;
+                flex-direction: column-reverse;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="consent-container">
+        <div class="consent-header">
+            <div class="logo-container">
+                <div class="logo-icon">BT</div>
+            </div>
+            <h1>BotifyTrades</h1>
+            <p>User Agreement & Risk Disclosure</p>
+            <span class="version-badge">Version 3.0 - US/UK Compliance Edition</span>
+        </div>
+        
+        <div class="consent-body">
+            <div class="alert-banner">
+                <span class="icon">&#9888;</span>
+                <span class="text">Please read carefully. Trading involves significant financial risk including total loss of investment.</span>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">1</span>
+                    Eligibility & Age Requirement
+                </div>
+                <div class="section-content warning">
+                    <p>By using this Software, you represent and warrant that:</p>
+                    <ul>
+                        <li>You are at least <strong>18 years of age</strong> (or the age of majority in your jurisdiction, whichever is higher)</li>
+                        <li>You have the legal capacity to enter into this Agreement</li>
+                        <li>You have an existing, independently opened brokerage account in your own name</li>
+                        <li>You are legally permitted to trade securities, options, and/or other financial instruments in your jurisdiction</li>
+                        <li>You are not located in a jurisdiction where use of automated trading software is prohibited</li>
+                    </ul>
+                    <p class="highlight">If you do not meet these requirements, you must not use this Software.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">2</span>
+                    Regulatory Status Disclaimer
+                </div>
+                <div class="section-content danger">
+                    <p class="highlight-red">Important regulatory disclosures:</p>
+                    <ul>
+                        <li>The Developer is <strong>NOT</strong> a registered broker-dealer, investment adviser, or financial planner under U.S. Securities and Exchange Commission (SEC) or Financial Industry Regulatory Authority (FINRA) rules</li>
+                        <li>The Developer is <strong>NOT</strong> authorized, regulated, or registered by the UK Financial Conduct Authority (FCA) under the Financial Services and Markets Act 2000</li>
+                        <li>The Developer does not hold any financial services license in any jurisdiction</li>
+                        <li>This Software is a <strong>technology tool</strong> that automates trade execution based on signals you independently choose to follow — it does not generate, recommend, or endorse any trading signals</li>
+                        <li>The Developer does not manage, advise on, or have discretion over your trading account or investment decisions</li>
+                        <li>You are solely responsible for evaluating the suitability and legality of using this Software in your jurisdiction</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">3</span>
+                    Acknowledgment of Risk
+                </div>
+                <div class="section-content danger">
+                    <p>By using this Software, you acknowledge and agree:</p>
+                    <ul>
+                        <li>Trading involves substantial financial risk, including the loss of your entire investment</li>
+                        <li>Automated trading systems may malfunction, misinterpret data, execute incorrect or duplicate trades, or fail to execute</li>
+                        <li>Past performance of any trading signal, strategy, or system does not guarantee future results</li>
+                        <li>You alone decide whether to use this Software for trading purposes</li>
+                        <li>You assume full responsibility for all actions taken by this Software</li>
+                    </ul>
+                    <p class="highlight-red">The Developer assumes NO responsibility for your trading results, losses, or decisions.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">4</span>
+                    No Financial Advice - No Fiduciary Duty
+                </div>
+                <div class="section-content">
+                    <p>You acknowledge and agree that:</p>
+                    <ul>
+                        <li>This Software is not a financial advisor</li>
+                        <li>It does not provide investment recommendations, advice, or suitability analysis</li>
+                        <li>The Developer is not your broker, agent, fiduciary, or representative</li>
+                        <li>All trading decisions are entirely your own and at your own risk</li>
+                        <li>No profitability is guaranteed or implied</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">5</span>
+                    "AS-IS" and "AS-AVAILABLE" - No Warranty
+                </div>
+                <div class="section-content">
+                    <p>The Software is provided strictly on an <strong>AS-IS</strong> and <strong>AS-AVAILABLE</strong> basis. The Developer makes no warranties, express or implied, including:</p>
+                    <ul>
+                        <li>Performance or profitability</li>
+                        <li>Accuracy or reliability</li>
+                        <li>Correct API behavior or timely order execution</li>
+                        <li>Functioning of risk management features</li>
+                        <li>Uptime, availability, or continued support</li>
+                    </ul>
+                    <p>You accept the Software with all faults, defects, and errors, known or unknown.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">6</span>
+                    Total Waiver of Liability
+                </div>
+                <div class="section-content warning">
+                    <p>To the maximum extent permitted by law, the Developer shall NOT be liable for:</p>
+                    <ul>
+                        <li>Direct, indirect, incidental, or consequential damages</li>
+                        <li>Financial losses, lost profits, account liquidation, margin calls</li>
+                        <li>Missed, incorrect, duplicate, late, or unintended trades</li>
+                        <li>Market losses or volatility impacts</li>
+                        <li>Emotional, psychological, or stress-related damages</li>
+                        <li>Technical failures, bugs, crashes, or software malfunctions</li>
+                        <li>Broker/API outages, errors, or data inaccuracies</li>
+                    </ul>
+                    <p class="highlight">You expressly waive any legal right to seek damages or compensation.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">7</span>
+                    You Assume All Risks
+                </div>
+                <div class="section-content">
+                    <p>You assume all risks associated with automated trading, including:</p>
+                    <ul>
+                        <li>Market volatility, slippage, spreads</li>
+                        <li>Incorrect parsing of Discord messages or signals</li>
+                        <li>Message delays, API rate limits, and Discord blocks</li>
+                        <li>Broker/API downtime, API changes, revoked access</li>
+                        <li>Trading losses, including total loss of account value</li>
+                        <li>Bot misinterpretation, failed trades, or unexpected behavior</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">8</span>
+                    Discord & Policy Compliance
+                </div>
+                <div class="section-content">
+                    <p>This Software may operate in a manner considered a self-bot, which may violate Discord's Terms of Service.</p>
+                    <ul>
+                        <li>You are 100% responsible for ensuring compliance with Discord policies</li>
+                        <li>The Developer is not responsible for account warnings, suspensions, bans, or loss of access</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">9</span>
+                    Brokerage & API Compliance
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li>The Developer is not affiliated with any brokerage or financial institution</li>
+                        <li>The Software does not guarantee API availability, accuracy, or performance</li>
+                        <li>You are solely responsible for complying with all brokerage rules, restrictions, and regulations</li>
+                        <li>The Developer is not responsible for loss of API access, rejected orders, or brokerage enforcement actions</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num special">10</span>
+                    License Server, Heartbeat Validation & Machine ID Binding
+                </div>
+                <div class="section-content special">
+                    <p class="highlight-purple">By using this Software, you acknowledge and agree to the following licensing requirements:</p>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.1 License Validation</div>
+                        <p>This Software requires communication with a remote License Server to:</p>
+                        <ul>
+                            <li>Verify subscription or license status</li>
+                            <li>Validate authenticity of your license key</li>
+                            <li>Confirm that the license is not shared or misused</li>
+                            <li>Enforce usage limits and subscription terms</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.2 Heartbeat Check</div>
+                        <p>The Software regularly sends a heartbeat request to the License Server to validate an active license, confirm subscription status, detect unauthorized use, and prevent use of expired licenses.</p>
+                        <p class="highlight">If the Software cannot reach the License Server, your license may be temporarily suspended, restricted, or disabled until revalidation occurs.</p>
+                    </div>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.3 Machine ID Binding</div>
+                        <p>To prevent unauthorized license sharing:</p>
+                        <ul>
+                            <li>Your license may be bound to a unique hardware identifier (Machine ID)</li>
+                            <li>This Machine ID contains no personal data and is used only for anti-piracy and authentication</li>
+                            <li>Changing hardware or attempting to spoof the Machine ID may invalidate the license</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.4 Remote Disablement</div>
+                        <p>The Developer reserves the right to revoke, suspend, disable, block, or terminate any license that is:</p>
+                        <ul>
+                            <li>Expired, refunded, or charged back</li>
+                            <li>Shared among unauthorized users</li>
+                            <li>Used on multiple machines without permission</li>
+                            <li>Tampered with or bypassed</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.5 Anti-Tampering</div>
+                        <p>You agree NOT to:</p>
+                        <ul>
+                            <li>Reverse engineer the Software</li>
+                            <li>Modify or patch any executable or script</li>
+                            <li>Bypass the heartbeat or license checks</li>
+                            <li>Spoof Machine ID or interfere with server communication</li>
+                        </ul>
+                        <p class="highlight-red">Violation results in immediate termination of license and no refund.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">11</span>
+                    Credentials Stored Locally
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li>All credentials (Discord token, broker keys, passwords) are stored only on the user's machine</li>
+                        <li>The Developer does not store, access, or control any brokerage or Discord accounts</li>
+                        <li>You are fully responsible for securing your system, files, and environment</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">12</span>
+                    Indemnification
+                </div>
+                <div class="section-content">
+                    <p>You agree to indemnify, defend, and hold harmless the Developer from any claims, losses, damages, liabilities, or expenses arising from:</p>
+                    <ul>
+                        <li>Use or misuse of the Software</li>
+                        <li>Trading losses</li>
+                        <li>API or brokerage behavior</li>
+                        <li>Discord account actions</li>
+                        <li>Violation of this Agreement</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">13</span>
+                    Dispute Resolution & Binding Arbitration
+                </div>
+                <div class="section-content danger">
+                    <p>Any dispute, controversy, or claim arising out of or relating to this Agreement or the Software shall be resolved as follows:</p>
+                    <ul>
+                        <li><strong>Informal Resolution First:</strong> Before initiating any formal proceedings, you agree to contact the Developer and attempt to resolve the dispute informally for a period of at least 30 days</li>
+                        <li><strong>Binding Arbitration:</strong> If informal resolution fails, all disputes shall be resolved through binding arbitration, not in court, conducted by a single arbitrator under the rules of the American Arbitration Association (AAA) or equivalent body in your jurisdiction</li>
+                        <li><strong>No Class Actions:</strong> You agree to resolve disputes only on an individual basis. You waive any right to participate in a class action, collective action, or representative proceeding</li>
+                        <li><strong>Small Claims Exception:</strong> Either party may bring an individual action in small claims court if the claim qualifies</li>
+                    </ul>
+                    <p class="highlight-red">All sales are final. No refunds or chargebacks.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">14</span>
+                    Refund Policy & Cooling-Off Period
+                </div>
+                <div class="section-content warning">
+                    <ul>
+                        <li>All purchases of license keys and subscriptions are <strong>final and non-refundable</strong> once the Software has been downloaded, activated, or used</li>
+                        <li><strong>UK/EU Users:</strong> Under the Consumer Rights Act 2015 (UK) and Consumer Contracts Regulations, you may have a right to cancel within 14 days of purchase. However, by accepting this Agreement and using the Software, you expressly consent to immediate access and acknowledge that you lose your right of withdrawal once the digital content has been accessed or the license key has been activated</li>
+                        <li>Disputes over payments must be directed to the Developer before initiating any chargeback with your payment provider</li>
+                        <li>Unauthorized chargebacks will result in immediate license revocation</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">15</span>
+                    Termination of Access
+                </div>
+                <div class="section-content">
+                    <p>The Developer may, at any time and without notice, modify, suspend, disable, or terminate any part of the Software or licensing system, including:</p>
+                    <ul>
+                        <li>Heartbeat servers and license validation</li>
+                        <li>API integrations</li>
+                        <li>Features and functionality</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">16</span>
+                    Data Collection & Privacy
+                </div>
+                <div class="section-content">
+                    <p>The Developer respects your privacy. The following data practices apply:</p>
+                    <ul>
+                        <li><strong>Account Data:</strong> When you create an account, your name, email address, and username are collected and stored for authentication and communication purposes</li>
+                        <li><strong>License Data:</strong> Your license key, Machine ID, and activation timestamps are transmitted to and stored on the License Server for license validation and anti-piracy purposes</li>
+                        <li><strong>Trading Credentials:</strong> All brokerage credentials, Discord tokens, and API keys are stored locally on your machine only. The Developer does not have access to these credentials</li>
+                        <li><strong>No Trading Data Collection:</strong> Your trade history, positions, account balances, and portfolio data are not collected, transmitted, or stored by the Developer</li>
+                        <li><strong>Heartbeat Data:</strong> Periodic heartbeat requests transmit only your license key and Machine ID — no personal or financial data</li>
+                    </ul>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">UK GDPR / Data Protection Rights</div>
+                        <p>If you are located in the United Kingdom or European Economic Area, you have the following rights under the UK General Data Protection Regulation (UK GDPR) and the Data Protection Act 2018:</p>
+                        <ul>
+                            <li><strong>Right of Access:</strong> You may request a copy of the personal data we hold about you</li>
+                            <li><strong>Right to Rectification:</strong> You may request correction of inaccurate personal data</li>
+                            <li><strong>Right to Erasure:</strong> You may request deletion of your personal data, subject to legal retention requirements</li>
+                            <li><strong>Right to Data Portability:</strong> You may request your data in a structured, machine-readable format</li>
+                            <li><strong>Right to Object:</strong> You may object to processing of your personal data</li>
+                            <li><strong>Data Retention:</strong> Account and license data is retained for the duration of your active subscription and for 12 months after termination, after which it is permanently deleted</li>
+                        </ul>
+                        <p>To exercise any of these rights, contact the Developer at the email address provided on the BotifyTrades website.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">17</span>
+                    Governing Law & Jurisdiction
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li>This Agreement shall be governed by and construed in accordance with the laws of the jurisdiction in which the Developer is domiciled, without regard to its conflict of law provisions</li>
+                        <li>For users in the United Kingdom, nothing in this Agreement affects your statutory rights under UK consumer protection law, including the Consumer Rights Act 2015</li>
+                        <li>For users in the United States, federal arbitration law (Federal Arbitration Act) governs the interpretation and enforcement of the arbitration provisions in Section 13</li>
+                        <li>If any provision of this Agreement is found to be unenforceable, the remaining provisions shall continue in full force and effect</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">18</span>
+                    Amendments & Updates to This Agreement
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li>The Developer reserves the right to modify this Agreement at any time by publishing an updated version within the Software</li>
+                        <li>You will be required to review and re-accept the Agreement when material changes are made</li>
+                        <li>Continued use of the Software after notification of changes constitutes acceptance of the updated terms</li>
+                        <li>The version number and effective date are displayed at the bottom of this Agreement</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">19</span>
+                    If You Do Not Agree - Do Not Use
+                </div>
+                <div class="section-content">
+                    <p>If you disagree with any part of this Agreement:</p>
+                    <ul>
+                        <li>You must stop using the Software immediately</li>
+                        <li>Delete all files and uninstall the application</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="final-box">
+                <h3>By Clicking "I Agree" You Affirm:</h3>
+                <ul>
+                    <li>You are at least 18 years old and legally eligible to trade in your jurisdiction</li>
+                    <li>You have read and fully understand this Agreement</li>
+                    <li>You understand the Developer is NOT a registered broker-dealer, investment adviser, or FCA-authorized firm</li>
+                    <li>You accept all risks of automated trading, including total loss of investment</li>
+                    <li>You acknowledge the Developer is not liable for any trading losses or damages</li>
+                    <li>You agree to binding arbitration for any disputes</li>
+                    <li>You understand the Software may be disabled at any time</li>
+                    <li>You accept license-server, Machine ID, and heartbeat requirements</li>
+                    <li>You acknowledge the data collection and privacy practices described herein</li>
+                    <li>You voluntarily choose to proceed at your own risk</li>
+                    <li>You are solely responsible for all consequences</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="checkbox-section">
+            <label class="checkbox-wrapper" id="checkbox-wrapper">
+                <input type="checkbox" id="agree-checkbox" onchange="updateAgreeButton()">
+                <div class="checkbox-inner">
+                    <div class="custom-checkbox">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                    <span class="checkbox-label">I have read, understood, and agree to ALL terms in the User Agreement, License Terms & Liability Waiver</span>
+                </div>
+            </label>
+        </div>
+        
+        <div class="consent-footer">
+            <button class="btn btn-decline" onclick="declineAgreement()">Decline</button>
+            <button class="btn btn-agree" id="agree-btn" disabled onclick="acceptAgreement()">I Agree</button>
+        </div>
+        
+        <div class="version-info">
+            Agreement Version: {{ version }} | Effective Date: April 2026
+        </div>
+    </div>
+    
+    <script>
+        function updateAgreeButton() {
+            const checkbox = document.getElementById('agree-checkbox');
+            const agreeBtn = document.getElementById('agree-btn');
+            const wrapper = document.getElementById('checkbox-wrapper');
+            
+            agreeBtn.disabled = !checkbox.checked;
+            
+            if (checkbox.checked) {
+                wrapper.classList.add('checked');
+            } else {
+                wrapper.classList.remove('checked');
+            }
+        }
+        
+        async function acceptAgreement() {
+            const agreeBtn = document.getElementById('agree-btn');
+            agreeBtn.disabled = true;
+            agreeBtn.textContent = 'Processing...';
+            
+            try {
+                const response = await fetch('/api/consent/accept', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    window.location.href = '{{ next_url | default("/", true) }}';
+                } else {
+                    alert('Failed to save agreement: ' + (result.error || 'Unknown error'));
+                    agreeBtn.disabled = false;
+                    agreeBtn.textContent = 'I Agree';
+                }
+            } catch (error) {
+                alert('Error saving agreement: ' + error.message);
+                agreeBtn.disabled = false;
+                agreeBtn.textContent = 'I Agree';
+            }
+        }
+        
+        function declineAgreement() {
+            if (confirm('Are you sure you want to decline? You will not be able to use BotifyTrades without accepting the agreement.')) {
+                window.location.href = '/consent/declined';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}India Bot - Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark text-white">
+                <div class="card-body">
+                    <h1 class="mb-0">🇮🇳 India Trading Bot</h1>
+                    <p class="text-muted mb-0">NSE / BSE / MCX Trading Automation</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-dark text-white h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Upstox</h5>
+                </div>
+                <div class="card-body">
+                    <div id="upstox-status">
+                        <span class="badge bg-secondary">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-dark text-white h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Zerodha</h5>
+                </div>
+                <div class="card-body">
+                    <div id="zerodha-status">
+                        <span class="badge bg-secondary">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-dark text-white h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">DhanQ</h5>
+                </div>
+                <div class="card-body">
+                    <div id="dhanq-status">
+                        <span class="badge bg-secondary">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark text-white">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recent Signals</h5>
+                    <a href="/channels" class="btn btn-primary btn-sm">Manage Channels</a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Symbol</th>
+                                    <th>Action</th>
+                                    <th>Strike</th>
+                                    <th>Price</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="signals-table">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card bg-dark text-white">
+                <div class="card-header">
+                    <h5 class="mb-0">Conditional Orders</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Symbol</th>
+                                    <th>Trigger</th>
+                                    <th>Price</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody id="conditional-orders-table">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadBrokerStatus() {
+    try {
+        const resp = await fetch('/api/broker/status');
+        const data = await resp.json();
+        
+        for (const [broker, status] of Object.entries(data)) {
+            const el = document.getElementById(`${broker}-status`);
+            if (el) {
+                if (status.connected) {
+                    el.innerHTML = '<span class="badge bg-success">Connected</span>';
+                } else {
+                    el.innerHTML = '<span class="badge bg-danger">Disconnected</span>';
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error loading broker status:', e);
+    }
+}
+
+async function loadSignals() {
+    try {
+        const resp = await fetch('/api/signals');
+        const data = await resp.json();
+        
+        const tbody = document.getElementById('signals-table');
+        if (data.success && data.signals.length > 0) {
+            tbody.innerHTML = data.signals.slice(0, 10).map(s => `
+                <tr>
+                    <td>${new Date(s.created_at).toLocaleString()}</td>
+                    <td>${s.symbol}</td>
+                    <td><span class="badge ${s.action === 'BTO' ? 'bg-success' : 'bg-danger'}">${s.action}</span></td>
+                    <td>${s.strike || '-'}${s.call_put || ''}</td>
+                    <td>₹${s.price || '-'}</td>
+                    <td><span class="badge ${s.status === 'EXECUTED' ? 'bg-success' : 'bg-secondary'}">${s.status}</span></td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No signals yet</td></tr>';
+        }
+    } catch (e) {
+        console.error('Error loading signals:', e);
+    }
+}
+
+async function loadConditionalOrders() {
+    try {
+        const resp = await fetch('/api/conditional-orders');
+        const data = await resp.json();
+        
+        const tbody = document.getElementById('conditional-orders-table');
+        if (data.success && data.orders.length > 0) {
+            tbody.innerHTML = data.orders.slice(0, 10).map(o => `
+                <tr>
+                    <td>#${o.id}</td>
+                    <td>${o.symbol} ${o.strike || ''}${o.opt_type || ''}</td>
+                    <td>${o.trigger_type} ₹${o.trigger_price}</td>
+                    <td>₹${o.current_price || '-'}</td>
+                    <td><span class="badge ${o.status === 'EXECUTED' ? 'bg-success' : o.status === 'PENDING' ? 'bg-warning' : 'bg-secondary'}">${o.status}</span></td>
+                    <td>${new Date(o.created_at).toLocaleString()}</td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No conditional orders</td></tr>';
+        }
+    } catch (e) {
+        console.error('Error loading conditional orders:', e);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadBrokerStatus();
+    loadSignals();
+    loadConditionalOrders();
+    
+    setInterval(loadBrokerStatus, 30000);
+    setInterval(loadSignals, 10000);
+    setInterval(loadConditionalOrders, 10000);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,1 @@
+"""BotifyTrades Test Suite"""

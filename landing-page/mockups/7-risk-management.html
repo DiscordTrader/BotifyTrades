@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Management - QuantumPulse</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="mockup-styles.css">
+</head>
+<body>
+    <div class="mockup-container">
+        <div class="mockup-header">
+            <h2 class="mockup-title">🛡️ Automated Risk Management</h2>
+            <span class="mockup-badge success">Protection Enabled</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 24px;">
+            <!-- Profit Target -->
+            <div class="info-card" style="border: 2px solid rgba(0, 255, 136, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                    <div>
+                        <h4 style="color: var(--success); margin-bottom: 8px; font-size: 1.125rem;">📈 Auto Profit Target</h4>
+                        <p style="color: var(--text-muted); font-size: 0.875rem;">Automatically close winning positions</p>
+                    </div>
+                    <div class="toggle active"></div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                    <div style="font-size: 3rem; font-weight: 700; color: var(--success);">20%</div>
+                    <div>
+                        <div style="font-size: 0.875rem; color: var(--text-muted);">Target Profit</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Exits triggered automatically</div>
+                    </div>
+                </div>
+                <div style="background: rgba(0, 255, 136, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 0.8125rem; color: var(--text-secondary);">Positions closed</span>
+                        <span style="font-weight: 600; color: var(--success);">47</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size: 0.8125rem; color: var(--text-secondary);">Profit secured</span>
+                        <span style="font-weight: 600; color: var(--success);">$8,245</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stop Loss -->
+            <div class="info-card" style="border: 2px solid rgba(255, 107, 107, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                    <div>
+                        <h4 style="color: var(--error); margin-bottom: 8px; font-size: 1.125rem;">🛑 Auto Stop Loss</h4>
+                        <p style="color: var(--text-muted); font-size: 0.875rem;">Limit downside risk automatically</p>
+                    </div>
+                    <div class="toggle active"></div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                    <div style="font-size: 3rem; font-weight: 700; color: var(--error);">10%</div>
+                    <div>
+                        <div style="font-size: 0.875rem; color: var(--text-muted);">Max Loss</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Protection triggered automatically</div>
+                    </div>
+                </div>
+                <div style="background: rgba(255, 107, 107, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 0.8125rem; color: var(--text-secondary);">Stop losses triggered</span>
+                        <span style="font-weight: 600; color: var(--error);">12</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size: 0.8125rem; color: var(--text-secondary);">Losses prevented</span>
+                        <span style="font-weight: 600; color: var(--error);">Est. -$3,420</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trailing Stop -->
+            <div class="info-card" style="border: 2px solid rgba(255, 215, 0, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                    <div>
+                        <h4 style="color: var(--warning); margin-bottom: 8px; font-size: 1.125rem;">📊 Auto Trailing Stop</h4>
+                        <p style="color: var(--text-muted); font-size: 0.875rem;">Lock in profits as position moves</p>
+                    </div>
+                    <div class="toggle active"></div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                    <div style="font-size: 3rem; font-weight: 700; color: var(--warning);">5%</div>
+                    <div>
+                        <div style="font-size: 0.875rem; color: var(--text-muted);">Trail Distance</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Follows price automatically</div>
+                    </div>
+                </div>
+                <div style="background: rgba(255, 215, 0, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 0.8125rem; color: var(--text-secondary);">Active trailing stops</span>
+                        <span style="font-weight: 600; color: var(--warning);">8</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size: 0.8125rem; color: var(--text-secondary);">Profit locked in</span>
+                        <span style="font-weight: 600; color: var(--warning);">$2,180</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-Time Risk Scoring -->
+            <div class="info-card" style="border: 2px solid rgba(0, 212, 255, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                    <div>
+                        <h4 style="color: var(--accent-teal); margin-bottom: 8px; font-size: 1.125rem;">🎯 Real-Time Risk Scoring</h4>
+                        <p style="color: var(--text-muted); font-size: 0.875rem;">AI-powered position risk analysis</p>
+                    </div>
+                    <span class="mockup-badge locked" style="font-size: 0.6875rem;">Pro Only</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                    <div style="font-size: 3rem; font-weight: 700; color: var(--success);">Low</div>
+                    <div>
+                        <div style="font-size: 0.875rem; color: var(--text-muted);">Current Portfolio Risk</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Updated in real-time</div>
+                    </div>
+                </div>
+                <div style="background: rgba(0, 212, 255, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="display: grid; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-size: 0.8125rem; color: var(--text-secondary);">Low Risk</span>
+                            <span style="font-weight: 600; color: var(--success);">18 positions</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-size: 0.8125rem; color: var(--text-secondary);">Medium Risk</span>
+                            <span style="font-weight: 600; color: var(--warning);">6 positions</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-size: 0.8125rem; color: var(--text-secondary);">High Risk</span>
+                            <span style="font-weight: 600; color: var(--error);">3 positions</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="premium-banner">
+            <div class="premium-banner-icon">🤖</div>
+            <div class="premium-banner-text">
+                <strong>Advanced Risk AI Engine:</strong> Get real-time risk scoring, Greeks monitoring, IV tracking, and predictive risk alerts. Available only to Pro and Elite users.
+            </div>
+            <a href="#" class="premium-banner-cta">Upgrade to Pro</a>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 24px;">
+            <div class="info-card">
+                <div class="info-card-header">Total Protected</div>
+                <div class="info-card-value" style="color: var(--success); font-size: 1.5rem;">$11,665</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Active Rules</div>
+                <div class="info-card-value" style="color: var(--accent-teal); font-size: 1.5rem;">67</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Saved from Loss</div>
+                <div class="info-card-value" style="color: var(--warning); font-size: 1.5rem;">$3,420</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Win Rate Boost</div>
+                <div class="info-card-value" style="color: var(--success); font-size: 1.5rem;">+14.2%</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

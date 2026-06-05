@@ -1,0 +1,101 @@
+# ============================================================
+# Ψ∿ QuantumPulse - Python Dependencies
+# Professional Discord Trading Bot
+# ============================================================
+
+# ============================================================
+# Core Bot Framework
+# ============================================================
+discord.py-self>=1.9.0
+python-dotenv>=1.0.0
+requests>=2.28.0
+aiohttp>=3.8.0
+
+# ============================================================
+# Trading & Broker Integration
+# ============================================================
+webull>=0.2.0
+alpaca-py>=0.8.0
+ib-insync>=0.9.70
+
+# ============================================================
+# Web GUI - Flask Control Panel
+# ============================================================
+Flask>=3.0.0
+Werkzeug>=3.0.0
+Jinja2>=3.1.0
+
+# ============================================================
+# Security & Encryption
+# ============================================================
+cryptography>=41.0.0
+pywin32>=306; platform_system=="Windows"
+
+# ============================================================
+# AI Analysis - OpenAI Integration
+# ============================================================
+openai>=1.0.0
+anthropic>=0.30.0
+
+# ============================================================
+# Technical Analysis & Market Data
+# ============================================================
+ta>=0.10.0
+yfinance>=0.2.0
+pandas>=2.0.0
+numpy>=1.24.0
+python-dateutil>=2.8.0
+pytz>=2024.0
+
+# ============================================================
+# WebSocket & Real-Time Data
+# ============================================================
+websocket-client>=1.0.0
+websockets>=10.0
+
+# ============================================================
+# Optional: Build Tools (for creating .exe)
+# ============================================================
+# Uncomment to build standalone executables
+# pyinstaller>=6.0.0
+oauthlib
+pytest
+pytest-asyncio
+requests
+aiohttp
+alpaca-py
+cryptography
+discord.py-self
+Flask
+ib-insync
+Jinja2
+numpy
+oauthlib
+pandas
+pytest
+pytest-asyncio
+python-dateutil
+python-dotenv
+pytz
+tzdata
+requests
+ta
+websocket-client
+websockets
+webull
+Werkzeug
+yfinance
+gunicorn
+bcrypt
+tastytrade
+openai
+PySide6
+upstox-python-sdk
+telethon
+schwab-py
+dhanhq
+kiteconnect
+PyYAML
+pyotp
+robin-stocks
+websockets

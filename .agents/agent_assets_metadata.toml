@@ -1,0 +1,152 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "f6VfpjZ_AzQi2zqXCbemy"
+uri = "file://.local/docs/telegram_notification_architecture.md"
+type = "text"
+title = "Telegram Notification Architecture — Full Design Document"
+
+[[outputs]]
+id = "6VOZ0ud1LZWxIwBYnIvYI"
+uri = "file://.local/docs/ai_agent_order_monitoring_analysis.md"
+type = "text"
+title = "AI Agent Order Monitoring — Full Risk Analysis"
+
+[[outputs]]
+id = "7RktyUHaCUfRtXKMC6yCd"
+uri = "file://.local/docs/discord_startup_bug_analysis.md"
+type = "text"
+title = "Discord Startup Bug — Root Cause Analysis"
+
+[[outputs]]
+id = "Z7URhXM7gqhcGACSS6FcX"
+uri = "file://attached_assets/Per_Channel_Settings_Explained.md"
+type = "text"
+title = "Per-Channel Settings Explained: Entry Confirmation vs Trigger Offset vs Limit Cap"
+
+[[outputs]]
+id = "xQxflmxsI9aqHMxKSjMqS"
+uri = "file://docs/ENTRY_CONFIRMATION_LIMIT_CAP_GUIDE.md"
+type = "text"
+title = "Entry Confirmation & Limit Cap Guide"
+
+[[outputs]]
+id = "aZVjS822ubBs4LnEfbE1V"
+uri = "file://attached_assets/trade_analysis_report_2026-03-30.md"
+type = "text"
+title = "Trade Analysis Report — March 30, 2026"
+
+[[outputs]]
+id = "wqRFFtTooQFRVlz1rkcl_"
+uri = "file://docs/DEPLOYMENT_PLAN.md"
+type = "text"
+title = "BotifyTrades Deployment Plan — Docker + Cloudflare Tunnel + Flask Auth"
+
+[[outputs]]
+id = "DU_S-TEQ2DJM4SyIJaqec"
+uri = "file://.local/architecture_review_improvements.md"
+type = "text"
+title = "Risk Architecture Review: Current vs Improved (Detailed Breakdown)"
+
+[[outputs]]
+id = "n2UPbUA4qEQxPhgEMCxdd"
+uri = "file://.local/COCP_SL_gap_investigation.md"
+type = "text"
+title = "COCP SL Gap Investigation: -10% SL triggered at -13.37%"
+
+[[outputs]]
+id = "rpW9UfVQjab1YkMtWgMD-"
+uri = "file://.local/BotifyTrades_Risk_Architecture_Complete.md"
+type = "text"
+title = "BotifyTrades Risk Architecture — Complete Reference (Updated)"
+
+[[outputs]]
+id = "YzrVgs1WIe5Mcznj-sd0B"
+uri = "file://Staleness_Gate_Deep_Dive.md"
+type = "text"
+title = "Staleness Gate — Complete Technical Breakdown"
+
+[[outputs]]
+id = "ILhessgvmo3uMESqA6Phl"
+uri = "file://Risk_Engine_Price_Flow_And_Exit_Timing.md"
+type = "text"
+title = "Risk Engine — Price Sourcing, Exit Timing & Staleness Gate Flow"
+
+[[outputs]]
+id = "zSOL7JfiBycYwqeH1eBk1"
+uri = "file://docs/BROKER_DISCONNECT_PLAN.md"
+type = "text"
+title = "Broker Disconnect Button — Implementation Plan"
+
+[[outputs]]
+id = "43tivrZT29B8bsaqe4v8T"
+uri = "file://docs/BRACKET_ORDER_ARCHITECTURE.md"
+type = "text"
+title = "Bracket Order Architecture — Implementation Complete"
+
+[[outputs]]
+id = "ZHxT-JqT_3OeB6Wq0Rz7u"
+uri = "file://docs/ema_stop_loss_bug_analysis.md"
+type = "text"
+title = "EMA Stop Loss Bug Analysis & Fix — Full Document"
+
+[[outputs]]
+id = "nzA2eWeyPfoH4P-wZfWNr"
+uri = "file://docs/risk_features_comparison.md"
+type = "text"
+title = "Risk Features Comparison: Early Trailing vs Dynamic SL vs Escalation Only"
+
+[[outputs]]
+id = "QsgHQhqT7mrAIJpXFhyZj"
+uri = "file://attached_assets/DKI_Analysis_v8.1.8.md"
+type = "text"
+title = "DKI Trade Analysis — BotifyTrades v8.1.8"
+
+[[outputs]]
+id = "93YZW-5zJ6ykBeFUTV8-_"
+uri = "file://attached_assets/Channel_Settings_Validation_v8.1.8.md"
+type = "text"
+title = "Channel Settings Validation — All 4 Tabs (v8.1.8)"
+
+[[outputs]]
+id = "q03FsHDAyev3PVY3OL1z-"
+uri = "file://attached_assets/Risk_Management_Validation_v8.1.8.md"
+type = "text"
+title = "Risk Management Full Stack Validation (v8.1.8)"
+
+[[outputs]]
+id = "LdTwhLYab3vdnT5RQnC4B"
+uri = "file://docs/Multi_Broker_Smart_Routing.md"
+type = "text"
+title = "Multi-Broker Smart Routing Guide"
+
+[[outputs]]
+id = "SUr9MYzLRyDaTPHDtdT-K"
+uri = "file://docs/bracket_order_deep_analysis.md"
+type = "text"
+title = "Bracket Order Deep Analysis — All 7 Brokers"
+
+[[outputs]]
+id = "fTSvAUaeOUl6Ipz0S_Fwl"
+uri = "file://docs/balance_pipeline_gap_analysis.md"
+type = "text"
+title = "Balance Pipeline & Risk Engine Gap Analysis"
+
+[[outputs]]
+id = "ENC_ezpoXKY5L9TSrmt4t"
+uri = "file://docs/RISK_SETTINGS_VALIDATION_REFERENCE.md"
+type = "text"
+title = "Risk Settings Validation Reference"
+
+[[outputs]]
+id = "0DgHShAsMMp9Z0-nDE9Ui"
+uri = "file://MYSE_Investigation_Report.md"
+type = "text"
+title = "MYSE Investigation Report"
+
+[[outputs]]
+id = "FdzpuacloHZTzydSSC2uQ"
+uri = "file://docs/snaptrade-analysis.pdf"
+type = "pdf"
+title = "SnapTrade vs BotifyTrades — Architectural Analysis (v2)"

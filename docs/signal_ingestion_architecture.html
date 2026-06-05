@@ -1,0 +1,2623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BotifyTrades — Signal Ingestion Architecture v2.0</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg-primary: #0a0e1a;
+    --bg-secondary: #111827;
+    --bg-card: #1a2234;
+    --bg-card-hover: #1f2a40;
+    --border: #2a3654;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-blue: #3b82f6;
+    --accent-cyan: #06b6d4;
+    --accent-purple: #8b5cf6;
+    --accent-green: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --accent-pink: #ec4899;
+    --discord-blurple: #5865F2;
+    --gradient-1: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    --gradient-2: linear-gradient(135deg, #06b6d4, #3b82f6);
+    --gradient-3: linear-gradient(135deg, #10b981, #06b6d4);
+    --gradient-4: linear-gradient(135deg, #f59e0b, #ef4444);
+    --gradient-discord: linear-gradient(135deg, #5865F2, #8b5cf6);
+    --shadow-lg: 0 20px 60px rgba(0,0,0,0.4);
+    --shadow-glow-blue: 0 0 40px rgba(59,130,246,0.15);
+    --shadow-glow-purple: 0 0 40px rgba(139,92,246,0.15);
+    --shadow-glow-green: 0 0 40px rgba(16,185,129,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.7;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg-primary); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+
+  /* Navigation */
+  .nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: rgba(10,14,26,0.95);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    z-index: 100;
+  }
+
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 700;
+    font-size: 18px;
+  }
+
+  .nav-brand .icon {
+    width: 36px;
+    height: 36px;
+    background: var(--gradient-1);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 8px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .nav-links a:hover, .nav-links a.active {
+    color: var(--text-primary);
+    background: rgba(59,130,246,0.1);
+  }
+
+  .nav-version {
+    font-size: 12px;
+    color: var(--accent-green);
+    background: rgba(16,185,129,0.1);
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(16,185,129,0.2);
+  }
+
+  /* Main Content */
+  .main {
+    margin-top: 64px;
+    padding: 40px 32px;
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    padding: 60px 0 40px;
+    position: relative;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(88,101,242,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    background: rgba(88,101,242,0.1);
+    border: 1px solid rgba(88,101,242,0.25);
+    border-radius: 20px;
+    font-size: 13px;
+    color: #5865F2;
+    margin-bottom: 24px;
+  }
+
+  .hero h1 {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, #f1f5f9 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero h1 span {
+    background: var(--gradient-discord);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero p {
+    font-size: 18px;
+    color: var(--text-secondary);
+    max-width: 700px;
+    margin: 0 auto 32px;
+  }
+
+  /* Problem Statement */
+  .problem-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin: 40px 0;
+  }
+
+  .problem-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .problem-card.danger {
+    border-color: rgba(239,68,68,0.3);
+  }
+
+  .problem-card.danger::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #ef4444, #f59e0b);
+  }
+
+  .problem-card.success {
+    border-color: rgba(16,185,129,0.3);
+  }
+
+  .problem-card.success::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-3);
+  }
+
+  .problem-card h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .problem-card ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .problem-card li {
+    padding: 6px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .problem-card li::before {
+    content: '•';
+    color: var(--text-muted);
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  .problem-card.danger li::before { color: var(--accent-red); }
+  .problem-card.success li::before { color: var(--accent-green); content: '✓'; }
+
+  /* Section Headers */
+  .section {
+    margin: 60px 0 32px;
+    padding-top: 20px;
+  }
+
+  .section-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--accent-blue);
+    margin-bottom: 12px;
+  }
+
+  .section h2 {
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+
+  .section p.subtitle {
+    font-size: 16px;
+    color: var(--text-secondary);
+    max-width: 600px;
+  }
+
+  /* Architecture Diagram */
+  .arch-diagram {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 48px;
+    margin: 32px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .arch-diagram::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--gradient-1);
+  }
+
+  .arch-diagram h3 {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 40px;
+    color: var(--text-primary);
+  }
+
+  .arch-diagram .diagram-label {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 24px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* SVG Diagram Styles */
+  .diagram-svg {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    display: block;
+  }
+
+  /* Flow Diagram */
+  .flow-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .flow-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .flow-node {
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    min-width: 160px;
+    position: relative;
+    border: 1px solid;
+  }
+
+  .flow-node.discord {
+    background: rgba(88,101,242,0.12);
+    border-color: rgba(88,101,242,0.3);
+    color: #7c8aff;
+  }
+
+  .flow-node.cloud {
+    background: rgba(59,130,246,0.12);
+    border-color: rgba(59,130,246,0.3);
+    color: #60a5fa;
+  }
+
+  .flow-node.local {
+    background: rgba(16,185,129,0.12);
+    border-color: rgba(16,185,129,0.3);
+    color: #34d399;
+  }
+
+  .flow-node.broker {
+    background: rgba(245,158,11,0.12);
+    border-color: rgba(245,158,11,0.3);
+    color: #fbbf24;
+  }
+
+  .flow-node.webhook {
+    background: rgba(139,92,246,0.12);
+    border-color: rgba(139,92,246,0.3);
+    color: #a78bfa;
+  }
+
+  .flow-node .node-sub {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .flow-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 11px;
+    gap: 2px;
+  }
+
+  .flow-arrow .arrow {
+    font-size: 20px;
+    color: var(--border);
+  }
+
+  .flow-arrow.down .arrow { transform: rotate(90deg); }
+
+  .flow-divider {
+    width: 100%;
+    max-width: 900px;
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 8px 0;
+    position: relative;
+  }
+
+  .flow-divider-label {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    padding: 0 16px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+  }
+
+  /* Tier Cards */
+  .tier-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin: 32px 0;
+  }
+
+  .tier-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+
+  .tier-card:hover {
+    border-color: rgba(59,130,246,0.3);
+    box-shadow: var(--shadow-glow-blue);
+  }
+
+  .tier-card.full-width {
+    grid-column: 1 / -1;
+  }
+
+  .tier-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+
+  .tier-card.tier-1::before { background: var(--gradient-3); }
+  .tier-card.tier-3::before { background: var(--gradient-discord); }
+  .tier-card.tier-hybrid::before { background: var(--gradient-1); }
+
+  .tier-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+  }
+
+  .tier-badge.green {
+    background: rgba(16,185,129,0.15);
+    color: var(--accent-green);
+    border: 1px solid rgba(16,185,129,0.3);
+  }
+
+  .tier-badge.purple {
+    background: rgba(88,101,242,0.15);
+    color: #5865F2;
+    border: 1px solid rgba(88,101,242,0.3);
+  }
+
+  .tier-badge.blue {
+    background: rgba(59,130,246,0.15);
+    color: var(--accent-blue);
+    border: 1px solid rgba(59,130,246,0.3);
+  }
+
+  .tier-card h3 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .tier-card .tier-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+  }
+
+  .tier-features {
+    list-style: none;
+    padding: 0;
+  }
+
+  .tier-features li {
+    padding: 8px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border-bottom: 1px solid rgba(42,54,84,0.5);
+  }
+
+  .tier-features li:last-child { border-bottom: none; }
+
+  .tier-features .feat-icon {
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+  }
+
+  /* Comparison Table */
+  .comparison-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 32px 0;
+    font-size: 13px;
+  }
+
+  .comparison-table thead th {
+    background: var(--bg-secondary);
+    padding: 14px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border);
+    position: sticky;
+    top: 64px;
+    z-index: 10;
+  }
+
+  .comparison-table thead th:first-child {
+    border-radius: 12px 0 0 0;
+  }
+
+  .comparison-table thead th:last-child {
+    border-radius: 0 12px 0 0;
+  }
+
+  .comparison-table tbody td {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(42,54,84,0.4);
+    color: var(--text-secondary);
+    vertical-align: top;
+  }
+
+  .comparison-table tbody tr:hover td {
+    background: rgba(59,130,246,0.03);
+  }
+
+  .comparison-table tbody td:first-child {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .comparison-table .score {
+    display: inline-flex;
+    gap: 2px;
+  }
+
+  .comparison-table .score .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+
+  .comparison-table .score .dot.filled { background: var(--accent-green); }
+  .comparison-table .score .dot.warn { background: var(--accent-amber); }
+  .comparison-table .score .dot.danger { background: var(--accent-red); }
+
+  .badge-sm {
+    display: inline-flex;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .badge-sm.tos-yes { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+  .badge-sm.tos-no { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+  .badge-sm.tos-gray { background: rgba(245,158,11,0.15); color: var(--accent-amber); }
+  .badge-sm.recommended { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+
+  /* User Journey Steps */
+  .journey-container {
+    margin: 32px 0;
+  }
+
+  .journey-step {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 0;
+    position: relative;
+  }
+
+  .journey-timeline {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 48px;
+  }
+
+  .journey-num {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .journey-num.discord { background: var(--gradient-discord); }
+  .journey-num.cloud { background: var(--gradient-2); }
+  .journey-num.local { background: var(--gradient-3); }
+  .journey-num.broker { background: var(--gradient-4); }
+
+  .journey-line {
+    width: 2px;
+    flex-grow: 1;
+    min-height: 24px;
+    background: var(--border);
+  }
+
+  .journey-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    flex-grow: 1;
+    margin-bottom: 12px;
+  }
+
+  .journey-content h4 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .journey-content p {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .journey-content .latency {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-top: 8px;
+  }
+
+  .latency.fast { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+  .latency.medium { background: rgba(245,158,11,0.15); color: var(--accent-amber); }
+
+  /* Tier 2 specific */
+  .tier-card.tier-2::before { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+
+  .tier-badge.amber {
+    background: rgba(245,158,11,0.15);
+    color: var(--accent-amber);
+    border: 1px solid rgba(245,158,11,0.3);
+  }
+
+  /* Risk Comparison Visual */
+  .risk-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+    margin: 32px 0;
+  }
+
+  .risk-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .risk-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+
+  .risk-card.bad::before { background: linear-gradient(90deg, #ef4444, #ef4444); }
+  .risk-card.ok::before { background: linear-gradient(90deg, #f59e0b, #10b981); }
+  .risk-card.good::before { background: linear-gradient(90deg, #10b981, #10b981); }
+
+  .risk-card .risk-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+
+  .risk-card h4 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .risk-card .risk-accounts {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+    min-height: 40px;
+    align-items: center;
+  }
+
+  .risk-card .risk-accounts .acct {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+  }
+
+  .risk-card .risk-accounts .acct.danger { background: var(--accent-red); }
+  .risk-card .risk-accounts .acct.safe { background: var(--accent-green); opacity: 0.4; }
+  .risk-card .risk-accounts .acct.warn { background: var(--accent-amber); }
+
+  .risk-card .risk-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+  }
+
+  .risk-card .risk-number {
+    font-size: 36px;
+    font-weight: 800;
+    margin: 4px 0;
+  }
+
+  .risk-card .risk-number.red { color: var(--accent-red); }
+  .risk-card .risk-number.amber { color: var(--accent-amber); }
+  .risk-card .risk-number.green { color: var(--accent-green); }
+
+  /* Provider approaches grid */
+  .provider-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 24px 0;
+  }
+
+  .provider-approach {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .provider-approach::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+  }
+
+  .provider-approach.opt-a::before { background: var(--accent-amber); }
+  .provider-approach.opt-b::before { background: var(--accent-cyan); }
+  .provider-approach.opt-c::before { background: var(--accent-green); }
+
+  .provider-approach h4 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .provider-approach p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+
+  .provider-approach .pa-meta {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-flex;
+  }
+
+  .pa-meta.risk-low { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+  .pa-meta.risk-med { background: rgba(245,158,11,0.15); color: var(--accent-amber); }
+  .pa-meta.risk-none { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+
+  /* Desktop Architecture Detail */
+  .desktop-arch {
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr 80px 1fr;
+    align-items: center;
+    gap: 0;
+    margin: 32px 0;
+  }
+
+  .arch-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+    position: relative;
+  }
+
+  .arch-box h4 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .arch-box .arch-items {
+    list-style: none;
+    padding: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .arch-box .arch-items li {
+    padding: 4px 0;
+  }
+
+  .arch-box.discord-zone {
+    border-color: rgba(88,101,242,0.3);
+    background: rgba(88,101,242,0.05);
+  }
+
+  .arch-box.cloud-zone {
+    border-color: rgba(59,130,246,0.3);
+    background: rgba(59,130,246,0.05);
+  }
+
+  .arch-box.desktop-zone {
+    border-color: rgba(16,185,129,0.3);
+    background: rgba(16,185,129,0.05);
+  }
+
+  .arch-connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 10px;
+    text-align: center;
+    gap: 4px;
+  }
+
+  .arch-connector .conn-arrow {
+    font-size: 24px;
+    color: var(--accent-blue);
+  }
+
+  .arch-connector .conn-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    max-width: 70px;
+    line-height: 1.3;
+  }
+
+  /* Why Not Username/Password */
+  .why-box {
+    background: linear-gradient(135deg, rgba(239,68,68,0.05), rgba(245,158,11,0.05));
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 16px;
+    padding: 32px;
+    margin: 32px 0;
+  }
+
+  .why-box h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent-red);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .why-box .timeline {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 20px;
+    margin-top: 20px;
+  }
+
+  .why-box .timeline .year {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent-amber);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .why-box .timeline .event {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(42,54,84,0.3);
+  }
+
+  /* Security Box */
+  .security-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 24px 0;
+  }
+
+  .security-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .security-item .sec-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+  }
+
+  .security-item h4 {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .security-item p {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* Code Block */
+  .code-block {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 16px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    overflow-x: auto;
+    color: var(--text-secondary);
+  }
+
+  .code-block .comment { color: var(--text-muted); }
+  .code-block .keyword { color: var(--accent-purple); }
+  .code-block .string { color: var(--accent-green); }
+  .code-block .endpoint { color: var(--accent-cyan); }
+  .code-block .param { color: var(--accent-amber); }
+
+  /* Stats Row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin: 32px 0;
+  }
+
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .stat-card .stat-value {
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .stat-card .stat-value.green { color: var(--accent-green); }
+  .stat-card .stat-value.blue { color: var(--accent-blue); }
+  .stat-card .stat-value.purple { color: #5865F2; }
+  .stat-card .stat-value.amber { color: var(--accent-amber); }
+
+  .stat-card .stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* Info callout */
+  .callout {
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 20px 0;
+    font-size: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .callout.info {
+    background: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.2);
+    color: var(--text-secondary);
+  }
+
+  .callout.warning {
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.2);
+    color: var(--text-secondary);
+  }
+
+  .callout.success {
+    background: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.2);
+    color: var(--text-secondary);
+  }
+
+  .callout .callout-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* User Persona Boxes */
+  .persona-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin: 32px 0;
+  }
+
+  .persona-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    text-align: center;
+  }
+
+  .persona-card .persona-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+  }
+
+  .persona-card h4 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .persona-card p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .persona-card .persona-method {
+    display: inline-flex;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .persona-method.t1 { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+  .persona-method.t3 { background: rgba(88,101,242,0.15); color: #5865F2; }
+  .persona-method.both { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+
+  /* Implementation Roadmap */
+  .roadmap {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin: 32px 0;
+  }
+
+  .roadmap-phase {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .roadmap-phase::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+
+  .roadmap-phase.p1::before { background: var(--accent-green); }
+  .roadmap-phase.p2::before { background: var(--accent-blue); }
+  .roadmap-phase.p3::before { background: var(--accent-purple); }
+
+  .roadmap-phase .phase-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+  }
+
+  .roadmap-phase.p1 .phase-label { color: var(--accent-green); }
+  .roadmap-phase.p2 .phase-label { color: var(--accent-blue); }
+  .roadmap-phase.p3 .phase-label { color: var(--accent-purple); }
+
+  .roadmap-phase h4 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .roadmap-phase p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .roadmap-phase .phase-tasks {
+    list-style: none;
+    padding: 0;
+  }
+
+  .roadmap-phase .phase-tasks li {
+    padding: 5px 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .roadmap-phase .phase-tasks li::before {
+    content: '○';
+    color: var(--border);
+    font-size: 10px;
+  }
+
+  .roadmap-phase .est {
+    margin-top: 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 40px;
+    border-top: 1px solid var(--border);
+    margin-top: 60px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .problem-grid, .tier-grid, .security-grid, .persona-grid, .roadmap, .stats-row {
+      grid-template-columns: 1fr;
+    }
+    .desktop-arch {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .arch-connector { transform: rotate(90deg); }
+    .hero h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="icon">⚡</div>
+    <span>BotifyTrades</span>
+  </div>
+  <ul class="nav-links">
+    <li><a href="#problem" class="active">Problem</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#tier1">Tier 1: Webhook</a></li>
+    <li><a href="#tier2">Tier 2: Bridge</a></li>
+    <li><a href="#tier3">Tier 3: Bot</a></li>
+    <li><a href="#journey">User Journey</a></li>
+    <li><a href="#compare">Compare</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+  </ul>
+  <span class="nav-version">v9.3.3</span>
+</nav>
+
+<!-- Main Content -->
+<div class="main">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">📡 Architecture Proposal — Signal Ingestion v2.0</div>
+    <h1>From Selfbot to<br><span>Scalable Signal Platform</span></h1>
+    <p>A ToS-compliant, multi-source signal ingestion architecture that transforms BotifyTrades from a Discord selfbot into a professional trade execution platform.</p>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-value purple">7</div>
+      <div class="stat-label">Brokers Supported</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value green">100%</div>
+      <div class="stat-label">ToS Compliant</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value blue">&lt;200ms</div>
+      <div class="stat-label">Signal Latency</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value amber">4</div>
+      <div class="stat-label">Platforms</div>
+    </div>
+  </div>
+
+  <!-- Problem Statement -->
+  <div class="section" id="problem">
+    <div class="section-label">⚠️ The Problem</div>
+    <h2>Why the Current Approach Must Change</h2>
+    <p class="subtitle">Discord selfbots worked in 2023. In 2026, they're a ticking time bomb for a commercial product.</p>
+  </div>
+
+  <div class="problem-grid">
+    <div class="problem-card danger">
+      <h3>🚫 Current: Discord Selfbot Risks</h3>
+      <ul>
+        <li>Violates Discord Terms of Service — account ban risk</li>
+        <li>User token can be invalidated anytime (password change, Discord security sweep)</li>
+        <li>Token extraction via DevTools is confusing for non-technical users</li>
+        <li>Commercial distribution of selfbot tools increases legal exposure</li>
+        <li>Discord actively detects and terminates automated user accounts</li>
+        <li>No official support or documentation — library can break on any Gateway update</li>
+      </ul>
+    </div>
+    <div class="problem-card success">
+      <h3>✅ New: Multi-Source Signal Platform</h3>
+      <ul>
+        <li>100% Discord ToS compliant — no user token needed</li>
+        <li>Multiple signal sources: webhooks, bot relay, Telegram, direct API</li>
+        <li>Professional onboarding — no DevTools knowledge required</li>
+        <li>Signal providers can officially integrate via partnership</li>
+        <li>Cloud relay ensures reliability — no local network requirements</li>
+        <li>Fully documented, supported, and commercially viable</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Why Not Username/Password -->
+  <div class="why-box">
+    <h3>🔐 Why Username + Password Login Is Not Possible</h3>
+    <p style="font-size:14px; color:var(--text-secondary); margin-bottom:16px;">
+      Discord removed programmatic username/password authentication. There is <strong>no API endpoint</strong> that accepts credentials and returns a usable session. Here's what happened:
+    </p>
+    <div class="timeline">
+      <span class="year">2020</span>
+      <span class="event"><code>POST /api/auth/login</code> accepted email + password, returned user token. Automated login was possible.</span>
+      <span class="year">2021</span>
+      <span class="event">Discord added mandatory hCaptcha to the login endpoint. Automated requests receive <code>captcha_key</code> challenges.</span>
+      <span class="year">2022</span>
+      <span class="event">MFA/TOTP enforcement expanded. Even with CAPTCHA bypass, 2FA blocks automated auth flows.</span>
+      <span class="year">2023</span>
+      <span class="event">Discord's anti-automation detection flags programmatic login patterns. Accounts get locked for "suspicious activity."</span>
+      <span class="year">2024+</span>
+      <span class="event">OAuth2 is the only sanctioned auth path — but <strong>no OAuth2 scope grants message reading ability</strong>. The experimental <code>messages.read</code> scope was restricted and removed from general availability.</span>
+    </div>
+    <div class="callout warning" style="margin-top:20px;">
+      <span class="callout-icon">💡</span>
+      <div><strong>Bottom line:</strong> Even if you could bypass CAPTCHA + MFA programmatically (which would be fragile, unreliable, and still violate ToS), Discord would detect and ban the account. The correct solution is to <em>not authenticate as the user at all</em> — instead, use an official Discord Bot or webhook relay.</div>
+    </div>
+  </div>
+
+  <!-- Architecture Overview -->
+  <div class="section" id="architecture">
+    <div class="section-label">🏗️ Architecture</div>
+    <h2>The Desktop-First Signal Platform</h2>
+    <p class="subtitle">Each user runs their own BotifyTrades instance. The cloud relay is a thin signal bridge — all execution stays local.</p>
+  </div>
+
+  <div class="callout info">
+    <span class="callout-icon">🖥️</span>
+    <div><strong>Key Constraint:</strong> BotifyTrades is a desktop application. Every user runs their own instance with their own broker credentials. Unlike cloud SaaS, we cannot run one bot that serves all users. The architecture must account for <em>individual desktop apps connecting to a shared signal relay</em>.</div>
+  </div>
+
+  <!-- Main Architecture Diagram -->
+  <div class="arch-diagram">
+    <h3>Signal Ingestion Architecture v2.0 — Complete Data Flow</h3>
+
+    <svg class="diagram-svg" viewBox="0 0 1100 700" xmlns="http://www.w3.org/2000/svg">
+      <!-- Background zones -->
+      <rect x="20" y="20" width="1060" height="170" rx="16" fill="rgba(88,101,242,0.04)" stroke="rgba(88,101,242,0.15)" stroke-dasharray="6,4"/>
+      <text x="40" y="48" font-family="Inter,sans-serif" font-size="11" fill="#5865F2" font-weight="600" letter-spacing="1.5">SIGNAL SOURCES (EXTERNAL)</text>
+
+      <rect x="20" y="210" width="1060" height="200" rx="16" fill="rgba(59,130,246,0.04)" stroke="rgba(59,130,246,0.15)" stroke-dasharray="6,4"/>
+      <text x="40" y="238" font-family="Inter,sans-serif" font-size="11" fill="#3b82f6" font-weight="600" letter-spacing="1.5">BOTIFYTRADES CLOUD RELAY (LIGHTWEIGHT)</text>
+
+      <rect x="20" y="430" width="1060" height="250" rx="16" fill="rgba(16,185,129,0.04)" stroke="rgba(16,185,129,0.15)" stroke-dasharray="6,4"/>
+      <text x="40" y="458" font-family="Inter,sans-serif" font-size="11" fill="#10b981" font-weight="600" letter-spacing="1.5">USER'S DESKTOP (WINDOWS / MAC / LINUX)</text>
+
+      <!-- Signal Source Boxes -->
+      <rect x="60" y="70" width="180" height="100" rx="12" fill="rgba(88,101,242,0.12)" stroke="rgba(88,101,242,0.3)"/>
+      <text x="150" y="100" font-family="Inter,sans-serif" font-size="13" fill="#7c8aff" font-weight="700" text-anchor="middle">Discord Servers</text>
+      <text x="150" y="120" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Signal Provider Channels</text>
+      <text x="150" y="138" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">C1apped · Phoenix · Jacob</text>
+      <text x="150" y="156" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Spy Sniper · Temples</text>
+
+      <rect x="280" y="70" width="180" height="100" rx="12" fill="rgba(139,92,246,0.12)" stroke="rgba(139,92,246,0.3)"/>
+      <text x="370" y="100" font-family="Inter,sans-serif" font-size="13" fill="#a78bfa" font-weight="700" text-anchor="middle">TradingView</text>
+      <text x="370" y="120" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Alert Webhooks</text>
+      <text x="370" y="138" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Custom Pine Scripts</text>
+      <text x="370" y="156" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Strategy Automations</text>
+
+      <rect x="500" y="70" width="180" height="100" rx="12" fill="rgba(6,182,212,0.12)" stroke="rgba(6,182,212,0.3)"/>
+      <text x="590" y="100" font-family="Inter,sans-serif" font-size="13" fill="#22d3ee" font-weight="700" text-anchor="middle">Telegram</text>
+      <text x="590" y="120" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Signal Groups</text>
+      <text x="590" y="138" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Bot Channels</text>
+      <text x="590" y="156" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Already Implemented</text>
+
+      <rect x="720" y="70" width="180" height="100" rx="12" fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.3)"/>
+      <text x="810" y="100" font-family="Inter,sans-serif" font-size="13" fill="#fbbf24" font-weight="700" text-anchor="middle">Direct Webhook</text>
+      <text x="810" y="120" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">User Custom Sources</text>
+      <text x="810" y="138" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Zapier / IFTTT / n8n</text>
+      <text x="810" y="156" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Provider API Bridges</text>
+
+      <rect x="940" y="70" width="120" height="100" rx="12" fill="rgba(236,72,153,0.12)" stroke="rgba(236,72,153,0.3)"/>
+      <text x="1000" y="100" font-family="Inter,sans-serif" font-size="13" fill="#f472b6" font-weight="700" text-anchor="middle">Email</text>
+      <text x="1000" y="120" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Gmail Alerts</text>
+      <text x="1000" y="138" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Swing Signals</text>
+
+      <!-- Arrows from sources to cloud -->
+      <line x1="150" y1="170" x2="150" y2="265" stroke="#5865F2" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrowBlue)"/>
+      <line x1="370" y1="170" x2="370" y2="265" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrowBlue)"/>
+      <line x1="590" y1="170" x2="590" y2="475" stroke="#22d3ee" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrowGreen)"/>
+      <line x1="810" y1="170" x2="810" y2="265" stroke="#fbbf24" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrowBlue)"/>
+      <line x1="1000" y1="170" x2="960" y2="475" stroke="#f472b6" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrowGreen)"/>
+
+      <!-- Cloud Components -->
+      <rect x="80" y="265" width="220" height="120" rx="12" fill="rgba(88,101,242,0.15)" stroke="rgba(88,101,242,0.4)" stroke-width="2"/>
+      <text x="190" y="295" font-family="Inter,sans-serif" font-size="14" fill="#7c8aff" font-weight="700" text-anchor="middle">🤖 BotifyTrades Bot</text>
+      <text x="190" y="315" font-family="Inter,sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">Official Discord Bot</text>
+      <text x="190" y="335" font-family="Inter,sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">Added by signal providers</text>
+      <text x="190" y="355" font-family="Inter,sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">Reads signals in real-time</text>
+      <text x="190" y="375" font-family="Inter,sans-serif" font-size="10" fill="#10b981" text-anchor="middle">✓ ToS Compliant</text>
+
+      <rect x="340" y="265" width="220" height="120" rx="12" fill="rgba(59,130,246,0.15)" stroke="rgba(59,130,246,0.4)" stroke-width="2"/>
+      <text x="450" y="295" font-family="Inter,sans-serif" font-size="14" fill="#60a5fa" font-weight="700" text-anchor="middle">📡 Signal Relay API</text>
+      <text x="450" y="315" font-family="Inter,sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">WebSocket + REST</text>
+      <text x="450" y="335" font-family="Inter,sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">Auth via license key</text>
+      <text x="450" y="355" font-family="Inter,sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">Normalize &amp; deduplicate</text>
+      <text x="450" y="375" font-family="Inter,sans-serif" font-size="10" fill="#fbbf24" text-anchor="middle">⚡ &lt;50ms relay latency</text>
+
+      <rect x="600" y="265" width="220" height="120" rx="12" fill="rgba(245,158,11,0.15)" stroke="rgba(245,158,11,0.4)" stroke-width="2"/>
+      <text x="710" y="295" font-family="Inter,sans-serif" font-size="14" fill="#fbbf24" font-weight="700" text-anchor="middle">🔗 Webhook Gateway</text>
+      <text x="710" y="315" font-family="Inter,sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">POST /api/v1/signals</text>
+      <text x="710" y="335" font-family="Inter,sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">TradingView compatible</text>
+      <text x="710" y="355" font-family="Inter,sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">API key authentication</text>
+      <text x="710" y="375" font-family="Inter,sans-serif" font-size="10" fill="#10b981" text-anchor="middle">✓ Standard REST endpoint</text>
+
+      <!-- Cloud to Desktop arrows -->
+      <line x1="300" y1="335" x2="340" y2="335" stroke="#5865F2" stroke-width="2" marker-end="url(#arrowBlue)"/>
+      <line x1="560" y1="335" x2="600" y2="335" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+      <line x1="450" y1="385" x2="450" y2="475" stroke="#3b82f6" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+      <text x="470" y="438" font-family="JetBrains Mono,monospace" font-size="10" fill="#3b82f6" font-weight="600">WebSocket</text>
+      <text x="470" y="452" font-family="JetBrains Mono,monospace" font-size="10" fill="#64748b">(persistent)</text>
+
+      <!-- Desktop Components -->
+      <rect x="80" y="475" width="300" height="60" rx="10" fill="rgba(16,185,129,0.12)" stroke="rgba(16,185,129,0.3)"/>
+      <text x="230" y="500" font-family="Inter,sans-serif" font-size="13" fill="#34d399" font-weight="700" text-anchor="middle">📥 Signal Receiver</text>
+      <text x="230" y="518" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">WebSocket client + local HTTP + Telegram listener</text>
+
+      <line x1="230" y1="535" x2="230" y2="558" stroke="#10b981" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+      <rect x="80" y="558" width="300" height="50" rx="10" fill="rgba(6,182,212,0.12)" stroke="rgba(6,182,212,0.3)"/>
+      <text x="230" y="580" font-family="Inter,sans-serif" font-size="13" fill="#22d3ee" font-weight="700" text-anchor="middle">🧠 Signal Parsing Pipeline</text>
+      <text x="230" y="596" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Embed → Registry → Trader → Standard → AI Fallback</text>
+
+      <line x1="380" y1="583" x2="420" y2="583" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+      <rect x="420" y="558" width="200" height="50" rx="10" fill="rgba(139,92,246,0.12)" stroke="rgba(139,92,246,0.3)"/>
+      <text x="520" y="580" font-family="Inter,sans-serif" font-size="13" fill="#a78bfa" font-weight="700" text-anchor="middle">⚖️ Risk Engine</text>
+      <text x="520" y="596" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">PT/SL/OCO/Trailing/Dynamic</text>
+
+      <line x1="620" y1="583" x2="660" y2="583" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+      <rect x="660" y="558" width="200" height="50" rx="10" fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.3)"/>
+      <text x="760" y="580" font-family="Inter,sans-serif" font-size="13" fill="#fbbf24" font-weight="700" text-anchor="middle">🏦 Broker Execution</text>
+      <text x="760" y="596" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">7 brokers · OCO brackets</text>
+
+      <!-- Broker icons row -->
+      <rect x="440" y="630" width="480" height="40" rx="8" fill="rgba(245,158,11,0.06)" stroke="rgba(245,158,11,0.15)"/>
+      <text x="460" y="655" font-family="Inter,sans-serif" font-size="11" fill="#64748b">Schwab</text>
+      <text x="530" y="655" font-family="Inter,sans-serif" font-size="11" fill="#64748b">Webull</text>
+      <text x="595" y="655" font-family="Inter,sans-serif" font-size="11" fill="#64748b">Alpaca</text>
+      <text x="660" y="655" font-family="Inter,sans-serif" font-size="11" fill="#64748b">IBKR</text>
+      <text x="715" y="655" font-family="Inter,sans-serif" font-size="11" fill="#64748b">Tastytrade</text>
+      <text x="800" y="655" font-family="Inter,sans-serif" font-size="11" fill="#64748b">Robinhood</text>
+      <text x="890" y="655" font-family="Inter,sans-serif" font-size="11" fill="#64748b">T212</text>
+
+      <!-- Defs for arrowheads -->
+      <defs>
+        <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#3b82f6"/>
+        </marker>
+        <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#10b981"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="diagram-label">Complete signal flow: Sources → Cloud Relay → Desktop App → Broker Execution</div>
+  </div>
+
+  <!-- The Key Insight -->
+  <div class="callout success">
+    <span class="callout-icon">💡</span>
+    <div><strong>The Key Insight:</strong> The cloud relay is <em>not</em> a trading platform. It never sees broker credentials, never places orders, never holds positions. It's a <strong>thin message router</strong> — it receives signals from various sources and forwards them to subscribed desktop apps via WebSocket. All execution, risk management, and broker interaction stays on the user's local machine. This keeps the architecture simple, secure, and regulation-friendly.</div>
+  </div>
+
+  <!-- Tier 1: Webhook Signal API -->
+  <div class="section" id="tier1">
+    <div class="section-label">🟢 Tier 1</div>
+    <h2>Direct Signal Ingestion API</h2>
+    <p class="subtitle">Users receive signals via webhooks — no Discord dependency at all. Works today.</p>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier-card tier-1">
+      <div class="tier-badge green">Tier 1 — Build Now</div>
+      <h3>Cloud Webhook Gateway</h3>
+      <p class="tier-desc">A lightweight cloud endpoint that receives signals from TradingView, Zapier, or any HTTP source, then relays to subscribed desktop apps.</p>
+      <ul class="tier-features">
+        <li><span class="feat-icon">🔗</span> <strong>POST /api/v1/signals</strong> — Standard REST endpoint accepts JSON signals from any source</li>
+        <li><span class="feat-icon">🔑</span> Each user gets a unique API key tied to their license — rate-limited, authenticated</li>
+        <li><span class="feat-icon">📡</span> Cloud relay pushes signal to user's desktop app via persistent WebSocket</li>
+        <li><span class="feat-icon">🔄</span> TradingView-compatible format — users paste their webhook URL in TV alert settings</li>
+        <li><span class="feat-icon">🧹</span> Server-side deduplication — same signal from multiple sources only executes once</li>
+        <li><span class="feat-icon">⚡</span> No NAT/firewall issues — WebSocket is outbound from user's machine</li>
+      </ul>
+    </div>
+
+    <div class="tier-card tier-1">
+      <div class="tier-badge green">How It Works</div>
+      <h3>User Setup Flow</h3>
+      <p class="tier-desc">Three clicks to connect. No Discord token, no DevTools, no port forwarding.</p>
+      <ul class="tier-features">
+        <li><span class="feat-icon">1️⃣</span> User opens BotifyTrades desktop app → Settings → Signal Sources</li>
+        <li><span class="feat-icon">2️⃣</span> App auto-generates a personal webhook URL: <code style="color:#10b981">https://relay.botifytrades.com/hook/usr_abc123</code></li>
+        <li><span class="feat-icon">3️⃣</span> User pastes this URL in TradingView alert settings, Zapier, or gives it to their signal provider</li>
+        <li><span class="feat-icon">4️⃣</span> Signals flow: Source → Cloud Relay → WebSocket → Desktop App → Broker</li>
+        <li><span class="feat-icon">🔒</span> API key rotatable from the app. Revoke + regenerate if compromised</li>
+        <li><span class="feat-icon">🌐</span> Works behind any firewall/NAT — outbound WebSocket only</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Webhook API Spec -->
+  <div class="arch-diagram">
+    <h3>Webhook API — Signal Format</h3>
+    <div class="code-block">
+<span class="comment">// POST https://relay.botifytrades.com/api/v1/signals</span>
+<span class="comment">// Header: Authorization: Bearer usr_abc123_key</span>
+
+{
+  <span class="param">"action"</span>:     <span class="string">"BTO"</span>,          <span class="comment">// BTO, STC, BTO_OPTION, STC_OPTION</span>
+  <span class="param">"symbol"</span>:     <span class="string">"SPY"</span>,
+  <span class="param">"strike"</span>:     <span class="param">580</span>,            <span class="comment">// Options only</span>
+  <span class="param">"expiry"</span>:     <span class="string">"2026-05-02"</span>,   <span class="comment">// Options only</span>
+  <span class="param">"opt_type"</span>:   <span class="string">"C"</span>,            <span class="comment">// C or P — options only</span>
+  <span class="param">"price"</span>:      <span class="param">2.50</span>,           <span class="comment">// Limit price (null = market)</span>
+  <span class="param">"source"</span>:     <span class="string">"tradingview"</span>,  <span class="comment">// Source identifier</span>
+  <span class="param">"channel"</span>:    <span class="string">"my-alerts"</span>     <span class="comment">// Maps to channel risk settings</span>
+}
+
+<span class="comment">// TradingView-compatible format (auto-detected):</span>
+<span class="string">"BTO SPY 580C 05/02 @2.50"</span>   <span class="comment">// Raw text — parsed by signal pipeline</span>
+
+<span class="comment">// Response: { "status": "relayed", "signal_id": "sig_xyz789" }</span>
+    </div>
+    <div class="callout info" style="margin-top:16px;">
+      <span class="callout-icon">📋</span>
+      <div>The webhook gateway accepts <strong>both structured JSON and raw text</strong>. Raw text goes through the same signal parsing pipeline used for Discord messages — all 7 parser tiers. This means any format that works in Discord also works via webhook.</div>
+    </div>
+  </div>
+
+  <!-- Tier 2: Cloud Selfbot Bridge -->
+  <div class="section" id="tier2">
+    <div class="section-label">🟡 Tier 2</div>
+    <h2>Cloud Selfbot Bridge</h2>
+    <p class="subtitle">Provider won't add a bot? No problem. ONE selfbot on the cloud reads for ALL users. Zero risk on user side.</p>
+  </div>
+
+  <!-- The Core Problem This Solves -->
+  <div class="callout warning">
+    <span class="callout-icon">🎯</span>
+    <div><strong>The Real-World Scenario:</strong> Your signal provider admin is willing to cooperate — but won't add an official Discord bot to their server. They <em>are</em> okay with forwarding messages. The question is: how do we get signals from their Discord to your users <strong>without putting any user's Discord account at risk?</strong></div>
+  </div>
+
+  <!-- ToS Risk Comparison -->
+  <div class="risk-compare">
+    <div class="risk-card bad">
+      <div class="risk-icon">🚨</div>
+      <h4>Current: Every User Runs Selfbot</h4>
+      <div class="risk-number red">1,000</div>
+      <div class="risk-label">Discord accounts at risk</div>
+      <div class="risk-accounts">
+        <span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span>
+        <span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span>
+        <span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span>
+        <span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span><span class="acct danger"></span>
+      </div>
+      <p style="font-size:12px; color:var(--accent-red); margin-top:8px;">Every user's personal account can be banned</p>
+    </div>
+
+    <div class="risk-card ok">
+      <div class="risk-icon">🛡️</div>
+      <h4>New: Cloud Bridge (1 Disposable Account)</h4>
+      <div class="risk-number amber">1</div>
+      <div class="risk-label">Disposable account at risk</div>
+      <div class="risk-accounts">
+        <span class="acct warn"></span>
+        <span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span>
+        <span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span>
+        <span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span>
+        <span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span>
+      </div>
+      <p style="font-size:12px; color:var(--accent-green); margin-top:8px;">All user accounts are 100% safe</p>
+    </div>
+
+    <div class="risk-card good">
+      <div class="risk-icon">✅</div>
+      <h4>Goal: Webhook Mirror (Zero Risk)</h4>
+      <div class="risk-number green">0</div>
+      <div class="risk-label">Accounts at risk</div>
+      <div class="risk-accounts">
+        <span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span>
+        <span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span>
+        <span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span>
+        <span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span><span class="acct safe"></span>
+      </div>
+      <p style="font-size:12px; color:var(--accent-green); margin-top:8px;">Migration to webhook when provider is ready</p>
+    </div>
+  </div>
+
+  <!-- How the Bridge Works -->
+  <div class="arch-diagram">
+    <h3>Cloud Selfbot Bridge — Data Flow</h3>
+
+    <svg class="diagram-svg" viewBox="0 0 1100 520" xmlns="http://www.w3.org/2000/svg">
+      <!-- Provider Discord Zone -->
+      <rect x="20" y="20" width="280" height="260" rx="14" fill="rgba(88,101,242,0.06)" stroke="rgba(88,101,242,0.2)"/>
+      <text x="40" y="48" font-family="Inter,sans-serif" font-size="10" fill="#5865F2" font-weight="700" letter-spacing="1.5">PROVIDER'S DISCORD SERVER</text>
+
+      <rect x="40" y="65" width="240" height="35" rx="8" fill="rgba(88,101,242,0.15)" stroke="rgba(88,101,242,0.3)"/>
+      <text x="160" y="88" font-family="Inter,sans-serif" font-size="12" fill="#7c8aff" font-weight="600" text-anchor="middle">#signals — Trade Alerts</text>
+
+      <rect x="40" y="110" width="240" height="35" rx="8" fill="rgba(88,101,242,0.15)" stroke="rgba(88,101,242,0.3)"/>
+      <text x="160" y="133" font-family="Inter,sans-serif" font-size="12" fill="#7c8aff" font-weight="600" text-anchor="middle">#options-0dte — Day Trades</text>
+
+      <rect x="40" y="155" width="240" height="35" rx="8" fill="rgba(88,101,242,0.15)" stroke="rgba(88,101,242,0.3)"/>
+      <text x="160" y="178" font-family="Inter,sans-serif" font-size="12" fill="#7c8aff" font-weight="600" text-anchor="middle">#swing-plays — Swing Trades</text>
+
+      <!-- Dedicated bridge account -->
+      <rect x="40" y="210" width="240" height="55" rx="8" fill="rgba(245,158,11,0.1)" stroke="rgba(245,158,11,0.3)"/>
+      <text x="160" y="232" font-family="Inter,sans-serif" font-size="12" fill="#fbbf24" font-weight="700" text-anchor="middle">🔑 Bridge Account (read-only)</text>
+      <text x="160" y="252" font-family="Inter,sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Dedicated disposable account · Provider grants access</text>
+
+      <!-- Arrow from Discord to Cloud -->
+      <path d="M 300 150 C 340 150, 360 150, 400 150" stroke="#f59e0b" stroke-width="2.5" fill="none" marker-end="url(#arrowAmber)"/>
+      <text x="350" y="138" font-family="JetBrains Mono,monospace" font-size="9" fill="#f59e0b" text-anchor="middle">Discord</text>
+      <text x="350" y="152" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b" text-anchor="middle">Gateway</text>
+
+      <!-- Cloud Relay Zone -->
+      <rect x="400" y="20" width="320" height="260" rx="14" fill="rgba(59,130,246,0.06)" stroke="rgba(59,130,246,0.25)" stroke-width="2"/>
+      <text x="420" y="48" font-family="Inter,sans-serif" font-size="10" fill="#3b82f6" font-weight="700" letter-spacing="1.5">BOTIFYTRADES CLOUD RELAY</text>
+
+      <rect x="420" y="65" width="280" height="40" rx="8" fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.3)"/>
+      <text x="560" y="82" font-family="Inter,sans-serif" font-size="12" fill="#fbbf24" font-weight="700" text-anchor="middle">🤖 Selfbot Bridge Reader</text>
+      <text x="560" y="96" font-family="Inter,sans-serif" font-size="10" fill="#64748b" text-anchor="middle">discord.py-self · reads configured channels</text>
+
+      <line x1="560" y1="105" x2="560" y2="118" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="580" y="115" font-family="Inter,sans-serif" font-size="9" fill="#64748b">localhost</text>
+
+      <rect x="420" y="118" width="280" height="35" rx="8" fill="rgba(6,182,212,0.12)" stroke="rgba(6,182,212,0.3)"/>
+      <text x="560" y="141" font-family="Inter,sans-serif" font-size="12" fill="#22d3ee" font-weight="700" text-anchor="middle">📡 Signal Relay API + Parser</text>
+
+      <line x1="560" y1="153" x2="560" y2="166" stroke="#3b82f6" stroke-width="1.5"/>
+
+      <rect x="420" y="166" width="280" height="35" rx="8" fill="rgba(139,92,246,0.12)" stroke="rgba(139,92,246,0.3)"/>
+      <text x="560" y="189" font-family="Inter,sans-serif" font-size="12" fill="#a78bfa" font-weight="700" text-anchor="middle">🔀 Subscriber Dispatch + Dedup</text>
+
+      <line x1="560" y1="201" x2="560" y2="214" stroke="#3b82f6" stroke-width="1.5"/>
+
+      <rect x="420" y="214" width="280" height="50" rx="8" fill="rgba(59,130,246,0.15)" stroke="rgba(59,130,246,0.4)" stroke-width="2"/>
+      <text x="560" y="237" font-family="Inter,sans-serif" font-size="13" fill="#60a5fa" font-weight="700" text-anchor="middle">📤 WebSocket Fan-Out Server</text>
+      <text x="560" y="255" font-family="Inter,sans-serif" font-size="10" fill="#64748b" text-anchor="middle">wss://relay.botifytrades.com/ws</text>
+
+      <!-- Also accepts webhooks -->
+      <rect x="750" y="65" width="160" height="60" rx="8" fill="rgba(16,185,129,0.08)" stroke="rgba(16,185,129,0.25)" stroke-dasharray="4,3"/>
+      <text x="830" y="85" font-family="Inter,sans-serif" font-size="11" fill="#10b981" font-weight="600" text-anchor="middle">Also accepts:</text>
+      <text x="830" y="102" font-family="Inter,sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Webhook / TradingView</text>
+      <text x="830" y="116" font-family="Inter,sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Provider scripts</text>
+      <line x1="750" y1="95" x2="700" y2="135" stroke="#10b981" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrowGn)"/>
+
+      <!-- Fan-out arrows to users -->
+      <line x1="480" y1="264" x2="120" y2="360" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowBl)"/>
+      <line x1="540" y1="264" x2="400" y2="360" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowBl)"/>
+      <line x1="600" y1="264" x2="680" y2="360" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowBl)"/>
+      <line x1="660" y1="264" x2="940" y2="360" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowBl)"/>
+
+      <text x="560" y="320" font-family="Inter,sans-serif" font-size="12" fill="#3b82f6" font-weight="700" text-anchor="middle">WebSocket (outbound from user's machine)</text>
+      <text x="560" y="336" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Works behind any firewall · No port forwarding · Auto-reconnect</text>
+
+      <!-- User Desktop Zone -->
+      <rect x="20" y="350" width="1060" height="150" rx="14" fill="rgba(16,185,129,0.04)" stroke="rgba(16,185,129,0.15)" stroke-dasharray="6,4"/>
+      <text x="40" y="378" font-family="Inter,sans-serif" font-size="10" fill="#10b981" font-weight="700" letter-spacing="1.5">USER DESKTOPS — ZERO SELFBOT · ZERO DISCORD TOKEN · 100% SAFE</text>
+
+      <!-- User boxes -->
+      <rect x="40" y="390" width="200" height="95" rx="10" fill="var(--bg-card)" stroke="rgba(16,185,129,0.3)"/>
+      <text x="140" y="413" font-family="Inter,sans-serif" font-size="12" fill="#34d399" font-weight="700" text-anchor="middle">👤 User A — Windows</text>
+      <text x="140" y="433" font-family="Inter,sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Relay Client → Parser → Risk</text>
+      <rect x="60" y="445" width="160" height="28" rx="6" fill="rgba(245,158,11,0.1)" stroke="rgba(245,158,11,0.2)"/>
+      <text x="140" y="464" font-family="Inter,sans-serif" font-size="11" fill="#fbbf24" font-weight="600" text-anchor="middle">→ Schwab + Webull</text>
+
+      <rect x="280" y="390" width="200" height="95" rx="10" fill="var(--bg-card)" stroke="rgba(16,185,129,0.3)"/>
+      <text x="380" y="413" font-family="Inter,sans-serif" font-size="12" fill="#34d399" font-weight="700" text-anchor="middle">👤 User B — macOS</text>
+      <text x="380" y="433" font-family="Inter,sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Relay Client → Parser → Risk</text>
+      <rect x="300" y="445" width="160" height="28" rx="6" fill="rgba(245,158,11,0.1)" stroke="rgba(245,158,11,0.2)"/>
+      <text x="380" y="464" font-family="Inter,sans-serif" font-size="11" fill="#fbbf24" font-weight="600" text-anchor="middle">→ Alpaca + IBKR</text>
+
+      <rect x="560" y="390" width="200" height="95" rx="10" fill="var(--bg-card)" stroke="rgba(16,185,129,0.3)"/>
+      <text x="660" y="413" font-family="Inter,sans-serif" font-size="12" fill="#34d399" font-weight="700" text-anchor="middle">👤 User C — Linux</text>
+      <text x="660" y="433" font-family="Inter,sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Relay Client → Parser → Risk</text>
+      <rect x="580" y="445" width="160" height="28" rx="6" fill="rgba(245,158,11,0.1)" stroke="rgba(245,158,11,0.2)"/>
+      <text x="660" y="464" font-family="Inter,sans-serif" font-size="11" fill="#fbbf24" font-weight="600" text-anchor="middle">→ Tastytrade + T212</text>
+
+      <rect x="800" y="390" width="240" height="95" rx="10" fill="var(--bg-card)" stroke="rgba(16,185,129,0.25)" stroke-dasharray="5,3"/>
+      <text x="920" y="420" font-family="Inter,sans-serif" font-size="20" fill="#64748b" text-anchor="middle">... User N</text>
+      <text x="920" y="445" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">No Discord needed at all</text>
+      <text x="920" y="465" font-family="Inter,sans-serif" font-size="11" fill="#10b981" text-anchor="middle">Users don't even need Discord</text>
+
+      <defs>
+        <marker id="arrowAmber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#f59e0b"/>
+        </marker>
+        <marker id="arrowBl" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#3b82f6"/>
+        </marker>
+        <marker id="arrowGn" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#10b981"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="diagram-label">One bridge account reads provider channels → Cloud relay fans out to all users via WebSocket</div>
+  </div>
+
+  <!-- Three Provider Bridge Options -->
+  <div class="section">
+    <div class="section-label">🔀 Provider Options</div>
+    <h2>Three Ways Providers Can Bridge Signals</h2>
+    <p class="subtitle">All three feed into the same cloud relay. The user's desktop app never knows which one the provider chose.</p>
+  </div>
+
+  <div class="provider-grid">
+    <div class="provider-approach opt-a">
+      <h4>🅰️ Cloud-Hosted Bridge</h4>
+      <p>BotifyTrades runs the selfbot on the cloud relay server. Provider just adds a dedicated Discord account to their server with read access. <strong>Easiest for providers.</strong></p>
+      <div style="margin-top:8px; font-size:12px; color:var(--text-secondary);">
+        <strong>Provider effort:</strong> Add 1 account (2 clicks)<br>
+        <strong>BotifyTrades effort:</strong> Run + monitor selfbot<br>
+        <strong>If banned:</strong> New account, provider re-adds (~5 min)
+      </div>
+      <div class="pa-meta risk-med" style="margin-top:12px;">ToS risk: 1 disposable account</div>
+    </div>
+
+    <div class="provider-approach opt-b">
+      <h4>🅱️ Provider-Hosted Bridge</h4>
+      <p>Provider runs a lightweight Python script on their own server. The script reads signals and POSTs to the BotifyTrades webhook. <strong>Provider owns the risk entirely.</strong></p>
+      <div style="margin-top:8px; font-size:12px; color:var(--text-secondary);">
+        <strong>Provider effort:</strong> Run a Docker container<br>
+        <strong>BotifyTrades effort:</strong> Provide turnkey container<br>
+        <strong>If banned:</strong> Provider handles it — BotifyTrades is clean
+      </div>
+      <div class="pa-meta risk-low" style="margin-top:12px;">ToS risk: Provider's choice</div>
+    </div>
+
+    <div class="provider-approach opt-c">
+      <h4>🅲 Provider's Own Micro-Bot</h4>
+      <p>Provider runs a 20-line Python script as <strong>their own bot</strong> — they control the token, the code, and can shut it down anytime. <strong>100% ToS compliant.</strong></p>
+      <div style="margin-top:8px; font-size:12px; color:var(--text-secondary);">
+        <strong>Provider effort:</strong> Create bot at discord.com/developers, run 20-line script<br>
+        <strong>BotifyTrades effort:</strong> Provide the script template<br>
+        <strong>If issues:</strong> No ban risk — official Discord bot API
+      </div>
+      <div class="pa-meta risk-none" style="margin-top:12px;">ToS risk: Zero for everyone</div>
+    </div>
+  </div>
+
+  <div class="callout success">
+    <span class="callout-icon">🔑</span>
+    <div><strong>The key insight:</strong> All three provider approaches POST signals into the <em>same relay ingest endpoint</em>. The cloud relay doesn't care how the signal arrived — selfbot bridge, provider script, or micro-bot. And the user's desktop app definitely doesn't care — it just receives parsed signals via WebSocket. This means providers can start with Option A (easiest) and migrate to Option C (safest) anytime, with <strong>zero changes on the user side</strong>.</div>
+  </div>
+
+  <!-- Webhook Mirror Deep Dive -->
+  <div class="section">
+    <div class="section-label">🔍 Deep Dive</div>
+    <h2>Can Carl-bot / MEE6 / Zapier Forward to External Webhooks?</h2>
+    <p class="subtitle">The honest answer — what each tool actually does and where the limitations are.</p>
+  </div>
+
+  <div class="why-box" style="border-color: rgba(59,130,246,0.3); background: linear-gradient(135deg, rgba(59,130,246,0.05), rgba(139,92,246,0.05));">
+    <h3 style="color: var(--accent-blue);">⚠️ Critical Misconception: Discord Webhooks Are ONE-WAY</h3>
+    <p style="font-size:14px; color:var(--text-secondary); margin-bottom:16px;">
+      Discord Webhooks are <strong>incoming only</strong>. They let you POST messages <em>into</em> a Discord channel — not out of it. There is no "outgoing webhook" in Discord (unlike Slack). Every tool that reads messages OUT of Discord does so by adding a bot to the server.
+    </p>
+    <div class="code-block" style="margin: 16px 0;">
+<span class="comment">Discord Webhook = INCOMING ONLY</span>
+<span class="keyword">POST https://discord.com/api/webhooks/XXXX/YYYY</span>  →  <span class="string">Message appears IN channel</span>
+
+<span class="comment">What people THINK exists (but doesn't):</span>
+<span class="keyword">Discord Channel message</span>  →  <span class="param">POST to external URL</span>  ← <span class="comment">❌ THIS DOES NOT EXIST</span>
+    </div>
+  </div>
+
+  <!-- Tool comparison grid -->
+  <table class="comparison-table" style="margin-top:24px;">
+    <thead>
+      <tr>
+        <th>Tool</th>
+        <th>Adds Bot?</th>
+        <th>POST to External URL?</th>
+        <th>Latency</th>
+        <th>Cost</th>
+        <th>Verdict</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Discord Webhooks</strong></td>
+        <td>—</td>
+        <td style="color:var(--accent-red); font-weight:600;">❌ Wrong direction (incoming only)</td>
+        <td>—</td>
+        <td>Free</td>
+        <td><span class="badge-sm tos-no">Can't read messages</span></td>
+      </tr>
+      <tr>
+        <td><strong>Carl-bot</strong></td>
+        <td><span class="badge-sm tos-no">Yes — Carl-bot</span></td>
+        <td style="color:var(--accent-red); font-weight:600;">❌ Channel-to-channel only</td>
+        <td>1-3s</td>
+        <td>$0-5/mo</td>
+        <td><span class="badge-sm tos-gray">No external HTTP</span></td>
+      </tr>
+      <tr>
+        <td><strong>MEE6</strong></td>
+        <td><span class="badge-sm tos-no">Yes — MEE6</span></td>
+        <td style="color:var(--accent-red); font-weight:600;">❌ Channel-to-channel only</td>
+        <td>1-3s</td>
+        <td>$12/mo</td>
+        <td><span class="badge-sm tos-gray">No external HTTP</span></td>
+      </tr>
+      <tr>
+        <td><strong>Zapier</strong></td>
+        <td><span class="badge-sm tos-no">Yes — Zapier Bot</span></td>
+        <td style="color:var(--accent-green); font-weight:600;">✅ Yes</td>
+        <td style="color:var(--accent-red);">1-15 min (polling)</td>
+        <td>$20-50/mo</td>
+        <td><span class="badge-sm tos-gray">Too slow for trading</span></td>
+      </tr>
+      <tr>
+        <td><strong>Make (Integromat)</strong></td>
+        <td><span class="badge-sm tos-no">Yes — Make Bot</span></td>
+        <td style="color:var(--accent-green); font-weight:600;">✅ Yes</td>
+        <td style="color:var(--accent-red);">1-15 min (polling)</td>
+        <td>$9-16/mo</td>
+        <td><span class="badge-sm tos-gray">Too slow for trading</span></td>
+      </tr>
+      <tr>
+        <td><strong>Pipedream</strong></td>
+        <td><span class="badge-sm tos-no">Yes — Pipedream Bot</span></td>
+        <td style="color:var(--accent-green); font-weight:600;">✅ Yes</td>
+        <td style="color:var(--accent-green);">&lt;1s (event-driven)</td>
+        <td>$0-19/mo</td>
+        <td><span class="badge-sm tos-yes">Best if bot OK</span></td>
+      </tr>
+      <tr>
+        <td><strong>n8n (self-hosted)</strong></td>
+        <td><span class="badge-sm tos-no">Yes — custom bot token</span></td>
+        <td style="color:var(--accent-green); font-weight:600;">✅ Yes</td>
+        <td style="color:var(--accent-green);">Real-time</td>
+        <td>$5-10/mo (VPS)</td>
+        <td><span class="badge-sm tos-yes">Good if bot OK</span></td>
+      </tr>
+      <tr>
+        <td><strong>IFTTT</strong></td>
+        <td><span class="badge-sm tos-no">Yes — IFTTT Bot</span></td>
+        <td style="color:var(--accent-green); font-weight:600;">✅ Yes</td>
+        <td style="color:var(--accent-red);">1-15 min</td>
+        <td>$3.49/mo</td>
+        <td><span class="badge-sm tos-gray">Too slow + limited</span></td>
+      </tr>
+      <tr style="background:rgba(245,158,11,0.05);">
+        <td><strong>Provider's Own Micro-Bot</strong></td>
+        <td><span class="badge-sm tos-yes">Yes — their own</span></td>
+        <td style="color:var(--accent-green); font-weight:600;">✅ Yes</td>
+        <td style="color:var(--accent-green);">&lt;100ms</td>
+        <td>Free</td>
+        <td><span class="badge-sm tos-yes">Best ToS-compliant</span></td>
+      </tr>
+      <tr style="background:rgba(245,158,11,0.05);">
+        <td><strong>Cloud Selfbot Bridge</strong></td>
+        <td style="color:var(--accent-green); font-weight:600;">❌ No bot needed</td>
+        <td style="color:var(--accent-green); font-weight:600;">✅ Yes</td>
+        <td style="color:var(--accent-green);">&lt;100ms</td>
+        <td>Free</td>
+        <td><span class="badge-sm recommended">Only "no bot" option</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout warning" style="margin-top:24px;">
+    <span class="callout-icon">🎯</span>
+    <div>
+      <strong>The Bottom Line:</strong> If the provider's constraint is truly "no bots at all" — then the <strong>Cloud Selfbot Bridge (Option A)</strong> is the only technical path. Every tool that can read Discord messages and forward externally does so by adding a bot. Carl-bot and MEE6 can't even forward externally — they only mirror within Discord.<br><br>
+      The recommended approach: <strong>Start with Option A (cloud selfbot bridge)</strong> to get signals flowing immediately. Then pitch the provider on <strong>Option C (their own 20-line micro-bot)</strong> as a migration path — frame it as "your bot, your token, your 20 lines of readable code, you control everything."
+    </div>
+  </div>
+
+  <!-- Provider Micro-Bot Script -->
+  <div class="arch-diagram" style="margin-top:24px;">
+    <h3>Option C: Provider's Own Micro-Bot — Complete Script (20 lines)</h3>
+    <div class="code-block">
+<span class="comment"># signal_forwarder.py — Provider runs this on their own server</span>
+<span class="comment"># Provider creates bot at https://discord.com/developers/applications</span>
+<span class="comment"># Provider adds bot to their own server with View Channels permission</span>
+
+<span class="keyword">import</span> discord, aiohttp, os
+
+intents = discord.Intents.default()
+intents.message_content = <span class="param">True</span>
+client = discord.Client(intents=intents)
+
+<span class="comment"># Provider configures these two values</span>
+SIGNAL_CHANNELS = {<span class="param">123456789</span>, <span class="param">987654321</span>}  <span class="comment"># their channel IDs</span>
+RELAY_URL = <span class="string">"https://relay.botifytrades.com/api/v1/signals"</span>
+API_KEY = os.environ[<span class="string">"RELAY_API_KEY"</span>]  <span class="comment"># provided by BotifyTrades</span>
+
+@client.event
+<span class="keyword">async def</span> on_message(message):
+    <span class="keyword">if</span> message.channel.id <span class="keyword">in</span> SIGNAL_CHANNELS <span class="keyword">and not</span> message.author.bot:
+        <span class="keyword">async with</span> aiohttp.ClientSession() <span class="keyword">as</span> session:
+            <span class="keyword">await</span> session.post(RELAY_URL, json={
+                <span class="string">"content"</span>: message.content,
+                <span class="string">"embeds"</span>: [e.to_dict() <span class="keyword">for</span> e <span class="keyword">in</span> message.embeds],
+                <span class="string">"author"</span>: message.author.display_name,
+                <span class="string">"channel"</span>: message.channel.name,
+                <span class="string">"timestamp"</span>: message.created_at.isoformat()
+            }, headers={<span class="string">"Authorization"</span>: <span class="keyword">f</span><span class="string">"Bearer {API_KEY}"</span>})
+
+client.run(os.environ[<span class="string">"BOT_TOKEN"</span>])
+<span class="comment"># That's it. 20 lines. Provider reads every line. Nothing hidden.</span>
+    </div>
+    <p style="text-align:center; margin-top:12px; font-size:13px; color:var(--text-secondary);">
+      Provider creates the bot, controls the token, reads every line of code. BotifyTrades never sees their bot token.<br>
+      <strong>This is the only path that is both fully ToS-compliant AND real-time.</strong>
+    </p>
+  </div>
+
+  <!-- Latency Comparison -->
+  <div class="arch-diagram">
+    <h3>Latency Comparison — Signal to Order Execution</h3>
+    <div class="code-block">
+<span class="comment">Current: User Selfbot (baseline)</span>
+<span class="keyword">Discord Gateway → User's selfbot_webull.py → Parse → Execute</span>
+<span class="string">~50ms          ~15ms                                    = ~65ms total</span>
+
+<span class="comment">New: Cloud Selfbot Bridge (Tier 2)</span>
+<span class="keyword">Discord Gateway → Cloud Selfbot → Relay → WebSocket → User App → Parse → Execute</span>
+<span class="string">~50ms          ~1ms (localhost)  ~20-80ms (network)  ~15ms        = ~86-146ms total</span>
+
+<span class="comment">Webhook Mirror (Tier 2, Option C)</span>
+<span class="keyword">Discord → Carl-bot → Webhook POST → Relay → WebSocket → User App → Execute</span>
+<span class="string">~50ms  ~200-500ms    ~50-100ms      ~20-80ms           ~15ms  = ~335-745ms total</span>
+
+<span class="comment">Official Discord Bot (Tier 3, future)</span>
+<span class="keyword">Discord Gateway → BotifyTrades Bot → Relay → WebSocket → User App → Execute</span>
+<span class="string">~50ms             ~1ms (localhost)    ~20-80ms           ~15ms  = ~86-146ms total</span>
+
+<span class="param">───────────────────────────────────────────────────────────</span>
+<span class="comment">Broker fill time: 100-500ms (the real bottleneck)</span>
+<span class="comment">Cloud bridge adds ~20-80ms — negligible vs. broker latency</span>
+    </div>
+  </div>
+
+  <!-- What Happens When Account Gets Banned -->
+  <div class="tier-grid">
+    <div class="tier-card tier-2">
+      <div class="tier-badge amber">Recovery Plan</div>
+      <h3>What If the Bridge Account Gets Banned?</h3>
+      <p class="tier-desc">The bridge account is <strong>disposable by design</strong>. It has no personal data, no chat history, no servers it owns. Recovery is a 5-minute process.</p>
+      <ul class="tier-features">
+        <li><span class="feat-icon">1️⃣</span> <strong>Detection:</strong> Cloud relay detects disconnect — alerts BotifyTrades ops via webhook/email</li>
+        <li><span class="feat-icon">2️⃣</span> <strong>Create new account:</strong> New Discord account created (email + password — just for this purpose)</li>
+        <li><span class="feat-icon">3️⃣</span> <strong>Provider re-adds:</strong> Provider admin adds the new account to their server (2 clicks)</li>
+        <li><span class="feat-icon">4️⃣</span> <strong>Auto-resume:</strong> Cloud relay restarts selfbot with new token — signals resume automatically</li>
+        <li><span class="feat-icon">⏱️</span> <strong>Total downtime:</strong> 5-30 minutes depending on provider response time</li>
+        <li><span class="feat-icon">🔒</span> <strong>User impact:</strong> ZERO. No user account is affected. Existing positions and risk management continue locally</li>
+      </ul>
+    </div>
+
+    <div class="tier-card tier-2">
+      <div class="tier-badge amber">Risk Mitigation</div>
+      <h3>How to Minimize Ban Risk</h3>
+      <p class="tier-desc">Read-only selfbots have the lowest detection risk. These practices make the bridge account virtually invisible to Discord's anti-abuse systems.</p>
+      <ul class="tier-features">
+        <li><span class="feat-icon">👁️</span> <strong>Read-only:</strong> Never send messages, reactions, or typing indicators — pure passive reading</li>
+        <li><span class="feat-icon">🐌</span> <strong>Low activity:</strong> Only connect to signal channels, not general chat — minimal Gateway events</li>
+        <li><span class="feat-icon">🔄</span> <strong>Natural patterns:</strong> Mimic real user behavior — connection times, heartbeat intervals</li>
+        <li><span class="feat-icon">🏠</span> <strong>Dedicated IP:</strong> Cloud relay has a static IP — no VPN hopping that triggers flags</li>
+        <li><span class="feat-icon">📱</span> <strong>Account aging:</strong> Let accounts age 1-2 weeks before using as bridge — fresh accounts draw scrutiny</li>
+        <li><span class="feat-icon">🎭</span> <strong>Multiple backup accounts:</strong> Have 2-3 accounts ready — instant swap on ban, zero downtime</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Unified Relay Architecture -->
+  <div class="callout info">
+    <span class="callout-icon">🏗️</span>
+    <div><strong>How Tier 2 Fits with Tier 1 + Tier 3:</strong> All three tiers feed into the <strong>same cloud relay server</strong>. Tier 1 (webhook) → REST endpoint. Tier 2 (selfbot bridge) → localhost POST. Tier 3 (official bot) → localhost POST. They all converge into the same signal parsing pipeline and WebSocket fan-out. A provider can even use multiple tiers simultaneously (webhook for TradingView alerts + bridge for Discord signals), and the relay deduplicates automatically.</div>
+  </div>
+
+  <!-- Tier 3: Discord Bot -->
+  <div class="section" id="tier3">
+    <div class="section-label">🟣 Tier 3</div>
+    <h2>Official Discord Bot Relay</h2>
+    <p class="subtitle">Signal providers add the BotifyTrades bot. Users subscribe to channels. Zero selfbot needed.</p>
+  </div>
+
+  <div class="callout warning">
+    <span class="callout-icon">🎯</span>
+    <div><strong>The Desktop Bot Challenge:</strong> Traditional Discord bots run on a server and serve many users. But BotifyTrades is a desktop app — each user runs their own instance. We can't run 1,000 separate bot connections from 1,000 desktops to the same Discord server. The solution: <strong>one cloud-hosted bot reads signals, then relays to all subscribed desktop apps via WebSocket.</strong></div>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier-card tier-3 full-width">
+      <div class="tier-badge purple">Tier 3 — Official Discord Bot</div>
+      <h3>How the Discord Bot Works with Desktop Apps</h3>
+      <p class="tier-desc">One official bot in the cloud. Thousands of desktop apps connected via WebSocket. Signal providers add the bot once — all subscribers benefit.</p>
+    </div>
+  </div>
+
+  <!-- Discord Bot Architecture Diagram -->
+  <div class="arch-diagram">
+    <h3>Discord Bot Relay Architecture — Desktop App Model</h3>
+
+    <svg class="diagram-svg" viewBox="0 0 1100 620" xmlns="http://www.w3.org/2000/svg">
+      <!-- Signal Provider Zone -->
+      <rect x="30" y="20" width="300" height="200" rx="14" fill="rgba(88,101,242,0.06)" stroke="rgba(88,101,242,0.2)"/>
+      <text x="50" y="48" font-family="Inter,sans-serif" font-size="10" fill="#5865F2" font-weight="700" letter-spacing="1.5">SIGNAL PROVIDER'S DISCORD SERVER</text>
+
+      <rect x="50" y="65" width="120" height="40" rx="8" fill="rgba(88,101,242,0.15)" stroke="rgba(88,101,242,0.3)"/>
+      <text x="110" y="90" font-family="Inter,sans-serif" font-size="12" fill="#7c8aff" font-weight="600" text-anchor="middle">#signals</text>
+
+      <rect x="190" y="65" width="120" height="40" rx="8" fill="rgba(88,101,242,0.15)" stroke="rgba(88,101,242,0.3)"/>
+      <text x="250" y="90" font-family="Inter,sans-serif" font-size="12" fill="#7c8aff" font-weight="600" text-anchor="middle">#options-0dte</text>
+
+      <rect x="50" y="120" width="120" height="40" rx="8" fill="rgba(88,101,242,0.15)" stroke="rgba(88,101,242,0.3)"/>
+      <text x="110" y="145" font-family="Inter,sans-serif" font-size="12" fill="#7c8aff" font-weight="600" text-anchor="middle">#swing-trades</text>
+
+      <!-- Bot badge -->
+      <rect x="50" y="175" width="260" height="30" rx="6" fill="rgba(16,185,129,0.12)" stroke="rgba(16,185,129,0.3)"/>
+      <text x="180" y="195" font-family="Inter,sans-serif" font-size="11" fill="#10b981" font-weight="600" text-anchor="middle">🤖 BotifyTrades Bot has READ access ✓</text>
+
+      <!-- Arrow from Discord to Cloud Bot -->
+      <line x1="330" y1="120" x2="400" y2="120" stroke="#5865F2" stroke-width="2.5" marker-end="url(#arrowBot)"/>
+      <text x="365" y="110" font-family="JetBrains Mono,monospace" font-size="9" fill="#5865F2" text-anchor="middle">Gateway</text>
+
+      <!-- Cloud Bot -->
+      <rect x="400" y="40" width="280" height="170" rx="14" fill="rgba(59,130,246,0.08)" stroke="rgba(59,130,246,0.35)" stroke-width="2"/>
+      <text x="420" y="68" font-family="Inter,sans-serif" font-size="10" fill="#3b82f6" font-weight="700" letter-spacing="1.5">BOTIFYTRADES CLOUD</text>
+
+      <rect x="420" y="82" width="240" height="35" rx="8" fill="rgba(88,101,242,0.15)" stroke="rgba(88,101,242,0.3)"/>
+      <text x="540" y="105" font-family="Inter,sans-serif" font-size="12" fill="#7c8aff" font-weight="600" text-anchor="middle">🤖 Discord Bot Instance</text>
+
+      <rect x="420" y="125" width="240" height="35" rx="8" fill="rgba(59,130,246,0.15)" stroke="rgba(59,130,246,0.3)"/>
+      <text x="540" y="148" font-family="Inter,sans-serif" font-size="12" fill="#60a5fa" font-weight="600" text-anchor="middle">📡 WebSocket Relay Server</text>
+
+      <rect x="420" y="168" width="240" height="30" rx="8" fill="rgba(139,92,246,0.12)" stroke="rgba(139,92,246,0.3)"/>
+      <text x="540" y="188" font-family="Inter,sans-serif" font-size="11" fill="#a78bfa" font-weight="600" text-anchor="middle">Subscription Manager + Dedup</text>
+
+      <!-- Signal flow inside cloud -->
+      <line x1="540" y1="117" x2="540" y2="125" stroke="#3b82f6" stroke-width="1.5"/>
+
+      <!-- Multiple provider servers -->
+      <rect x="30" y="240" width="300" height="80" rx="14" fill="rgba(139,92,246,0.06)" stroke="rgba(139,92,246,0.2)"/>
+      <text x="50" y="265" font-family="Inter,sans-serif" font-size="10" fill="#a78bfa" font-weight="700" letter-spacing="1.5">MORE SIGNAL PROVIDERS</text>
+      <text x="50" y="285" font-family="Inter,sans-serif" font-size="12" fill="#64748b">Phoenix Trading ·  C1apped ·  Temple Trades</text>
+      <text x="50" y="305" font-family="Inter,sans-serif" font-size="12" fill="#64748b">Each adds the bot to their server once</text>
+
+      <line x1="330" y1="280" x2="400" y2="200" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowBot)"/>
+
+      <!-- Desktop Users Zone -->
+      <rect x="30" y="370" width="1040" height="230" rx="14" fill="rgba(16,185,129,0.03)" stroke="rgba(16,185,129,0.15)" stroke-dasharray="6,4"/>
+      <text x="50" y="398" font-family="Inter,sans-serif" font-size="10" fill="#10b981" font-weight="700" letter-spacing="1.5">INDIVIDUAL USER DESKTOPS (EACH RUNS OWN BOTIFYTRADES INSTANCE)</text>
+
+      <!-- User 1 -->
+      <rect x="60" y="415" width="220" height="165" rx="12" fill="var(--bg-card)" stroke="rgba(16,185,129,0.3)"/>
+      <text x="170" y="440" font-family="Inter,sans-serif" font-size="13" fill="#34d399" font-weight="700" text-anchor="middle">👤 User A — Windows</text>
+      <rect x="80" y="452" width="180" height="24" rx="6" fill="rgba(6,182,212,0.1)" stroke="rgba(6,182,212,0.2)"/>
+      <text x="170" y="469" font-family="Inter,sans-serif" font-size="10" fill="#22d3ee" text-anchor="middle">Signal Receiver (WebSocket)</text>
+      <rect x="80" y="482" width="180" height="24" rx="6" fill="rgba(139,92,246,0.1)" stroke="rgba(139,92,246,0.2)"/>
+      <text x="170" y="499" font-family="Inter,sans-serif" font-size="10" fill="#a78bfa" text-anchor="middle">Signal Parsing Pipeline</text>
+      <rect x="80" y="512" width="180" height="24" rx="6" fill="rgba(245,158,11,0.1)" stroke="rgba(245,158,11,0.2)"/>
+      <text x="170" y="529" font-family="Inter,sans-serif" font-size="10" fill="#fbbf24" text-anchor="middle">Risk Engine + OCO Brackets</text>
+      <rect x="80" y="542" width="180" height="28" rx="6" fill="rgba(245,158,11,0.15)" stroke="rgba(245,158,11,0.3)"/>
+      <text x="170" y="561" font-family="Inter,sans-serif" font-size="11" fill="#fbbf24" font-weight="600" text-anchor="middle">Schwab + Webull</text>
+
+      <!-- User 2 -->
+      <rect x="310" y="415" width="220" height="165" rx="12" fill="var(--bg-card)" stroke="rgba(16,185,129,0.3)"/>
+      <text x="420" y="440" font-family="Inter,sans-serif" font-size="13" fill="#34d399" font-weight="700" text-anchor="middle">👤 User B — macOS</text>
+      <rect x="330" y="452" width="180" height="24" rx="6" fill="rgba(6,182,212,0.1)" stroke="rgba(6,182,212,0.2)"/>
+      <text x="420" y="469" font-family="Inter,sans-serif" font-size="10" fill="#22d3ee" text-anchor="middle">Signal Receiver (WebSocket)</text>
+      <rect x="330" y="482" width="180" height="24" rx="6" fill="rgba(139,92,246,0.1)" stroke="rgba(139,92,246,0.2)"/>
+      <text x="420" y="499" font-family="Inter,sans-serif" font-size="10" fill="#a78bfa" text-anchor="middle">Signal Parsing Pipeline</text>
+      <rect x="330" y="512" width="180" height="24" rx="6" fill="rgba(245,158,11,0.1)" stroke="rgba(245,158,11,0.2)"/>
+      <text x="420" y="529" font-family="Inter,sans-serif" font-size="10" fill="#fbbf24" text-anchor="middle">Risk Engine + OCO Brackets</text>
+      <rect x="330" y="542" width="180" height="28" rx="6" fill="rgba(245,158,11,0.15)" stroke="rgba(245,158,11,0.3)"/>
+      <text x="420" y="561" font-family="Inter,sans-serif" font-size="11" fill="#fbbf24" font-weight="600" text-anchor="middle">Alpaca + IBKR</text>
+
+      <!-- User 3 -->
+      <rect x="560" y="415" width="220" height="165" rx="12" fill="var(--bg-card)" stroke="rgba(16,185,129,0.3)"/>
+      <text x="670" y="440" font-family="Inter,sans-serif" font-size="13" fill="#34d399" font-weight="700" text-anchor="middle">👤 User C — Linux</text>
+      <rect x="580" y="452" width="180" height="24" rx="6" fill="rgba(6,182,212,0.1)" stroke="rgba(6,182,212,0.2)"/>
+      <text x="670" y="469" font-family="Inter,sans-serif" font-size="10" fill="#22d3ee" text-anchor="middle">Signal Receiver (WebSocket)</text>
+      <rect x="580" y="482" width="180" height="24" rx="6" fill="rgba(139,92,246,0.1)" stroke="rgba(139,92,246,0.2)"/>
+      <text x="670" y="499" font-family="Inter,sans-serif" font-size="10" fill="#a78bfa" text-anchor="middle">Signal Parsing Pipeline</text>
+      <rect x="580" y="512" width="180" height="24" rx="6" fill="rgba(245,158,11,0.1)" stroke="rgba(245,158,11,0.2)"/>
+      <text x="670" y="529" font-family="Inter,sans-serif" font-size="10" fill="#fbbf24" text-anchor="middle">Risk Engine + OCO Brackets</text>
+      <rect x="580" y="542" width="180" height="28" rx="6" fill="rgba(245,158,11,0.15)" stroke="rgba(245,158,11,0.3)"/>
+      <text x="670" y="561" font-family="Inter,sans-serif" font-size="11" fill="#fbbf24" font-weight="600" text-anchor="middle">Tastytrade + Robinhood</text>
+
+      <!-- User N -->
+      <rect x="810" y="415" width="220" height="165" rx="12" fill="var(--bg-card)" stroke="rgba(16,185,129,0.25)" stroke-dasharray="6,4"/>
+      <text x="920" y="490" font-family="Inter,sans-serif" font-size="24" fill="#64748b" text-anchor="middle">...</text>
+      <text x="920" y="515" font-family="Inter,sans-serif" font-size="12" fill="#64748b" text-anchor="middle">User N</text>
+      <text x="920" y="535" font-family="Inter,sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Any platform, any broker</text>
+
+      <!-- WebSocket arrows from cloud to users -->
+      <line x1="540" y1="210" x2="170" y2="415" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowBot)"/>
+      <line x1="540" y1="210" x2="420" y2="415" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowBot)"/>
+      <line x1="540" y1="210" x2="670" y2="415" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowBot)"/>
+      <line x1="540" y1="210" x2="920" y2="415" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowBot)"/>
+
+      <text x="750" y="330" font-family="Inter,sans-serif" font-size="11" fill="#3b82f6" font-weight="600">WebSocket Fan-out</text>
+      <text x="750" y="348" font-family="Inter,sans-serif" font-size="11" fill="#64748b">Each user subscribes to</text>
+      <text x="750" y="363" font-family="Inter,sans-serif" font-size="11" fill="#64748b">specific provider channels</text>
+
+      <defs>
+        <marker id="arrowBot" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#3b82f6"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="diagram-label">One cloud bot reads from all provider servers, fans out to all subscribed desktop apps</div>
+  </div>
+
+  <!-- Discord Bot Flow -->
+  <div class="section" id="journey">
+    <div class="section-label">🚀 User Journey</div>
+    <h2>How a User Connects — Step by Step</h2>
+    <p class="subtitle">No Discord token. No DevTools. No admin access to signal servers.</p>
+  </div>
+
+  <div class="journey-container">
+    <div class="journey-step">
+      <div class="journey-timeline">
+        <div class="journey-num local">1</div>
+        <div class="journey-line"></div>
+      </div>
+      <div class="journey-content">
+        <h4>Install & Activate BotifyTrades</h4>
+        <p>User downloads the desktop app for their platform (Windows/Mac/Linux). Enters their license key. The app generates a unique device ID and authenticates with the BotifyTrades license server.</p>
+        <span class="latency fast">One-time setup</span>
+      </div>
+    </div>
+
+    <div class="journey-step">
+      <div class="journey-timeline">
+        <div class="journey-num cloud">2</div>
+        <div class="journey-line"></div>
+      </div>
+      <div class="journey-content">
+        <h4>Choose Signal Sources</h4>
+        <p>In the app's <strong>Signal Sources</strong> tab, user sees a catalog of available providers — each one that has added the BotifyTrades bot to their server. User toggles which channels to subscribe to (e.g., "Phoenix #signals", "C1apped #options-0dte"). Each channel maps to the user's channel risk settings (PT/SL/trailing/OCO configuration).</p>
+        <span class="latency fast">Click to subscribe</span>
+      </div>
+    </div>
+
+    <div class="journey-step">
+      <div class="journey-timeline">
+        <div class="journey-num discord">3</div>
+        <div class="journey-line"></div>
+      </div>
+      <div class="journey-content">
+        <h4>Signal Arrives in Discord</h4>
+        <p>A signal provider posts <code>"BTO SPY 580C 05/02 @2.50"</code> in their Discord channel. The BotifyTrades cloud bot (which has read access to the channel) receives the message in real-time via the Discord Gateway WebSocket.</p>
+        <span class="latency fast">&lt;100ms — Discord Gateway</span>
+      </div>
+    </div>
+
+    <div class="journey-step">
+      <div class="journey-timeline">
+        <div class="journey-num cloud">4</div>
+        <div class="journey-line"></div>
+      </div>
+      <div class="journey-content">
+        <h4>Cloud Relay Fans Out</h4>
+        <p>The relay server identifies all users subscribed to this provider channel. It wraps the signal in a standardized envelope (source, channel, timestamp, raw content) and pushes it to each user's desktop app via their persistent WebSocket connection. Server-side dedup prevents duplicate execution.</p>
+        <span class="latency fast">&lt;50ms — WebSocket relay</span>
+      </div>
+    </div>
+
+    <div class="journey-step">
+      <div class="journey-timeline">
+        <div class="journey-num local">5</div>
+        <div class="journey-line"></div>
+      </div>
+      <div class="journey-content">
+        <h4>Desktop App Parses & Validates</h4>
+        <p>The user's local BotifyTrades instance receives the signal and runs it through the full 5-tier parsing pipeline (Embed → Registry → Trader-specific → Standard Regex → AI Fallback). The signal is validated against the user's channel risk settings — position limits, max allocation, market hours, etc.</p>
+        <span class="latency fast">&lt;10ms — local processing</span>
+      </div>
+    </div>
+
+    <div class="journey-step">
+      <div class="journey-timeline">
+        <div class="journey-num broker">6</div>
+        <div class="journey-line"></div>
+      </div>
+      <div class="journey-content">
+        <h4>Broker Execution + Risk Management</h4>
+        <p>The order is placed through the user's connected broker(s) — Schwab, Webull, Alpaca, IBKR, Tastytrade, Robinhood, or Trading212. OCO brackets, stop losses, profit targets, and dynamic trailing stops are automatically managed by the local risk engine. <strong>Broker credentials never leave the user's machine.</strong></p>
+        <span class="latency fast">&lt;200ms total signal-to-order</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security Architecture -->
+  <div class="section">
+    <div class="section-label">🔒 Security</div>
+    <h2>Security Architecture</h2>
+    <p class="subtitle">Broker credentials stay local. The cloud relay is a dumb pipe.</p>
+  </div>
+
+  <div class="security-grid">
+    <div class="security-item">
+      <div class="sec-icon">🔐</div>
+      <h4>Credentials Never Leave Desktop</h4>
+      <p>Broker API keys, tokens, and passwords are stored locally in encrypted SQLite. The cloud relay has zero access to broker credentials.</p>
+    </div>
+    <div class="security-item">
+      <div class="sec-icon">🎫</div>
+      <h4>License-Based Auth</h4>
+      <p>WebSocket connection authenticated via license key + machine fingerprint. No Discord credentials involved.</p>
+    </div>
+    <div class="security-item">
+      <div class="sec-icon">🔄</div>
+      <h4>End-to-End TLS</h4>
+      <p>WebSocket (wss://) and HTTPS — all traffic encrypted in transit. Signal content is visible only to the cloud relay (for routing) and the user's desktop.</p>
+    </div>
+    <div class="security-item">
+      <div class="sec-icon">🚫</div>
+      <h4>No Order Execution in Cloud</h4>
+      <p>The cloud relay cannot place orders, modify positions, or interact with brokers. It only forwards signal text.</p>
+    </div>
+    <div class="security-item">
+      <div class="sec-icon">📋</div>
+      <h4>Audit Trail</h4>
+      <p>Every signal relayed is logged with timestamp, source, and delivery confirmation. Users can review signal history in the desktop app.</p>
+    </div>
+    <div class="security-item">
+      <div class="sec-icon">⚡</div>
+      <h4>Stateless Relay</h4>
+      <p>Cloud relay stores no trade data, no positions, no P&L. If the relay goes down, desktop apps continue trading with existing positions and risk rules.</p>
+    </div>
+  </div>
+
+  <!-- User Personas -->
+  <div class="section">
+    <div class="section-label">👥 User Personas</div>
+    <h2>Which Tier Fits Which User?</h2>
+  </div>
+
+  <div class="persona-grid" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="persona-card">
+      <div class="persona-icon">📈</div>
+      <h4>TradingView User</h4>
+      <p>Runs Pine Script strategies. Wants alerts to auto-execute. No Discord.</p>
+      <div class="persona-method t1">Tier 1 — Webhook API</div>
+    </div>
+    <div class="persona-card">
+      <div class="persona-icon">💬</div>
+      <h4>Discord — Provider Won't Add Bot</h4>
+      <p>Provider cooperates but won't add bots. Cloud bridge reads on behalf of all users.</p>
+      <div class="persona-method" style="background:rgba(245,158,11,0.15); color:var(--accent-amber);">Tier 2 — Cloud Bridge</div>
+    </div>
+    <div class="persona-card">
+      <div class="persona-icon">🤖</div>
+      <h4>Discord — Provider Adds Bot</h4>
+      <p>Provider officially integrates. Bot reads signals with full ToS compliance.</p>
+      <div class="persona-method t3">Tier 3 — Discord Bot</div>
+    </div>
+    <div class="persona-card">
+      <div class="persona-icon">🔀</div>
+      <h4>Multi-Source Trader</h4>
+      <p>Follows signals from Discord + TradingView + Telegram. Needs all sources unified with deduplication.</p>
+      <div class="persona-method both">Tier 1 + 3 Combined</div>
+    </div>
+  </div>
+
+  <!-- Comparison Table -->
+  <div class="section" id="compare">
+    <div class="section-label">📊 Comparison</div>
+    <h2>Approach Comparison Matrix</h2>
+  </div>
+
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th>Approach</th>
+        <th>Setup Ease</th>
+        <th>Reliability</th>
+        <th>Latency</th>
+        <th>ToS Safety</th>
+        <th>Commercial</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Selfbot (current)</td>
+        <td><span class="score"><span class="dot warn"></span><span class="dot warn"></span><span class="dot warn"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="score"><span class="dot warn"></span><span class="dot warn"></span><span class="dot warn"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span></span></td>
+        <td><span class="badge-sm tos-no">Violates ToS</span></td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="badge-sm tos-gray">Deprecated</span></td>
+      </tr>
+      <tr>
+        <td>Username/Password</td>
+        <td colspan="5" style="text-align:center; color:var(--accent-red); font-weight:600;">Not possible — Discord removed this in 2021-2022 (hCaptcha + MFA blocks)</td>
+        <td><span class="badge-sm tos-no">Impossible</span></td>
+      </tr>
+      <tr>
+        <td>OAuth2</td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span></span></td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td>—</td>
+        <td><span class="badge-sm tos-yes">Compliant</span></td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="badge-sm tos-no">No msg scope</span></td>
+      </tr>
+      <tr style="background:rgba(16,185,129,0.03);">
+        <td><strong>Webhook API (Tier 1)</strong></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span></span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span></span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span></span></td>
+        <td><span class="badge-sm tos-yes">Compliant</span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span></span></td>
+        <td><span class="badge-sm recommended">Build Now</span></td>
+      </tr>
+      <tr style="background:rgba(245,158,11,0.03);">
+        <td><strong>Cloud Bridge (Tier 2)</strong></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span></span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span></span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span></span></td>
+        <td><span class="badge-sm tos-gray">Users safe</span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span></span></td>
+        <td><span class="badge-sm recommended">Build Now</span></td>
+      </tr>
+      <tr style="background:rgba(88,101,242,0.03);">
+        <td><strong>Discord Bot (Tier 3)</strong></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span></span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span></span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span></span></td>
+        <td><span class="badge-sm tos-yes">Compliant</span></td>
+        <td><span class="score"><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span></span></td>
+        <td><span class="badge-sm recommended">Build Next</span></td>
+      </tr>
+      <tr>
+        <td>Browser Automation</td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="score"><span class="dot warn"></span><span class="dot warn"></span><span class="dot warn"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="badge-sm tos-no">Violates ToS</span></td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="badge-sm tos-no">Not viable</span></td>
+      </tr>
+      <tr>
+        <td>Screen Scraping</td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="badge-sm tos-gray">Gray area</span></td>
+        <td><span class="score"><span class="dot danger"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></td>
+        <td><span class="badge-sm tos-no">Not viable</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Implementation Roadmap -->
+  <div class="section" id="roadmap">
+    <div class="section-label">🗺️ Roadmap</div>
+    <h2>Implementation Phases</h2>
+  </div>
+
+  <div class="roadmap">
+    <div class="roadmap-phase p1">
+      <div class="phase-label">Phase 1 — Foundation</div>
+      <h4>Cloud Relay + Bridge + Webhook</h4>
+      <p>Deploy relay server with selfbot bridge for your partner provider. Expose webhook endpoints. Desktop app connects via WebSocket.</p>
+      <ul class="phase-tasks">
+        <li>Deploy relay server (FastAPI + WebSocket on VPS)</li>
+        <li>Selfbot bridge reader for partner provider channels</li>
+        <li>WebSocket auth via license key + machine fingerprint</li>
+        <li>REST endpoint: POST /api/v1/signals (webhook)</li>
+        <li>Provider adapter layer (normalize selfbot + webhook inputs)</li>
+        <li>Desktop app WebSocket client + reconnect logic</li>
+        <li>Signal deduplication (TTL-based, cross-source)</li>
+        <li>User-facing "Signal Sources" settings tab</li>
+        <li>Bridge account ban detection + recovery alerting</li>
+      </ul>
+      <div class="est">Est: 2-3 weeks</div>
+    </div>
+
+    <div class="roadmap-phase p2">
+      <div class="phase-label">Phase 2 — Discord Bot</div>
+      <h4>Official Bot + Provider Onboarding</h4>
+      <p>Register Discord bot, build signal reader, onboard first providers.</p>
+      <ul class="phase-tasks">
+        <li>Register Discord bot at discord.com/developers</li>
+        <li>Apply for MESSAGE_CONTENT privileged intent</li>
+        <li>Build bot signal reader (discord.py official)</li>
+        <li>Provider channel subscription catalog</li>
+        <li>Admin panel: manage providers + channel mappings</li>
+        <li>Partner with 2-3 signal providers for beta</li>
+        <li>Provider onboarding kit (one-page guide)</li>
+      </ul>
+      <div class="est">Est: 3-4 weeks</div>
+    </div>
+
+    <div class="roadmap-phase p3">
+      <div class="phase-label">Phase 3 — Scale</div>
+      <h4>Multi-Source + Analytics</h4>
+      <p>Add Telegram relay, signal analytics, and provider marketplace.</p>
+      <ul class="phase-tasks">
+        <li>Telegram bot relay (parallel to Discord bot)</li>
+        <li>Signal analytics dashboard (hit rate, P&L by source)</li>
+        <li>Provider marketplace in desktop app</li>
+        <li>Rate provider channels based on signal quality</li>
+        <li>Deprecate selfbot with migration wizard</li>
+        <li>Public API docs for provider self-service integration</li>
+        <li>Mobile push notifications for high-priority signals</li>
+      </ul>
+      <div class="est">Est: 4-6 weeks</div>
+    </div>
+  </div>
+
+  <!-- Cloud Infrastructure -->
+  <div class="section">
+    <div class="section-label">☁️ Infrastructure</div>
+    <h2>Cloud Relay — What Actually Gets Deployed</h2>
+    <p class="subtitle">Minimal footprint. The relay is a thin message router, not a trading platform.</p>
+  </div>
+
+  <div class="arch-diagram">
+    <h3>Cloud Relay Server Stack</h3>
+    <div class="code-block">
+<span class="comment">╔══════════════════════════════════════════════════════════════╗</span>
+<span class="comment">║</span>  <span class="keyword">Cloud Relay Server</span> (single VPS — $20/mo is sufficient)      <span class="comment">║</span>
+<span class="comment">╠══════════════════════════════════════════════════════════════╣</span>
+<span class="comment">║</span>                                                              <span class="comment">║</span>
+<span class="comment">║</span>  <span class="endpoint">FastAPI Application</span>                                        <span class="comment">║</span>
+<span class="comment">║</span>  ├── <span class="string">POST /api/v1/signals</span>    Webhook ingestion endpoint     <span class="comment">║</span>
+<span class="comment">║</span>  ├── <span class="string">WS   /ws/signals</span>        Client WebSocket connections   <span class="comment">║</span>
+<span class="comment">║</span>  ├── <span class="string">GET  /api/v1/providers</span>  Available signal providers     <span class="comment">║</span>
+<span class="comment">║</span>  └── <span class="string">POST /api/v1/subscribe</span>  Channel subscription mgmt     <span class="comment">║</span>
+<span class="comment">║</span>                                                              <span class="comment">║</span>
+<span class="comment">║</span>  <span class="endpoint">Discord Bot</span> (discord.py official)                           <span class="comment">║</span>
+<span class="comment">║</span>  ├── Connects to provider Discord servers                    <span class="comment">║</span>
+<span class="comment">║</span>  ├── <span class="keyword">on_message</span> → parse → relay to subscribers              <span class="comment">║</span>
+<span class="comment">║</span>  └── Read-only permissions (VIEW_CHANNEL + MESSAGE_CONTENT) <span class="comment">║</span>
+<span class="comment">║</span>                                                              <span class="comment">║</span>
+<span class="comment">║</span>  <span class="endpoint">Subscription Manager</span>                                       <span class="comment">║</span>
+<span class="comment">║</span>  ├── user_id → [provider_channel_1, provider_channel_2]     <span class="comment">║</span>
+<span class="comment">║</span>  ├── Maps channels to connected WebSocket clients           <span class="comment">║</span>
+<span class="comment">║</span>  └── TTL-based dedup (signal_hash → 60s expiry)             <span class="comment">║</span>
+<span class="comment">║</span>                                                              <span class="comment">║</span>
+<span class="comment">║</span>  <span class="endpoint">Auth Layer</span>                                                 <span class="comment">║</span>
+<span class="comment">║</span>  ├── License key validation (calls license server)          <span class="comment">║</span>
+<span class="comment">║</span>  ├── Machine fingerprint check                              <span class="comment">║</span>
+<span class="comment">║</span>  └── API key generation for webhook URLs                    <span class="comment">║</span>
+<span class="comment">║</span>                                                              <span class="comment">║</span>
+<span class="comment">║</span>  <span class="param">Storage: Redis (pub/sub + dedup)</span>                           <span class="comment">║</span>
+<span class="comment">║</span>  <span class="param">NO broker creds · NO trade data · NO position state</span>       <span class="comment">║</span>
+<span class="comment">║</span>                                                              <span class="comment">║</span>
+<span class="comment">╚══════════════════════════════════════════════════════════════╝</span>
+    </div>
+  </div>
+
+  <!-- What Stays on Desktop -->
+  <div class="tier-grid">
+    <div class="tier-card tier-1">
+      <div class="tier-badge green">Desktop App — What Stays Local</div>
+      <h3>Everything That Matters</h3>
+      <p class="tier-desc">All sensitive operations run on the user's machine. The cloud relay is disposable — if it goes down, existing positions and risk management continue uninterrupted.</p>
+      <ul class="tier-features">
+        <li><span class="feat-icon">🔐</span> <strong>Broker Credentials</strong> — Encrypted in local SQLite, protected by Windows DPAPI / macOS Keychain</li>
+        <li><span class="feat-icon">📊</span> <strong>Position Cache</strong> — Full position state, P&L tracking, highest price, bracket order IDs</li>
+        <li><span class="feat-icon">⚖️</span> <strong>Risk Engine</strong> — Dynamic SL, trailing stops, OCO brackets, tiered profit targets</li>
+        <li><span class="feat-icon">🧠</span> <strong>Signal Parsing</strong> — All 5 parser tiers run locally for maximum accuracy</li>
+        <li><span class="feat-icon">📡</span> <strong>Broker Connections</strong> — Direct API calls to Schwab/Webull/Alpaca/IBKR/etc.</li>
+        <li><span class="feat-icon">🌐</span> <strong>Web GUI</strong> — Flask server on localhost for the trading dashboard</li>
+      </ul>
+    </div>
+
+    <div class="tier-card tier-3">
+      <div class="tier-badge purple">Cloud Relay — What Goes to Cloud</div>
+      <h3>Only Signal Text</h3>
+      <p class="tier-desc">The relay handles the absolute minimum needed to route signals from source to user.</p>
+      <ul class="tier-features">
+        <li><span class="feat-icon">📨</span> <strong>Raw Signal Text</strong> — "BTO SPY 580C 05/02 @2.50" — just the message content</li>
+        <li><span class="feat-icon">📌</span> <strong>Source Metadata</strong> — Which provider, which channel, timestamp</li>
+        <li><span class="feat-icon">🔑</span> <strong>License Key</strong> — For authentication only, not stored long-term</li>
+        <li><span class="feat-icon">📋</span> <strong>Subscriptions</strong> — Which user watches which provider channels</li>
+        <li><span class="feat-icon">🚫</span> <strong>NEVER:</strong> Broker credentials, API tokens, positions, orders, or P&L data</li>
+        <li><span class="feat-icon">🗑️</span> <strong>Stateless:</strong> Signals expire from memory after 60s — no persistent storage</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Discord Bot Provider Onboarding -->
+  <div class="section">
+    <div class="section-label">🤝 Provider Onboarding</div>
+    <h2>How Signal Providers Join</h2>
+    <p class="subtitle">One-click bot invite. Providers gain exposure to all BotifyTrades users.</p>
+  </div>
+
+  <div class="journey-container">
+    <div class="journey-step">
+      <div class="journey-timeline">
+        <div class="journey-num discord">1</div>
+        <div class="journey-line"></div>
+      </div>
+      <div class="journey-content">
+        <h4>Provider Clicks Invite Link</h4>
+        <p>BotifyTrades provides an OAuth2 invite URL. The provider (who is a server admin) clicks it and selects which server to add the bot to. The bot requests only <strong>View Channels</strong> + <strong>Read Message History</strong> — no message sending, no admin powers.</p>
+      </div>
+    </div>
+
+    <div class="journey-step">
+      <div class="journey-timeline">
+        <div class="journey-num cloud">2</div>
+        <div class="journey-line"></div>
+      </div>
+      <div class="journey-content">
+        <h4>Provider Selects Signal Channels</h4>
+        <p>In the BotifyTrades provider portal, the provider selects which channels contain trade signals (e.g., #signals, #options-0dte, #swing-plays). Non-signal channels (chat, memes, general) are excluded. The bot only reads from selected channels.</p>
+      </div>
+    </div>
+
+    <div class="journey-step">
+      <div class="journey-timeline">
+        <div class="journey-num local">3</div>
+        <div class="journey-line"></div>
+      </div>
+      <div class="journey-content">
+        <h4>Provider Appears in User Catalog</h4>
+        <p>The provider and their channels appear in every BotifyTrades user's <strong>Signal Sources</strong> tab. Users can subscribe to individual channels. The provider gains distribution to all BotifyTrades users — a growth channel for their signal service.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout success">
+    <span class="callout-icon">🎯</span>
+    <div><strong>The Provider Incentive:</strong> Signal providers <em>want</em> their signals to be auto-executed — it increases subscriber retention and proves signal quality. Offering a "Connect to BotifyTrades" button on their website gives them a competitive edge. This is a mutually beneficial partnership, not a one-sided ask.</div>
+  </div>
+
+  <!-- FAQ -->
+  <div class="section">
+    <div class="section-label">❓ FAQ</div>
+    <h2>Common Questions</h2>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier-card">
+      <h3 style="font-size:15px;">"What if the provider doesn't add the bot?"</h3>
+      <p class="tier-desc">Users can still use Tier 1 (Webhook API). Many signal providers already support TradingView alerts, Zapier, or direct webhook output. Users can also set up their own bridge using tools like <code>n8n</code> or <code>IFTTT</code> to relay messages from any source to the BotifyTrades webhook.</p>
+    </div>
+    <div class="tier-card">
+      <h3 style="font-size:15px;">"What about the MESSAGE_CONTENT intent?"</h3>
+      <p class="tier-desc">Discord requires the <strong>MESSAGE_CONTENT privileged intent</strong> for bots in 100+ servers. This requires verification (bot description, privacy policy, intended use). BotifyTrades qualifies as a legitimate use case — trade signal forwarding with user consent. Apply early in Phase 2.</p>
+    </div>
+    <div class="tier-card">
+      <h3 style="font-size:15px;">"What if the cloud relay goes down?"</h3>
+      <p class="tier-desc">Existing positions and risk management continue running locally. The desktop app has full autonomy — SL/PT/OCO brackets are already placed at the broker. Only <em>new</em> signal ingestion pauses. The WebSocket client auto-reconnects with exponential backoff.</p>
+    </div>
+    <div class="tier-card">
+      <h3 style="font-size:15px;">"Does the user need to be in the Discord server?"</h3>
+      <p class="tier-desc"><strong>No.</strong> That's the breakthrough. The <em>bot</em> is in the server — the user doesn't need to be. Users who don't even have Discord can still receive signals from Discord providers via the relay. This dramatically expands the addressable market.</p>
+    </div>
+    <div class="tier-card">
+      <h3 style="font-size:15px;">"Can I still use the selfbot?"</h3>
+      <p class="tier-desc">The selfbot mode will be maintained as a legacy option for users who understand the risks. It feeds into the same signal parsing pipeline. Over time, as providers onboard the official bot, selfbot usage will naturally decrease.</p>
+    </div>
+    <div class="tier-card">
+      <h3 style="font-size:15px;">"What's the cost of the cloud relay?"</h3>
+      <p class="tier-desc">A single $20/month VPS handles thousands of WebSocket connections and the Discord bot. Redis for pub/sub adds ~$5/month. Total infrastructure cost: <strong>~$25/month</strong> — trivially covered by even a few user licenses.</p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>BotifyTrades Signal Ingestion Architecture v2.0 — April 2026</p>
+    <p style="margin-top:8px; color:var(--text-muted);">From selfbot to platform. Built for traders who demand reliability.</p>
+  </div>
+
+</div>
+
+<script>
+  // Smooth scroll for nav links
+  document.querySelectorAll('.nav-links a').forEach(link => {
+    link.addEventListener('click', (e) => {
+      const href = link.getAttribute('href');
+      if (href.startsWith('#')) {
+        e.preventDefault();
+        document.querySelector(href)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.querySelectorAll('.nav-links a').forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
+  });
+
+  // Active nav on scroll
+  const sections = document.querySelectorAll('.section[id]');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(section => {
+      const top = section.offsetTop - 100;
+      if (window.pageYOffset >= top) current = section.getAttribute('id');
+    });
+    document.querySelectorAll('.nav-links a').forEach(link => {
+      link.classList.remove('active');
+      if (link.getAttribute('href') === '#' + current) link.classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>

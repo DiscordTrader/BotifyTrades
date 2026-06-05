@@ -1,0 +1,93 @@
+modules = ["web", "nodejs-20", "python-3.11", "postgresql-16"]
+[agent]
+expertMode = true
+integrations = ["python_openai_ai_integrations:1.0.0", "github:1.0.0", "google-mail:1.0.0"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "BotifyTrades"
+
+[[workflows.workflow]]
+name = "BotifyTrades"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PYTHONUNBUFFERED=1 python -u start.py"
+
+[nix]
+channel = "stable-25_05"
+packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt", "libyaml", "openssl", "pkg-config", "rustc", "sqlite", "zip"]
+
+[[ports]]
+localPort = 5000
+
+[[ports]]
+localPort = 5001
+externalPort = 80
+
+[[ports]]
+localPort = 5904
+externalPort = 3002
+
+[userenv]
+
+[userenv.shared]
+RSA_PRIVATE_KEY = """
+-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQD3FrA9hdIEEBgV
+sDUUcZrKHfD2R2u6XKZwLx4ZrJWUs1o5sjTLHxNRp+3FOmMeLmD4GD9EucfD6013
+GKS0m/Yph2Ik7X0I3HUHvLDrMY9Tru/ERALrEg1WhSNoSYLZPt49xOlcTBfSKgNg
++foww6EOpmUHPL6xRT/eqvsoFcUyUIys2wA7meGPhQiFhq/AbHm2XI7g121btQiN
+kkPB4V36jof78Mmj2SE/gzLJMkxgR8kGCl6tJ3guQTg8g6zq+noQa1PtrfwBxgnI
+t1dV5MU+1OrXIAflcc8qQMGjbHNoZYLXMl0c130WDYURPjCegOMfQfsTy9LBxpLX
+ID1bZvedAgMBAAECggEASa10RAQhSaDa7ayrRztQ4q/m6CkH0HxMDOuf2BwERmDs
+qIOhBmhvxEuEtOjiIV/G/nOMehvDm4IQiVDJ3CkdT+jUtRozzG6gXvw+7QLMMDHb
+wPRewmWRoJj2o+Q3pjv+3QBYbXMrLznj5AjmN6A96DZprazJV+bEUss9NQi40nVo
+XptdtzOVuIzC49z8RYkPCJV2zymYPZpumC7Z4G050qJy3SitsYh/9YZ88HUAmCo0
+q4JRqsdXFlEy7mtuuFdsVgGxnR02dZyf1lWwVhQqqvnORpQ5mqZlg1GlfRFJ5y5h
+7R7+cIQxJlAqx5Te9mGKqwxV/N4xWlvrOmTfCvDKaQKBgQD9LV55JswBSWKnYpck
+GXyXjXJkt6g7MVfV/GkI5DGMIWovLSH27DTFGbJc9I1qxcrcLmgZw6bOKZ79v4sI
+vjTcbWg+FoTWAzUvtYZEhNLDjjQ2jaIHOA1C2502pXpBIL09rfA+ISH91QO0SSbR
+csW+Jnu2oUKdHxk+pktzGcmPdwKBgQD51/DnW9dtToMQkDesG2ecIcgjjN63qjYN
+WuHIJU2XvQ1S3Zc3MQYlGepE9WUSDuJO4unA5vllOLB3A97EWfcL12Kq9c3Lb7xM
+c5Zus/tVdme6pgzXsGffkw7Y9CnOZkFQ4QoBpUsNCq6tflfKVqqLzIkny4jx0ps6
+51bGidL+iwKBgGVPb1uJk97777dNc2+lpz66AkmdWHt/Tke5voopTk5l3KjOJaY6
+dQ9eLgqWbbSJO5kKFOwiZ7Bd5Vpi+I7iFiMSwMD/n95H4FOcDwOCJxjL4cbmvCyp
+WF0lpm6EnzxKjo+M9/LUrVZ2lAnjr93mUIy7t4uoUhCvrhls0ApaClcXAoGBAOPX
+z/PNR5qBPPk/6+ViYIx8Kj5xWzJ3YS+wr7KMgkRcvefR+PL2HDp9da1JdNCRDkUO
+nkmy2cE7f4Ip31+FA8yisXJjEzfxP/EggBGYxR3dCx+mCpQwZan4PFQR5oY5rlsJ
+vsxdZyIPmdjSHVGC06kF8BaAgPS3MaT4D6SjT+2dAoGAeSw9lPntzl+6MLjRi5Te
+UF2aeCL9GKmZJdd4duQWC7eWuk1MnttncDAN1eGMl0J+h/gUS8IdUoUIaHwpn8oN
+ralhhpohC1hntOmfp9M0MZJ2RyJSSIp3fYY8w2Cs/OgfPuBXTc2wRWFmZkmsoyn/
+Y9gni8Qrg3UdNjwzTFUkmtA=
+-----END PRIVATE KEY-----"""
+DATABASE_PATH = "bot_data.db"
+DISCORD_TOKEN = "NDg5MjUxODk3ODIwMDUzNTA1.GsV18i.sA_S50Yw64ea_2AAKK03x1BHo9BYgaeFnztcRk"
+BUILD_TYPE = "ADMIN"
+LICENSE_KEY = "BTF-RZOG-QYJ8-4XPJ"
+GUI_PORT = "5001"
+
+[userenv.production]
+BUILD_TARGET = "admin"
+LICENSE_SERVER_MODE = "true"
+ADMIN_MODE = "true"
+
+[userenv.development]
+LICENSE_VALID = "true"
+
+[deployment]
+deploymentTarget = "vm"
+run = ["python", "src/selfbot_webull.py"]
+build = ["pip", "install", "-r", "requirements.txt"]

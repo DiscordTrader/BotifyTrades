@@ -1,0 +1,201 @@
+================================================================================
+BUILD INSTRUCTIONS - Run on Windows Machine
+================================================================================
+
+⚠️ IMPORTANT: Windows .exe builds MUST be done on Windows!
+   Replit is Linux-based, so you need to build locally on Windows.
+
+================================================================================
+STEP 1: DOWNLOAD FILES FROM REPLIT
+================================================================================
+
+Option A: Download as ZIP
+-------------------------
+1. Click "Tools" in Replit sidebar
+2. Click "Download as ZIP"
+3. Save: DiscordWebullBot.zip
+4. Extract to: C:\DiscordWebullBot\
+
+
+Option B: Use Git Clone
+------------------------
+1. Open Command Prompt on Windows
+2. Run: git clone <your-replit-git-url>
+
+
+================================================================================
+STEP 2: INSTALL PYTHON (If Not Installed)
+================================================================================
+
+1. Download Python 3.11+ from: https://www.python.org/downloads/
+2. During installation:
+   ✓ Check "Add Python to PATH"
+   ✓ Check "Install pip"
+3. Verify installation:
+   
+   python --version
+   
+   Should show: Python 3.11.x or higher
+
+
+================================================================================
+STEP 3: INSTALL DEPENDENCIES
+================================================================================
+
+1. Open Command Prompt
+2. Navigate to bot folder:
+   
+   cd C:\DiscordWebullBot
+   
+3. Install all packages:
+   
+   pip install -r requirements.txt
+   pip install pyinstaller
+   
+4. Wait for installation to complete (~2-3 minutes)
+
+
+================================================================================
+STEP 4: BUILD THE EXECUTABLE
+================================================================================
+
+Simply run:
+
+   build_simple.bat
+
+That's it! The script will:
+- ✓ Clean previous builds
+- ✓ Bundle ALL modules (Discord, Webull, OpenAI, etc.)
+- ✓ Create standalone .exe (~50-80MB)
+- ✓ Copy helper tools and documentation
+- ✓ Package everything in dist\ folder
+
+Build time: ~3-5 minutes
+
+
+================================================================================
+STEP 5: TEST THE EXECUTABLE
+================================================================================
+
+1. Navigate to dist folder:
+   
+   cd dist
+   
+2. Run the bot:
+   
+   DiscordTradingBot.exe
+   
+3. You should see:
+   
+   ============================================================
+   Discord Trading Bot - License Validation
+   ============================================================
+   
+   No license found. Starting setup wizard...
+
+
+✅ If you see this, the build works!
+❌ If you see "Module not found" errors, rebuild with build_simple.bat
+
+
+================================================================================
+STEP 6: DISTRIBUTE TO CUSTOMERS
+================================================================================
+
+The dist\ folder contains everything:
+
+   dist\
+   ├── DiscordTradingBot.exe          ← Main application
+   ├── config.ini                     ← Trading settings
+   ├── README.txt                     ← Quick start guide
+   ├── CUSTOMER_SETUP_GUIDE.txt       ← Detailed instructions
+   ├── GET_DISCORD_TOKEN.html         ← 1-click Discord token
+   ├── GET_WEBULL_TOKENS.html         ← Webull token guide
+   └── GET_MACHINE_ID.bat             ← Machine ID tool
+
+1. Right-click dist\ folder
+2. Send to → Compressed (zipped) folder
+3. Rename to: DiscordTradingBot_v1.0.zip
+4. Upload to Google Drive / Dropbox / your website
+5. Send download link to customers
+
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Problem: "PyInstaller not found"
+Solution: pip install pyinstaller
+
+
+Problem: "Module 'discord' not found" during build
+Solution: pip install discord.py-self
+
+
+Problem: Build fails with errors
+Solution: 
+   1. Delete build\ and dist\ folders
+   2. Run: pip install -r requirements.txt --upgrade
+   3. Run: build_simple.bat again
+
+
+Problem: .exe won't run (Windows Defender blocks it)
+Solution: 
+   1. Click "More info"
+   2. Click "Run anyway"
+   3. Add to Windows Defender exclusions
+
+
+Problem: Customer PC shows "MSVCP140.dll missing"
+Solution: Customer needs to install:
+   Microsoft Visual C++ Redistributable
+   Download: https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+
+================================================================================
+BEFORE FIRST DISTRIBUTION - CRITICAL!
+================================================================================
+
+⚠️ CHANGE THE SECRET_KEY! ⚠️
+
+Edit these two files and change SECRET_KEY to a random string:
+
+1. src\license_manager_secure.py (line ~15)
+2. generate_license_secure.py (line ~15)
+
+Example:
+   SECRET_KEY = b"my-super-secret-key-change-this-abc123xyz789"
+
+Use a random 32+ character string!
+
+
+================================================================================
+QUICK REFERENCE
+================================================================================
+
+Build command:
+   build_simple.bat
+
+Test command:
+   cd dist && DiscordTradingBot.exe
+
+Generate license:
+   python generate_license_secure.py --customer NAME --machine ID --days 30
+
+Get Machine ID:
+   cd dist && GET_MACHINE_ID.bat
+
+
+================================================================================
+NEED HELP?
+================================================================================
+
+Check BUILD_AND_DISTRIBUTE.md for complete documentation.
+
+Common issues:
+- Make sure you're on Windows 10/11 64-bit
+- Use Python 3.11 or higher
+- Install all requirements first
+- Run build_simple.bat from project root folder
+
+================================================================================

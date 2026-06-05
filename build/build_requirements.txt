@@ -1,0 +1,13 @@
+# ============================================================
+# Ψ∿ QuantumPulse - Build-Specific Requirements
+# For creating Windows EXE and Linux executables
+# Build Date: 2025-11-21
+# ============================================================
+
+# Build Tools
+pyinstaller>=6.0.0
+pyinstaller-hooks-contrib>=2024.0
+
+# Build Support
+wheel>=0.41.0
+setuptools>=68.0.0

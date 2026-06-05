@@ -1,0 +1,8 @@
+{
+  "created_at": "2025-12-10T04:29:25.773105",
+  "db_path": "bot_data.db",
+  "backup_path": "upgrade/backups/backup_pre-restore_20251210_042925.db",
+  "tag": "pre-restore",
+  "version": "2.1.26",
+  "size_bytes": 667648
+}

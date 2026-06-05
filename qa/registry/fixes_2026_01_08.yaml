@@ -1,0 +1,148 @@
+# BotifyTrades Fix Registry - 2026-01-08
+# Critical bug fixes that must never regress
+#
+# This registry tracks specific bug fixes and their validation requirements.
+# Run qa/validate_fixes.py to verify all fixes are still intact.
+
+schema_version: "1.0"
+date: "2026-01-08"
+
+fixes:
+  # ============================================
+  # FIX 1: Webull Timestamp Format Conversion
+  # ============================================
+  webull_timestamp_normalization:
+    id: FIX-2026-0108-001
+    severity: critical
+    description: "Webull returns timestamps in MM/DD/YYYY HH:MM:SS EST format which breaks SQLite datetime comparisons"
+    root_cause: "SQLite datetime() function expects ISO format (YYYY-MM-DDTHH:MM:SS)"
+    
+    symptoms:
+      - "Filled Orders tab shows 0 orders when filtering by Webull"
+      - "Date filtering returns empty results for Webull orders"
+      - "Order history not displaying despite data in database"
+    
+    fix_location:
+      file: "src/services/broker_sync_service.py"
+      method: "_normalize_timestamp"
+      line_range: [81, 107]
+    
+    validation:
+      unit_tests:
+        - "qa/tests/unit/test_broker_sync.py::TestTimestampNormalization"
+      assertions:
+        - "All Webull timestamps converted to ISO format before DB insert"
+        - "Existing non-ISO timestamps in DB = 0"
+        - "_normalize_timestamp handles EST, EDT, and edge cases"
+    
+    regression_indicators:
+      - "filled_orders table contains timestamps with '/' character"
+      - "get_filled_orders returns 0 when filtering by Webull broker"
+
+  # ============================================
+  # FIX 2: Date Filtering Column
+  # ============================================
+  filled_orders_date_column:
+    id: FIX-2026-0108-002
+    severity: high
+    description: "get_filled_orders used filled_at for date comparison, but Webull filled_at has non-ISO format"
+    root_cause: "Query used filled_at column which may have broker-specific format"
+    
+    fix_location:
+      file: "gui_app/database.py"
+      function: "get_filled_orders"
+      change: "Use created_at (always ISO) instead of filled_at for date filtering"
+    
+    validation:
+      code_inspection:
+        - "get_filled_orders uses created_at for date comparison"
+        - "ORDER BY uses id DESC for consistent sorting"
+      integration_tests:
+        - "qa/tests/unit/test_broker_sync.py::TestFilledOrdersDateFilter"
+
+  # ============================================
+  # FIX 3: Tier Fill Confirmation
+  # ============================================
+  tier_fill_confirmation:
+    id: FIX-2026-0108-003
+    severity: critical
+    description: "Tiers were marked as hit on order acceptance, not fill confirmation"
+    root_cause: "System marked tier complete when broker accepted order, before fill"
+    
+    symptoms:
+      - "PT1/PT2/PT3/PT4 marked as hit but orders not filled"
+      - "Retry attempts fail because tier already marked"
+      - "P&L tracking incorrect due to unfilled tiers"
+    
+    fix_components:
+      pending_order_tracking:
+        file: "src/risk/position_cache.py"
+        methods: ["add_pending_order", "update_pending_order", "get_pending_orders"]
+      reconciliation:
+        file: "src/services/broker_sync_service.py"
+        method: "reconcile_risk_orders"
+      tier_manager:
+        file: "src/risk/tiered_targets.py"
+        change: "Mark tier only after reconciliation confirms fill"
+    
+    validation:
+      integration_tests:
+        - "qa/tests/integration/test_tier_reconciliation.py::TestTierReconciliationWorkflow"
+      state_machine:
+        order_placed: "pending_orders[order_id] created"
+        fill_confirmed: "tier marked, pending_order removed"
+        order_cancelled: "pending_order removed, tier NOT marked"
+
+  # ============================================
+  # FIX 4: Reconciliation Frequency
+  # ============================================
+  reconciliation_frequency:
+    id: FIX-2026-0108-004
+    severity: high
+    description: "Reconciliation was only running every 5th sync cycle (150s)"
+    root_cause: "sync_count % 5 check throttled reconciliation"
+    
+    fix_location:
+      file: "src/services/broker_sync_service.py"
+      method: "_perform_sync"
+      change: "Call reconcile_risk_orders every cycle, not every 5th"
+    
+    validation:
+      code_inspection:
+        - "No 'sync_count % 5' before reconcile_risk_orders"
+        - "reconcile_risk_orders called unconditionally in _perform_sync"
+      timing:
+        expected_interval: "30 seconds"
+        previous_interval: "150 seconds"
+
+  # ============================================
+  # FIX 5: Position Cache Auto-Creation
+  # ============================================
+  position_cache_auto_create:
+    id: FIX-2026-0108-005
+    severity: medium
+    description: "Adding pending order failed if cache entry didn't exist"
+    root_cause: "add_pending_order assumed cache entry already existed"
+    
+    fix_location:
+      file: "src/risk/position_cache.py"
+      method: "add_pending_order"
+      change: "Auto-create cache entry if missing when adding pending order"
+    
+    validation:
+      unit_tests:
+        - "qa/tests/unit/test_broker_sync.py::TestPositionCacheAutoCreate"
+      assertion:
+        - "add_pending_order creates entry if position_key not in cache"
+
+validation_checklist:
+  pre_release:
+    - "All unit tests pass: qa/tests/unit/test_broker_sync.py"
+    - "All integration tests pass: qa/tests/integration/test_tier_reconciliation.py"
+    - "Database has 0 non-ISO timestamps"
+    - "Reconciliation runs every 30s (not 150s)"
+  
+  post_deployment:
+    - "Filled Orders tab shows Webull orders"
+    - "PT1/PT2/PT3/PT4 only mark after confirmed fills"
+    - "No 'entry access' errors in logs"

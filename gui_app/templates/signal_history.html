@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+
+{% block title %}Signal History - BotifyTrades{% endblock %}
+
+{% block content %}
+<div class="market-tabs" style="margin-bottom: 24px; display: flex; gap: 8px;">
+    <a href="/signals" class="market-tab {% if not market %}active{% endif %}" style="padding: 12px 32px; background: {% if not market %}linear-gradient(135deg, #00d4ff 0%, #0080ff 100%){% else %}#3A3A3C{% endif %}; color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; text-decoration: none;">
+        All Markets
+    </a>
+    <a href="/signals/us" class="market-tab {% if market == 'US' %}active{% endif %}" style="padding: 12px 32px; background: {% if market == 'US' %}linear-gradient(135deg, #00d4ff 0%, #0080ff 100%){% else %}#3A3A3C{% endif %}; color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; text-decoration: none;">
+        <span style="font-size: 20px;">🇺🇸</span> US Market <span class="currency-badge" style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 6px; font-size: 12px;">USD</span>
+    </a>
+    <a href="/signals/canada" class="market-tab {% if market == 'CA' %}active{% endif %}" style="padding: 12px 32px; background: {% if market == 'CA' %}linear-gradient(135deg, #00d4ff 0%, #0080ff 100%){% else %}#3A3A3C{% endif %}; color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; text-decoration: none;">
+        <span style="font-size: 20px;">🇨🇦</span> Canada Market <span class="currency-badge" style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 6px; font-size: 12px;">CAD</span>
+    </a>
+</div>
+
+<div class="filters-bar" style="margin-bottom: 24px; display: flex; gap: 12px; align-items: center; background: #2C2C2E; padding: 16px; border-radius: 12px; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <label style="color: #fff; font-weight: 500;">Symbol:</label>
+        <input type="text" id="symbolFilter" placeholder="AAPL, SPY..." style="padding: 8px 12px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; width: 120px;">
+    </div>
+    
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <label style="color: #fff; font-weight: 500;">Status:</label>
+        <select id="statusFilter" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px;">
+            <option value="">All Status</option>
+            <option value="DETECTED">Detected</option>
+            <option value="VALIDATED">Validated</option>
+            <option value="SUBMITTED">Submitted</option>
+            <option value="EXECUTED">Executed</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="FAILED">Failed</option>
+        </select>
+    </div>
+    
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <label style="color: #fff; font-weight: 500;">Broker:</label>
+        <select id="brokerFilter" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px;">
+            <option value="">All Brokers</option>
+            <option value="webull">Webull</option>
+            <option value="alpaca">Alpaca</option>
+            <option value="tastytrade">Tastytrade</option>
+            <option value="schwab">Schwab</option>
+            <option value="ibkr">IBKR</option>
+            <option value="robinhood">Robinhood</option>
+            <option value="upstox">Upstox</option>
+            <option value="zerodha">Zerodha</option>
+            <option value="dhanq">DhanQ</option>
+            <option value="questrade">Questrade</option>
+        </select>
+    </div>
+    
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <label style="color: #fff; font-weight: 500;">Platform:</label>
+        <select id="platformFilter" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px;">
+            <option value="">All Platforms</option>
+            <option value="discord">Discord</option>
+            <option value="telegram">Telegram</option>
+        </select>
+    </div>
+    
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <label style="color: #fff; font-weight: 500;">Date:</label>
+        <input type="date" id="dateFrom" style="padding: 8px 12px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px;">
+        <span style="color: #8E8E93;">to</span>
+        <input type="date" id="dateTo" style="padding: 8px 12px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px;">
+    </div>
+    
+    <button onclick="loadSignals()" style="padding: 8px 20px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-left: auto;">
+        Apply Filters
+    </button>
+    
+    <button onclick="exportSignals()" style="padding: 8px 20px; background: linear-gradient(135deg, #00ff88 0%, #00aa55 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+        Export CSV
+    </button>
+</div>
+
+<div id="stats-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+    <div class="stat-card" style="background: #2C2C2E; border-radius: 12px; padding: 20px; text-align: center;">
+        <div style="color: #8E8E93; font-size: 13px; margin-bottom: 4px;">Total Signals</div>
+        <div id="statTotal" style="color: #fff; font-size: 28px; font-weight: 700;">0</div>
+    </div>
+    <div class="stat-card" style="background: #2C2C2E; border-radius: 12px; padding: 20px; text-align: center;">
+        <div style="color: #8E8E93; font-size: 13px; margin-bottom: 4px;">Executed</div>
+        <div id="statExecuted" style="color: #00ff88; font-size: 28px; font-weight: 700;">0</div>
+    </div>
+    <div class="stat-card" style="background: #2C2C2E; border-radius: 12px; padding: 20px; text-align: center;">
+        <div style="color: #8E8E93; font-size: 13px; margin-bottom: 4px;">Rejected</div>
+        <div id="statRejected" style="color: #ff4444; font-size: 28px; font-weight: 700;">0</div>
+    </div>
+    <div class="stat-card" style="background: #2C2C2E; border-radius: 12px; padding: 20px; text-align: center;">
+        <div style="color: #8E8E93; font-size: 13px; margin-bottom: 4px;">Total P&L</div>
+        <div id="statPnl" style="color: #00d4ff; font-size: 28px; font-weight: 700;">$0.00</div>
+    </div>
+    <div class="stat-card" style="background: #2C2C2E; border-radius: 12px; padding: 20px; text-align: center;">
+        <div style="color: #8E8E93; font-size: 13px; margin-bottom: 4px;">Avg P&L %</div>
+        <div id="statAvgPnl" style="color: #00d4ff; font-size: 28px; font-weight: 700;">0.00%</div>
+    </div>
+</div>
+
+<div style="background: #2C2C2E; border-radius: 12px; overflow: hidden;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <thead>
+            <tr style="background: #3A3A3C;">
+                <th style="padding: 12px 16px; text-align: left; color: #8E8E93; font-weight: 500;">Time</th>
+                <th style="padding: 12px 16px; text-align: left; color: #8E8E93; font-weight: 500;">Symbol</th>
+                <th style="padding: 12px 16px; text-align: left; color: #8E8E93; font-weight: 500;">Direction</th>
+                <th style="padding: 12px 16px; text-align: left; color: #8E8E93; font-weight: 500;">Details</th>
+                <th style="padding: 12px 16px; text-align: left; color: #8E8E93; font-weight: 500;">Broker</th>
+                <th style="padding: 12px 16px; text-align: left; color: #8E8E93; font-weight: 500;">Status</th>
+                <th style="padding: 12px 16px; text-align: left; color: #8E8E93; font-weight: 500;">P&L</th>
+                <th style="padding: 12px 16px; text-align: left; color: #8E8E93; font-weight: 500;">Source</th>
+            </tr>
+        </thead>
+        <tbody id="signalsTable">
+            <tr>
+                <td colspan="8" style="padding: 40px; text-align: center; color: #8E8E93;">Loading signals...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<div id="pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 24px;"></div>
+
+<div id="signalModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: #2C2C2E; border-radius: 16px; padding: 24px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #fff;">Signal Details</h3>
+            <button onclick="hideSignalModal()" style="background: none; border: none; color: #888; font-size: 24px; cursor: pointer;">&times;</button>
+        </div>
+        <div id="signalModalContent"></div>
+    </div>
+</div>
+
+<script>
+const currentMarket = "{{ market or '' }}";
+let currentOffset = 0;
+const pageSize = 50;
+
+function loadSignals() {
+    const params = new URLSearchParams();
+    
+    const symbol = document.getElementById('symbolFilter').value;
+    const status = document.getElementById('statusFilter').value;
+    const broker = document.getElementById('brokerFilter').value;
+    const platform = document.getElementById('platformFilter').value;
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    
+    if (symbol) params.append('symbol', symbol);
+    if (status) params.append('status', status);
+    if (broker) params.append('broker', broker);
+    if (platform) params.append('platform', platform);
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+    if (currentMarket) params.append('market', currentMarket);
+    
+    params.append('limit', pageSize);
+    params.append('offset', currentOffset);
+    
+    fetch(`/api/signals/history?${params.toString()}`)
+        .then(r => r.json())
+        .then(data => {
+            renderSignals(data.signals);
+            renderPagination(data.total);
+        })
+        .catch(err => {
+            console.error('Error loading signals:', err);
+        });
+    
+    loadStats();
+}
+
+function loadStats() {
+    const params = new URLSearchParams();
+    if (currentMarket) params.append('market', currentMarket);
+    params.append('days', 30);
+    
+    fetch(`/api/signals/statistics?${params.toString()}`)
+        .then(r => r.json())
+        .then(stats => {
+            document.getElementById('statTotal').textContent = stats.total || 0;
+            document.getElementById('statExecuted').textContent = stats.executed || 0;
+            document.getElementById('statRejected').textContent = (stats.rejected || 0) + (stats.failed || 0);
+            document.getElementById('statPnl').textContent = formatCurrency(stats.total_pnl || 0);
+            document.getElementById('statAvgPnl').textContent = (stats.avg_pnl_percent || 0).toFixed(2) + '%';
+            
+            const pnlEl = document.getElementById('statPnl');
+            pnlEl.style.color = (stats.total_pnl || 0) >= 0 ? '#00ff88' : '#ff4444';
+        })
+        .catch(err => console.error('Error loading stats:', err));
+}
+
+function renderSignals(signals) {
+    const tbody = document.getElementById('signalsTable');
+    
+    if (!signals || signals.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="padding: 40px; text-align: center; color: #8E8E93;">No signals found matching your filters</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = signals.map(s => {
+        const statusColors = {
+            'DETECTED': '#8E8E93',
+            'VALIDATED': '#00d4ff',
+            'SUBMITTED': '#ffaa00',
+            'EXECUTED': '#00ff88',
+            'REJECTED': '#ff4444',
+            'FAILED': '#ff4444'
+        };
+        
+        const directionColor = (s.direction || '').toUpperCase().includes('BTO') || (s.direction || '').toUpperCase().includes('BUY') ? '#00ff88' : '#ff4444';
+        
+        let details = '';
+        if (s.asset_type === 'option' || s.asset_type === 'options') {
+            details = `${s.strike || ''} ${s.call_put || ''} ${s.expiry || ''}`;
+        } else {
+            details = `Qty: ${s.quantity || '-'} @ $${s.price || '-'}`;
+        }
+        
+        const pnlValue = s.pnl_realized || 0;
+        const pnlPercent = s.pnl_percent || 0;
+        const pnlColor = pnlValue >= 0 ? '#00ff88' : '#ff4444';
+        
+        return `
+            <tr style="border-bottom: 1px solid #3A3A3C; cursor: pointer;" onclick="showSignalDetail(${s.id})">
+                <td style="padding: 12px 16px; color: #fff;">${formatTime(s.received_at)}</td>
+                <td style="padding: 12px 16px; color: #00d4ff; font-weight: 600;">${s.symbol || '-'}</td>
+                <td style="padding: 12px 16px; color: ${directionColor}; font-weight: 600;">${s.direction || '-'}</td>
+                <td style="padding: 12px 16px; color: #8E8E93; font-size: 13px;">${details}</td>
+                <td style="padding: 12px 16px; color: #fff;">${(s.broker_target || '-').charAt(0).toUpperCase() + (s.broker_target || '-').slice(1)}</td>
+                <td style="padding: 12px 16px;">
+                    <span style="background: ${statusColors[s.execution_status] || '#8E8E93'}22; color: ${statusColors[s.execution_status] || '#8E8E93'}; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600;">${s.execution_status || '-'}</span>
+                </td>
+                <td style="padding: 12px 16px; color: ${pnlColor}; font-weight: 600;">
+                    ${pnlValue !== 0 ? formatCurrency(pnlValue) + ' (' + pnlPercent.toFixed(1) + '%)' : '-'}
+                </td>
+                <td style="padding: 12px 16px; color: #8E8E93;">
+                    ${s.source_platform || 'discord'} / ${s.channel_name || s.channel_id || '-'}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderPagination(total) {
+    const pages = Math.ceil(total / pageSize);
+    const currentPage = Math.floor(currentOffset / pageSize) + 1;
+    const container = document.getElementById('pagination');
+    
+    if (pages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    
+    if (currentPage > 1) {
+        html += `<button onclick="goToPage(${currentPage - 1})" style="padding: 8px 16px; background: #3A3A3C; color: #fff; border: none; border-radius: 8px; cursor: pointer;">Prev</button>`;
+    }
+    
+    html += `<span style="padding: 8px 16px; color: #8E8E93;">Page ${currentPage} of ${pages} (${total} total)</span>`;
+    
+    if (currentPage < pages) {
+        html += `<button onclick="goToPage(${currentPage + 1})" style="padding: 8px 16px; background: #3A3A3C; color: #fff; border: none; border-radius: 8px; cursor: pointer;">Next</button>`;
+    }
+    
+    container.innerHTML = html;
+}
+
+function goToPage(page) {
+    currentOffset = (page - 1) * pageSize;
+    loadSignals();
+}
+
+function showSignalDetail(signalId) {
+    fetch(`/api/signals/${signalId}`)
+        .then(r => r.json())
+        .then(signal => {
+            const content = document.getElementById('signalModalContent');
+            
+            let transitionsHtml = '';
+            if (signal.transitions && signal.transitions.length > 0) {
+                transitionsHtml = `
+                    <div style="margin-top: 20px;">
+                        <h4 style="color: #8E8E93; margin-bottom: 12px;">Lifecycle Timeline</h4>
+                        <div style="border-left: 2px solid #3A3A3C; padding-left: 16px;">
+                            ${signal.transitions.map(t => `
+                                <div style="margin-bottom: 16px; position: relative;">
+                                    <div style="position: absolute; left: -22px; width: 12px; height: 12px; background: #00d4ff; border-radius: 50%;"></div>
+                                    <div style="color: #fff; font-weight: 600;">${t.from_status || 'Start'} -> ${t.to_status}</div>
+                                    <div style="color: #8E8E93; font-size: 12px;">${formatTime(t.created_at)}</div>
+                                    ${t.details ? `<div style="color: #8E8E93; font-size: 13px; margin-top: 4px;">${t.details}</div>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                    <div style="background: #1C1C1E; padding: 16px; border-radius: 8px;">
+                        <div style="color: #8E8E93; font-size: 12px;">Symbol</div>
+                        <div style="color: #00d4ff; font-size: 18px; font-weight: 700;">${signal.symbol || '-'}</div>
+                    </div>
+                    <div style="background: #1C1C1E; padding: 16px; border-radius: 8px;">
+                        <div style="color: #8E8E93; font-size: 12px;">Direction</div>
+                        <div style="color: #fff; font-size: 18px; font-weight: 700;">${signal.direction || '-'}</div>
+                    </div>
+                    <div style="background: #1C1C1E; padding: 16px; border-radius: 8px;">
+                        <div style="color: #8E8E93; font-size: 12px;">Status</div>
+                        <div style="color: #fff; font-size: 18px; font-weight: 700;">${signal.execution_status || '-'}</div>
+                    </div>
+                    <div style="background: #1C1C1E; padding: 16px; border-radius: 8px;">
+                        <div style="color: #8E8E93; font-size: 12px;">Broker</div>
+                        <div style="color: #fff; font-size: 18px; font-weight: 700;">${signal.broker_target || '-'}</div>
+                    </div>
+                    <div style="background: #1C1C1E; padding: 16px; border-radius: 8px;">
+                        <div style="color: #8E8E93; font-size: 12px;">Order ID</div>
+                        <div style="color: #fff; font-size: 14px;">${signal.broker_order_id || '-'}</div>
+                    </div>
+                    <div style="background: #1C1C1E; padding: 16px; border-radius: 8px;">
+                        <div style="color: #8E8E93; font-size: 12px;">P&L</div>
+                        <div style="color: ${(signal.pnl_realized || 0) >= 0 ? '#00ff88' : '#ff4444'}; font-size: 18px; font-weight: 700;">
+                            ${formatCurrency(signal.pnl_realized || 0)} (${(signal.pnl_percent || 0).toFixed(2)}%)
+                        </div>
+                    </div>
+                </div>
+                
+                ${signal.broker_response ? `
+                    <div style="margin-top: 16px; background: #1C1C1E; padding: 16px; border-radius: 8px;">
+                        <div style="color: #8E8E93; font-size: 12px; margin-bottom: 4px;">Broker Response</div>
+                        <div style="color: #fff; font-size: 13px; font-family: monospace;">${signal.broker_response}</div>
+                    </div>
+                ` : ''}
+                
+                ${signal.last_error ? `
+                    <div style="margin-top: 16px; background: #ff444422; padding: 16px; border-radius: 8px; border: 1px solid #ff4444;">
+                        <div style="color: #ff4444; font-size: 12px; margin-bottom: 4px;">Error</div>
+                        <div style="color: #fff; font-size: 13px;">${signal.last_error}</div>
+                    </div>
+                ` : ''}
+                
+                ${transitionsHtml}
+                
+                ${signal.raw_message ? `
+                    <div style="margin-top: 20px; background: #1C1C1E; padding: 16px; border-radius: 8px;">
+                        <div style="color: #8E8E93; font-size: 12px; margin-bottom: 4px;">Original Message</div>
+                        <div style="color: #fff; font-size: 13px; white-space: pre-wrap;">${signal.raw_message}</div>
+                    </div>
+                ` : ''}
+            `;
+            
+            document.getElementById('signalModal').style.display = 'flex';
+        })
+        .catch(err => console.error('Error loading signal detail:', err));
+}
+
+function hideSignalModal() {
+    document.getElementById('signalModal').style.display = 'none';
+}
+
+function exportSignals() {
+    const params = new URLSearchParams();
+    
+    const symbol = document.getElementById('symbolFilter').value;
+    const status = document.getElementById('statusFilter').value;
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    
+    if (symbol) params.append('symbol', symbol);
+    if (status) params.append('status', status);
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+    if (currentMarket) params.append('market', currentMarket);
+    
+    window.location.href = `/api/signals/export?${params.toString()}`;
+}
+
+function formatTime(timestamp) {
+    if (!timestamp) return '-';
+    const d = new Date(timestamp);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
+
+function formatCurrency(value) {
+    return '$' + (value || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+document.addEventListener('DOMContentLoaded', loadSignals);
+</script>
+{% endblock %}

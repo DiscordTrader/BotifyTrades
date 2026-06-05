@@ -1,0 +1,515 @@
+# BotifyTrades Workflow Registry
+# Version: 2.0.0
+# Last Updated: 2026-01-08
+#
+# This registry defines complete trading workflow pipelines for validation.
+# Each pipeline has stages that must be intact for the workflow to function.
+# Changes to any stage require validation to ensure pipeline integrity.
+
+schema_version: "2.0"
+
+# ============================================
+# MAIN TRADING PIPELINE
+# ============================================
+# Signal Detection → Parsing → Region → Broker → Position → Risk → Conditional → Execute
+
+workflows:
+  # ============================================
+  # COMPLETE SIGNAL-TO-EXECUTION PIPELINE
+  # ============================================
+
+  complete_trading_pipeline:
+    name: "Complete Trading Pipeline"
+    description: "Full workflow from signal detection to trade execution with all stages"
+    priority: critical
+    stages:
+      # Stage 1: Signal Detection
+      signal_detection:
+        order: 1
+        name: "Signal Detection"
+        description: "Capture trading signals from Discord/Telegram"
+        database_requirements:
+          - table: channels
+            required_fields: [discord_channel_id, platform, execute_enabled, track_enabled]
+          - table: telegram_settings
+            required_fields: [api_id, api_hash, enabled]
+          - table: discord_settings
+            required_fields: [option_pattern, stock_pattern]
+        function_requirements:
+          - module: src.selfbot_webull
+            functions: [on_message]
+        inputs:
+          - type: discord_message
+            fields: [content, channel_id, author_id, guild_id]
+          - type: telegram_message
+            fields: [text, chat_id, sender_id]
+        outputs:
+          - type: raw_signal
+            fields: [content, source, channel_id, timestamp]
+        validation_checks:
+          - discord_token_valid
+          - telegram_credentials_valid
+          - at_least_one_channel_enabled
+
+      # Stage 2: Signal Parsing
+      signal_parsing:
+        order: 2
+        name: "Signal Parsing"
+        description: "Parse raw signal into structured trade data"
+        database_requirements:
+          - table: signal_formats
+            required_fields: [name, regex_pattern, example_signal, field_mappings]
+        function_requirements:
+          - module: src.signals.parser
+            functions: [parse_signal, parse_option_signal, parse_stock_signal]
+        inputs:
+          - type: raw_signal
+            from_stage: signal_detection
+        outputs:
+          - type: parsed_signal
+            fields: [symbol, direction, asset_type, quantity, price, strike, expiry, call_put]
+        validation_checks:
+          - symbol_not_empty
+          - direction_valid
+          - signal_formats_exist
+
+      # Stage 3: Region/Market Detection
+      region_detection:
+        order: 3
+        name: "Region/Market Detection"
+        description: "Determine market region (US/India/Canada) from channel settings"
+        database_requirements:
+          - table: channels
+            required_fields: [discord_channel_id, category]
+          - table: broker_credentials
+            required_fields: [country_code]
+        inputs:
+          - type: parsed_signal
+            from_stage: signal_parsing
+        outputs:
+          - type: regional_signal
+            fields: [symbol, direction, market_region, country_code]
+        valid_regions:
+          US: "United States - NYSE, NASDAQ"
+          IN: "India - NSE, BSE, MCX"
+          CA: "Canada - TSX, CSE, NEO"
+        validation_checks:
+          - region_is_valid
+          - symbol_matches_region_format
+
+      # Stage 4: Broker Routing
+      broker_routing:
+        order: 4
+        name: "Broker Routing"
+        description: "Route order to correct broker based on region and channel settings"
+        database_requirements:
+          - table: channels
+            required_fields: [enabled_brokers, broker_override]
+          - table: broker_credentials
+            required_fields: [broker_name, country_code, is_connected, credentials_encrypted]
+        inputs:
+          - type: regional_signal
+            from_stage: region_detection
+        outputs:
+          - type: routed_order
+            fields: [symbol, direction, broker_name, market_region]
+        broker_by_region:
+          US:
+            - webull
+            - alpaca
+            - interactive_brokers
+            - tastytrade
+            - robinhood
+            - schwab
+          IN:
+            - upstox
+            - zerodha
+            - dhanq
+          CA:
+            - questrade
+        validation_checks:
+          - broker_credentials_exist
+          - broker_is_connected
+          - broker_matches_region
+
+      # Stage 5: Position Sizing
+      position_sizing:
+        order: 5
+        name: "Position Sizing"
+        description: "Calculate order quantity based on risk settings"
+        database_requirements:
+          - table: channels
+            required_fields:
+              - default_quantity
+              - position_size_pct
+              - tracking_position_size_pct
+              - paper_trade_enabled
+        inputs:
+          - type: routed_order
+            from_stage: broker_routing
+          - type: portfolio_data
+            fields: [buying_power, account_value]
+        outputs:
+          - type: sized_order
+            fields: [symbol, direction, broker_name, quantity, estimated_value]
+        sizing_modes:
+          - fixed: "Fixed quantity per trade"
+          - percent_portfolio: "Percentage of portfolio"
+          - percent_risk: "Percentage of risk per trade"
+        validation_checks:
+          - quantity_positive
+          - within_max_position_value
+          - within_buying_power
+
+      # Stage 6: Risk Management Check
+      risk_check:
+        order: 6
+        name: "Risk Management Check"
+        description: "Validate order against risk management rules before execution"
+        database_requirements:
+          - table: channels
+            required_fields:
+              - risk_management_enabled
+              - stop_loss_pct
+              - profit_target_1_pct
+              - paper_trade_enabled
+        inputs:
+          - type: sized_order
+            from_stage: position_sizing
+        outputs:
+          - type: validated_order
+            fields: [symbol, direction, broker_name, quantity, risk_approved, risk_notes]
+        risk_checks:
+          - max_daily_trades_not_exceeded
+          - max_daily_loss_not_exceeded
+          - position_size_within_limits
+          - not_duplicate_position
+        validation_checks:
+          - risk_settings_configured
+          - paper_trade_setting_exists
+
+      # Stage 7: Conditional Order Check
+      conditional_check:
+        order: 7
+        name: "Conditional Order Check"
+        description: "Check if order has price conditions (over/under triggers)"
+        database_requirements:
+          - table: conditional_orders
+            required_fields: [symbol, trigger_type, trigger_price, status, channel_id]
+        inputs:
+          - type: validated_order
+            from_stage: risk_check
+        outputs:
+          - type: order_decision
+            fields: [is_conditional, condition_type, trigger_price]
+        condition_types:
+          - over: "Execute when price goes over trigger"
+          - under: "Execute when price goes under trigger"
+          - immediate: "Execute immediately"
+        branches:
+          conditional: price_monitoring
+          immediate: order_execution
+
+      # Stage 8: Price Monitoring (for conditional orders)
+      price_monitoring:
+        order: 8
+        name: "Price Monitoring"
+        description: "Monitor prices for conditional order triggers"
+        database_requirements:
+          - table: conditional_orders
+            required_fields: [symbol, trigger_price, trigger_type, status]
+        function_requirements:
+          - module: src.services.conditional_orders.base
+            functions: [get_current_price, check_trigger]
+        price_sources:
+          priority_order:
+            1: broker_native_api
+            2: finnhub_api
+            3: yfinance
+        inputs:
+          - type: conditional_order
+            fields: [symbol, trigger_type, trigger_price]
+        outputs:
+          - type: triggered_order
+            fields: [symbol, triggered_at, trigger_price_met]
+        validation_checks:
+          - price_source_available
+          - finnhub_api_key_exists
+
+      # Stage 9: Order Execution
+      order_execution:
+        order: 9
+        name: "Order Execution"
+        description: "Submit order to broker API"
+        database_requirements:
+          - table: trades
+            required_fields: [symbol, direction, quantity, status, broker, executed_price, executed_at]
+          - table: signals
+            required_fields: [symbol, direction, channel_id, execution_status]
+        function_requirements:
+          - module: src.selfbot_webull
+            functions: [execute_order]
+        inputs:
+          - type: validated_order
+            from_stage: risk_check
+        outputs:
+          - type: execution_result
+            fields: [order_id, symbol, executed_qty, executed_price, status, broker_response]
+        validation_checks:
+          - broker_api_accessible
+          - order_format_valid
+
+      # Stage 10: Position Tracking
+      position_tracking:
+        order: 10
+        name: "Position Tracking"
+        description: "Track open position for FIFO P&L calculation"
+        database_requirements:
+          - table: signal_lots
+            required_fields: [channel_id, symbol, open_price, original_qty, remaining_qty, status, source]
+          - table: lot_closures
+            required_fields: [lot_id, close_price, closed_qty, pnl, pnl_percent]
+        inputs:
+          - type: execution_result
+            from_stage: order_execution
+        outputs:
+          - type: tracked_position
+            fields: [lot_id, symbol, open_price, quantity]
+        validation_checks:
+          - lot_created_successfully
+          - pnl_tracking_enabled
+
+      # Stage 11: Risk Monitoring (ongoing)
+      risk_monitoring:
+        order: 11
+        name: "Risk Monitoring"
+        description: "Monitor positions for profit targets, stop losses, trailing stops"
+        database_requirements:
+          - table: channels
+            required_fields:
+              - profit_target_1_pct
+              - profit_target_2_pct
+              - profit_target_3_pct
+              - profit_target_4_pct
+              - stop_loss_pct
+              - trailing_stop_pct
+              - trailing_activation_pct
+              - leave_runner_enabled
+              - leave_runner_pct
+              - conditional_order_enabled
+        function_requirements:
+          - module: src.risk.position_monitor
+            functions: [monitor_positions, check_profit_targets, check_stop_loss]
+        inputs:
+          - type: tracked_position
+            from_stage: position_tracking
+        outputs:
+          - type: risk_action
+            fields: [action_type, symbol, quantity, trigger_reason]
+        exit_strategies:
+          signal: "Follow trader exit signals only"
+          risk: "Follow automated risk management only"
+          hybrid: "Use both signal and risk management"
+        validation_checks:
+          - risk_management_enabled
+          - profit_targets_configured
+
+  # ============================================
+  # DISCORD SIGNAL WORKFLOW (LEGACY COMPATIBILITY)
+  # ============================================
+
+  discord_signal_to_execution:
+    name: "Discord Signal to Trade Execution"
+    description: "Complete flow from Discord message to broker execution"
+    priority: critical
+    inherits: complete_trading_pipeline
+    source_filter: discord
+    steps:
+      1_receive:
+        component: discord_client
+        action: on_message
+        inputs: [channel_id, message_content, author_id]
+        outputs: [raw_signal]
+      2_filter:
+        component: channel_filter
+        action: check_channel_enabled
+        inputs: [channel_id]
+        outputs: [is_valid_channel]
+      3_parse:
+        component: signal_parser
+        action: parse_signal
+        inputs: [raw_signal]
+        outputs: [parsed_signal]
+      4_validate:
+        component: signal_validator
+        action: validate_signal
+        inputs: [parsed_signal]
+        outputs: [is_valid_signal]
+      5_queue:
+        component: order_queue
+        action: add_to_queue
+        inputs: [parsed_signal, channel_id]
+        outputs: [queue_position]
+      6_execute:
+        component: order_processor
+        action: execute_order
+        inputs: [parsed_signal]
+        outputs: [order_result]
+      7_record:
+        component: trade_recorder
+        action: save_trade
+        inputs: [order_result]
+        outputs: [trade_id]
+    test_scenarios:
+      - name: valid_option_bto
+        input: "BTO AAPL 185c 1/17 @ 2.50"
+        expected: trade_executed
+      - name: valid_stock_bto
+        input: "BTO TSLA @ 250"
+        expected: trade_executed
+      - name: invalid_format
+        input: "random message"
+        expected: ignored
+
+  telegram_signal_to_execution:
+    name: "Telegram Signal to Trade Execution"
+    description: "Complete flow from Telegram message to broker execution"
+    priority: critical
+    steps:
+      1_receive:
+        component: telegram_listener
+        action: on_message
+        inputs: [chat_id, message_content]
+        outputs: [raw_signal]
+      2_bridge:
+        component: telegram_bridge
+        action: forward_to_queue
+        inputs: [raw_signal, chat_id]
+        outputs: [queued]
+      3_process:
+        component: order_processor
+        action: process_signal
+        inputs: [raw_signal]
+        outputs: [order_result]
+
+  # ============================================
+  # RISK MANAGEMENT WORKFLOWS
+  # ============================================
+
+  risk_monitoring:
+    name: "Position Risk Monitoring"
+    description: "Monitor open positions and trigger risk actions"
+    priority: critical
+    steps:
+      1_load_positions:
+        component: broker_sync
+        action: get_all_positions
+        inputs: []
+        outputs: [positions]
+      2_check_risk:
+        component: risk_manager
+        action: evaluate_positions
+        inputs: [positions]
+        outputs: [risk_triggers]
+      3_execute_trim:
+        component: risk_manager
+        action: execute_risk_action
+        inputs: [risk_triggers]
+        outputs: [trim_results]
+    test_scenarios:
+      - name: profit_target_hit
+        setup: position_at_25_pct_gain
+        expected: trim_executed
+      - name: stop_loss_hit
+        setup: position_at_10_pct_loss
+        expected: position_closed
+
+  conditional_order_monitoring:
+    name: "Conditional Order Price Monitoring"
+    description: "Monitor prices and execute when conditions met"
+    priority: high
+    steps:
+      1_load_orders:
+        component: conditional_service
+        action: get_active_orders
+        inputs: [market]
+        outputs: [orders]
+      2_fetch_prices:
+        component: price_monitor
+        action: get_prices
+        inputs: [symbols]
+        outputs: [current_prices]
+      3_check_triggers:
+        component: conditional_service
+        action: check_triggers
+        inputs: [orders, current_prices]
+        outputs: [triggered_orders]
+      4_execute:
+        component: conditional_service
+        action: execute_orders
+        inputs: [triggered_orders]
+        outputs: [execution_results]
+
+  # ============================================
+  # SETTINGS WORKFLOWS
+  # ============================================
+
+  settings_save_load:
+    name: "Settings Save and Load Cycle"
+    description: "Validate settings persistence"
+    priority: high
+    steps:
+      1_save:
+        component: settings_api
+        action: save_setting
+        inputs: [setting_key, setting_value]
+        outputs: [save_result]
+      2_reload:
+        component: settings_loader
+        action: load_settings
+        inputs: []
+        outputs: [loaded_settings]
+      3_verify:
+        component: settings_validator
+        action: verify_value
+        inputs: [setting_key, expected_value]
+        outputs: [is_match]
+    test_scenarios:
+      - name: trading_settings
+        settings: [max_position_size, trade_summary_enabled]
+      - name: channel_settings
+        settings: [risk_management_enabled, leave_runner_enabled]
+
+  channel_configuration:
+    name: "Channel Configuration Flow"
+    description: "Complete channel setup and update flow"
+    priority: high
+    steps:
+      1_create:
+        component: channel_api
+        action: create_channel
+        inputs: [discord_channel_id, name, category]
+        outputs: [channel_id]
+      2_configure_brokers:
+        component: channel_api
+        action: update_channel
+        inputs: [channel_id, enabled_brokers]
+        outputs: [update_result]
+      3_configure_risk:
+        component: channel_api
+        action: update_channel
+        inputs: [channel_id, risk_settings]
+        outputs: [update_result]
+      4_verify:
+        component: channel_api
+        action: get_channel
+        inputs: [channel_id]
+        outputs: [channel_data]
+
+# Validation requirements
+validation:
+  critical_workflows:
+    - discord_signal_to_execution
+    - risk_monitoring
+  test_coverage_minimum: 80%
+  regression_on_change: true

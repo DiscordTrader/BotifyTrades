@@ -1,0 +1,829 @@
+# BotifyTrades Database Schema Registry
+# Version: 1.0.0
+# Last Updated: 2026-01-08
+# Database: bot_data.db
+#
+# This registry defines the complete database schema for validation.
+# Any schema change must update this file.
+
+schema_version: "1.0"
+database_version: "45"
+
+tables:
+  # ============================================
+  # CORE TABLES
+  # ============================================
+
+  channels:
+    description: "Discord/Telegram channels for signal monitoring"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      discord_channel_id:
+        type: TEXT
+        nullable: false
+      name:
+        type: TEXT
+        nullable: false
+      category:
+        type: TEXT
+        nullable: false
+      execute_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      track_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      broker_override:
+        type: TEXT
+        nullable: true
+      is_active:
+        type: INTEGER
+        nullable: true
+        default: 1
+      paper_trade_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      enabled_brokers:
+        type: TEXT
+        nullable: true
+      profit_target_pct:
+        type: REAL
+        nullable: true
+      profit_target_1_pct:
+        type: REAL
+        nullable: true
+      profit_target_2_pct:
+        type: REAL
+        nullable: true
+      profit_target_3_pct:
+        type: REAL
+        nullable: true
+      profit_target_4_pct:
+        type: REAL
+        nullable: true
+      stop_loss_pct:
+        type: REAL
+        nullable: true
+      trailing_stop_pct:
+        type: REAL
+        nullable: true
+      trailing_activation_pct:
+        type: REAL
+        nullable: true
+      position_size_pct:
+        type: REAL
+        nullable: true
+      tracking_position_size_pct:
+        type: REAL
+        nullable: true
+      risk_management_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      default_quantity:
+        type: INTEGER
+        nullable: true
+      leave_runner_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      leave_runner_pct:
+        type: REAL
+        nullable: true
+        default: 25.0
+      conditional_order_enabled:
+        type: INTEGER
+        nullable: true
+        default: 1
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+      updated_at:
+        type: TIMESTAMP
+        nullable: true
+
+  trades:
+    description: "Executed trades and their status"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: TEXT
+        nullable: true
+      message_id:
+        type: TEXT
+        nullable: true
+      direction:
+        type: TEXT
+        nullable: false
+      asset_type:
+        type: TEXT
+        nullable: false
+      symbol:
+        type: TEXT
+        nullable: false
+      strike:
+        type: REAL
+        nullable: true
+      expiry:
+        type: TEXT
+        nullable: true
+      call_put:
+        type: TEXT
+        nullable: true
+      quantity:
+        type: INTEGER
+        nullable: false
+      intended_price:
+        type: REAL
+        nullable: true
+      executed_price:
+        type: REAL
+        nullable: true
+      current_price:
+        type: REAL
+        nullable: true
+      executed_at:
+        type: TIMESTAMP
+        nullable: true
+      closed_at:
+        type: TIMESTAMP
+        nullable: true
+      status:
+        type: TEXT
+        nullable: true
+        default: "'OPEN'"
+      pnl:
+        type: REAL
+        nullable: true
+        default: 0
+      pnl_percent:
+        type: REAL
+        nullable: true
+        default: 0
+      broker:
+        type: TEXT
+        nullable: true
+      order_id:
+        type: TEXT
+        nullable: true
+      stop_loss_price:
+        type: REAL
+        nullable: true
+      profit_target_price:
+        type: REAL
+        nullable: true
+      close_reason:
+        type: TEXT
+        nullable: true
+      option_id:
+        type: INTEGER
+        nullable: true
+      source:
+        type: TEXT
+        nullable: true
+      risk_trigger:
+        type: TEXT
+        nullable: true
+      origin_trade_id:
+        type: INTEGER
+        nullable: true
+      user_id:
+        type: INTEGER
+        nullable: true
+      conditional_order_id:
+        type: INTEGER
+        nullable: true
+      market:
+        type: TEXT
+        nullable: true
+        default: "'US'"
+
+  signals:
+    description: "Received trading signals"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: TEXT
+        nullable: true
+      message_id:
+        type: TEXT
+        nullable: true
+      direction:
+        type: TEXT
+        nullable: false
+      asset_type:
+        type: TEXT
+        nullable: false
+      symbol:
+        type: TEXT
+        nullable: false
+      strike:
+        type: REAL
+        nullable: true
+      expiry:
+        type: TEXT
+        nullable: true
+      call_put:
+        type: TEXT
+        nullable: true
+      quantity:
+        type: INTEGER
+        nullable: true
+      price:
+        type: REAL
+        nullable: true
+      author_name:
+        type: TEXT
+        nullable: true
+      author_id:
+        type: TEXT
+        nullable: true
+      guild_id:
+        type: TEXT
+        nullable: true
+      received_at:
+        type: TIMESTAMP
+        nullable: true
+      executed:
+        type: INTEGER
+        nullable: true
+        default: 0
+      execution_status:
+        type: TEXT
+        nullable: true
+        default: "'PENDING'"
+      execution_reason:
+        type: TEXT
+        nullable: true
+      market:
+        type: TEXT
+        nullable: true
+        default: "'US'"
+      source_platform:
+        type: TEXT
+        nullable: true
+        default: "'discord'"
+
+  trading_settings:
+    description: "Global trading configuration"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      max_position_size:
+        type: INTEGER
+        nullable: true
+      max_position_size_enabled:
+        type: INTEGER
+        nullable: true
+      global_default_quantity:
+        type: INTEGER
+        nullable: true
+      trade_summary_enabled:
+        type: INTEGER
+        nullable: true
+      updated_at:
+        type: TIMESTAMP
+        nullable: true
+
+  conditional_orders:
+    description: "Pending conditional orders"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: TEXT
+        nullable: true
+      symbol:
+        type: TEXT
+        nullable: false
+      trigger_type:
+        type: TEXT
+        nullable: false
+      trigger_price:
+        type: REAL
+        nullable: false
+      adjusted_trigger_price:
+        type: REAL
+        nullable: true
+      asset_type:
+        type: TEXT
+        nullable: true
+      broker_primary:
+        type: TEXT
+        nullable: true
+      status:
+        type: TEXT
+        nullable: true
+      market:
+        type: TEXT
+        nullable: true
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+      executed_at:
+        type: TIMESTAMP
+        nullable: true
+
+  signal_lots:
+    description: "FIFO lot tracking for P&L"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: TEXT
+        nullable: false
+      signal_id:
+        type: INTEGER
+        nullable: true
+      trade_id:
+        type: INTEGER
+        nullable: true
+      asset_type:
+        type: TEXT
+        nullable: false
+      symbol:
+        type: TEXT
+        nullable: false
+      strike:
+        type: REAL
+        nullable: true
+      expiry:
+        type: TEXT
+        nullable: true
+      call_put:
+        type: TEXT
+        nullable: true
+      original_qty:
+        type: INTEGER
+        nullable: false
+      remaining_qty:
+        type: INTEGER
+        nullable: false
+      open_price:
+        type: REAL
+        nullable: false
+      opened_at:
+        type: TIMESTAMP
+        nullable: false
+      status:
+        type: TEXT
+        nullable: true
+      source:
+        type: TEXT
+        nullable: false
+      author_name:
+        type: TEXT
+        nullable: true
+      user_id:
+        type: INTEGER
+        nullable: true
+
+  lot_closures:
+    description: "Closed lots with P&L"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      lot_id:
+        type: INTEGER
+        nullable: false
+      channel_id:
+        type: TEXT
+        nullable: false
+      signal_id:
+        type: INTEGER
+        nullable: true
+      trade_id:
+        type: INTEGER
+        nullable: true
+      closed_qty:
+        type: INTEGER
+        nullable: false
+      close_price:
+        type: REAL
+        nullable: false
+      closed_at:
+        type: TIMESTAMP
+        nullable: false
+      pnl:
+        type: REAL
+        nullable: false
+      pnl_percent:
+        type: REAL
+        nullable: false
+      holding_days:
+        type: REAL
+        nullable: true
+      author_name:
+        type: TEXT
+        nullable: true
+      user_id:
+        type: INTEGER
+        nullable: true
+
+  broker_credentials:
+    description: "Encrypted broker credentials"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      broker_name:
+        type: VARCHAR
+        nullable: false
+      country_code:
+        type: VARCHAR
+        nullable: false
+      credentials_encrypted:
+        type: TEXT
+        nullable: true
+      is_connected:
+        type: INTEGER
+        nullable: true
+      last_connected_at:
+        type: TIMESTAMP
+        nullable: true
+      connection_status:
+        type: VARCHAR
+        nullable: true
+      updated_at:
+        type: TIMESTAMP
+        nullable: true
+
+  telegram_settings:
+    description: "Telegram integration settings"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      api_id:
+        type: TEXT
+        nullable: true
+      api_hash:
+        type: TEXT
+        nullable: true
+      session_string:
+        type: TEXT
+        nullable: true
+      enabled:
+        type: INTEGER
+        nullable: true
+
+  upstox_pending_orders:
+    description: "Upstox pending orders during API blackout"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      pending_order_id:
+        type: TEXT
+        nullable: false
+      instrument_token:
+        type: TEXT
+        nullable: false
+      symbol_display:
+        type: TEXT
+        nullable: true
+      transaction_type:
+        type: TEXT
+        nullable: false
+      quantity:
+        type: INTEGER
+        nullable: false
+      price:
+        type: REAL
+        nullable: true
+      order_type:
+        type: TEXT
+        nullable: false
+      product:
+        type: TEXT
+        nullable: false
+      slice:
+        type: INTEGER
+        nullable: true
+      status:
+        type: TEXT
+        nullable: true
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+
+  signal_formats:
+    description: "Learned signal formats from AI teaching"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      name:
+        type: TEXT
+        nullable: false
+      description:
+        type: TEXT
+        nullable: true
+      example_signal:
+        type: TEXT
+        nullable: false
+      parsed_fields:
+        type: TEXT
+        nullable: false
+      regex_pattern:
+        type: TEXT
+        nullable: true
+      field_mappings:
+        type: TEXT
+        nullable: false
+      is_enabled:
+        type: INTEGER
+        nullable: true
+      usage_count:
+        type: INTEGER
+        nullable: true
+      success_rate:
+        type: REAL
+        nullable: true
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+      updated_at:
+        type: TIMESTAMP
+        nullable: true
+      created_by:
+        type: TEXT
+        nullable: true
+
+  # ============================================
+  # EXECUTION TRACKING TABLES (v46)
+  # ============================================
+
+  analyst_portfolios:
+    description: "Analyst portfolio values per channel for proportional sizing"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: TEXT
+        nullable: false
+      portfolio_value:
+        type: REAL
+        nullable: false
+      currency:
+        type: TEXT
+        nullable: true
+        default: "'USD'"
+      source:
+        type: TEXT
+        nullable: true
+        default: "'manual'"
+      notes:
+        type: TEXT
+        nullable: true
+      last_updated:
+        type: TIMESTAMP
+        nullable: true
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+
+  user_sizing_settings:
+    description: "User position sizing preferences per channel"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: TEXT
+        nullable: true
+      sizing_mode:
+        type: TEXT
+        nullable: false
+        default: "'fixed_contracts'"
+      fixed_dollar_amount:
+        type: REAL
+        nullable: true
+      fixed_contracts:
+        type: INTEGER
+        nullable: true
+      max_position_pct:
+        type: REAL
+        nullable: true
+        default: 25.0
+      min_contracts:
+        type: INTEGER
+        nullable: true
+        default: 1
+      max_contracts:
+        type: INTEGER
+        nullable: true
+      user_portfolio_value:
+        type: REAL
+        nullable: true
+      is_global:
+        type: INTEGER
+        nullable: true
+        default: 0
+      updated_at:
+        type: TIMESTAMP
+        nullable: true
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+
+  execution_lots:
+    description: "Actual broker fills with timestamps and slippage tracking"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      signal_lot_id:
+        type: INTEGER
+        nullable: true
+      channel_id:
+        type: TEXT
+        nullable: false
+      broker:
+        type: TEXT
+        nullable: false
+      broker_order_id:
+        type: TEXT
+        nullable: true
+      symbol:
+        type: TEXT
+        nullable: false
+      asset_type:
+        type: TEXT
+        nullable: false
+      strike:
+        type: REAL
+        nullable: true
+      expiry:
+        type: TEXT
+        nullable: true
+      call_put:
+        type: TEXT
+        nullable: true
+      original_qty:
+        type: INTEGER
+        nullable: false
+      remaining_qty:
+        type: INTEGER
+        nullable: false
+      fill_price:
+        type: REAL
+        nullable: false
+      signal_price:
+        type: REAL
+        nullable: true
+      slippage_pct:
+        type: REAL
+        nullable: true
+      signal_detected_at:
+        type: TIMESTAMP
+        nullable: true
+      signal_parsed_at:
+        type: TIMESTAMP
+        nullable: true
+      order_submitted_at:
+        type: TIMESTAMP
+        nullable: true
+      order_filled_at:
+        type: TIMESTAMP
+        nullable: false
+      latency_parse_ms:
+        type: INTEGER
+        nullable: true
+      latency_broker_ms:
+        type: INTEGER
+        nullable: true
+      latency_total_ms:
+        type: INTEGER
+        nullable: true
+      analyst_entry_qty:
+        type: INTEGER
+        nullable: true
+      sizing_mode:
+        type: TEXT
+        nullable: true
+      sizing_details:
+        type: TEXT
+        nullable: true
+      status:
+        type: TEXT
+        nullable: true
+        default: "'OPEN'"
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+
+  execution_closures:
+    description: "Actual exit fills with real P&L calculation"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      execution_lot_id:
+        type: INTEGER
+        nullable: false
+      signal_lot_closure_id:
+        type: INTEGER
+        nullable: true
+      channel_id:
+        type: TEXT
+        nullable: false
+      broker:
+        type: TEXT
+        nullable: false
+      broker_order_id:
+        type: TEXT
+        nullable: true
+      closed_qty:
+        type: INTEGER
+        nullable: false
+      fill_price:
+        type: REAL
+        nullable: false
+      signal_exit_price:
+        type: REAL
+        nullable: true
+      slippage_pct:
+        type: REAL
+        nullable: true
+      order_submitted_at:
+        type: TIMESTAMP
+        nullable: true
+      filled_at:
+        type: TIMESTAMP
+        nullable: false
+      latency_broker_ms:
+        type: INTEGER
+        nullable: true
+      pnl:
+        type: REAL
+        nullable: false
+      pnl_percent:
+        type: REAL
+        nullable: false
+      holding_days:
+        type: REAL
+        nullable: true
+      exit_source:
+        type: TEXT
+        nullable: false
+      closure_hash:
+        type: TEXT
+        nullable: true
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+
+# Schema validation rules
+validation_rules:
+  required_columns:
+    - id (primary key)
+  naming_conventions:
+    tables: snake_case
+    columns: snake_case
+  data_types:
+    allowed: [INTEGER, REAL, TEXT, BLOB, TIMESTAMP]

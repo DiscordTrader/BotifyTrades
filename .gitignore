@@ -1,4 +1,120 @@
-*
-!README.md
-!.gitignore
-!LICENSE
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Sensitive data - NEVER COMMIT THESE
+config.ini
+config.ini.local
+*.secret
+.env
+.env.local
+schwab_token.json
+token.json
+.encryption_key
+.schwab_salt
+schwab_tokens.enc
+config.enc
+wizard_credentials.json
+
+# Runtime data - machine-specific, changes constantly
+.position_cache.json
+sod_snapshots.json
+
+# Extracted channel data (Discord signal dumps)
+extracted_*.json
+
+# License Server - NEVER include in client builds or public repos
+license_server/
+license_server_package.tar.gz
+admin_server.py
+admin_panel/
+scripts/admin/
+
+# PyArmor license files - NEVER COMMIT THESE
+pyarmor-regcode-*.txt
+pyarmor-regfile-*.zip
+pyarmor-ci-*.zip
+pyarmor-device-regfile-*.zip
+license_backup/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Replit
+.upm/
+.pythonlibs/
+.cache/
+
+# Build System - Ignore OUTPUT directories only, keep scripts!
+build/windows/dist_standard/
+build/windows/dist_hardened/
+build/windows/obfuscated/
+build/windows/build_temp_hardened/
+build/linux/dist_standard/
+build/linux/dist_hardened/
+build/linux/obfuscated/
+build/linux/build_temp_hardened/
+
+# Database files
+bot_data.db
+*.db
+*.db-shm
+*.db-wal
+
+# Runtime SOD snapshots (daily P&L baseline persistence)
+sod_snapshots.json
+
+# Attached assets (may contain sensitive data)
+attached_assets/*.ini
+attached_assets/
+.git_backup/
+
+# Claude Code / Agent artifacts
+.claude/
+session_summary.md
+.autosave_heartbeat
+extracted_*.json
+
+# Agent Studio
+agent_studio/
+
+# Backup files
+*_backup*.html

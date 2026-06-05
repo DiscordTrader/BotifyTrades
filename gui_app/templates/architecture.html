@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotifyTrades - Automated Trading Platform</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-void: #030308;
+            --bg-primary: #070B14;
+            --bg-secondary: #0C1220;
+            --bg-elevated: #111827;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --aurora-cyan: #00F5FF;
+            --aurora-mint: #0FF0B3;
+            --aurora-blue: #3B82F6;
+            --aurora-violet: #8B5CF6;
+            --aurora-purple: #A855F7;
+            --aurora-pink: #EC4899;
+            --aurora-rose: #F43F5E;
+            --aurora-gold: #F59E0B;
+            --gradient-aurora: linear-gradient(135deg, #00F5FF 0%, #0FF0B3 25%, #8B5CF6 50%, #EC4899 75%, #F43F5E 100%);
+            --gradient-glass: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%);
+            --gradient-glow: linear-gradient(135deg, rgba(0,245,255,0.4) 0%, rgba(139,92,246,0.4) 100%);
+            --success: #10B981;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+            --text-primary: #FFFFFF;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-glow: rgba(0, 245, 255, 0.3);
+            --glow-cyan: 0 0 60px rgba(0, 245, 255, 0.4);
+            --glow-violet: 0 0 60px rgba(139, 92, 246, 0.4);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-void);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.7;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ===== ANIMATED BACKGROUND ===== */
+        .aurora-bg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -2; overflow: hidden; background: var(--bg-void);
+        }
+        .aurora-bg::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(0,245,255,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 80% 20%, rgba(139,92,246,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse 50% 60% at 60% 80%, rgba(236,72,153,0.08) 0%, transparent 50%);
+            animation: auroraShift 20s ease-in-out infinite;
+        }
+        @keyframes auroraShift {
+            0%, 100% { transform: translate(0,0) rotate(0deg) scale(1); }
+            25% { transform: translate(3%,2%) rotate(2deg) scale(1.02); }
+            50% { transform: translate(-2%,4%) rotate(-1deg) scale(0.98); }
+            75% { transform: translate(2%,-3%) rotate(1deg) scale(1.01); }
+        }
+
+        .particles { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+        .particle {
+            position: absolute; width: 4px; height: 4px; background: var(--aurora-cyan);
+            border-radius: 50%; opacity: 0; animation: particleFloat 15s infinite;
+        }
+        .particle:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 20%; animation-delay: 2s; background: var(--aurora-violet); }
+        .particle:nth-child(3) { left: 30%; animation-delay: 4s; background: var(--aurora-pink); }
+        .particle:nth-child(4) { left: 40%; animation-delay: 1s; }
+        .particle:nth-child(5) { left: 50%; animation-delay: 3s; background: var(--aurora-mint); }
+        .particle:nth-child(6) { left: 60%; animation-delay: 5s; background: var(--aurora-violet); }
+        .particle:nth-child(7) { left: 70%; animation-delay: 2.5s; }
+        .particle:nth-child(8) { left: 80%; animation-delay: 1.5s; background: var(--aurora-pink); }
+        @keyframes particleFloat {
+            0% { transform: translateY(100vh) scale(0); opacity: 0; }
+            10% { opacity: 0.8; } 90% { opacity: 0.8; }
+            100% { transform: translateY(-100vh) scale(1); opacity: 0; }
+        }
+
+        .grid-pattern {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
+            background-image:
+                linear-gradient(rgba(0,245,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,245,255,0.03) 1px, transparent 1px);
+            background-size: 80px 80px;
+            mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 20%, transparent 70%);
+        }
+
+        /* ===== NAVIGATION ===== */
+        .nav-bar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            padding: 1rem 2rem; background: rgba(3,3,8,0.6);
+            backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex; justify-content: space-between; align-items: center;
+            transition: all 0.3s ease;
+        }
+        .nav-bar.scrolled { padding: 0.75rem 2rem; background: rgba(3,3,8,0.9); }
+
+        .nav-brand { display: flex; align-items: center; gap: 18px; text-decoration: none; }
+        .logo-mark { position: relative; width: 56px; height: 56px; animation: logoBreathe 5s ease-in-out infinite; }
+        @keyframes logoBreathe {
+            0%, 100% { filter: drop-shadow(0 0 10px rgba(0,245,255,0.12)) drop-shadow(0 0 28px rgba(139,92,246,0.06)); }
+            50% { filter: drop-shadow(0 0 22px rgba(0,245,255,0.32)) drop-shadow(0 0 44px rgba(139,92,246,0.14)); }
+        }
+        .logo-mark svg { width: 56px; height: 56px; transition: transform 0.6s cubic-bezier(0.16,1,0.3,1); }
+        .nav-brand:hover .logo-mark { animation: none; filter: drop-shadow(0 0 30px rgba(0,245,255,0.55)) drop-shadow(0 0 60px rgba(139,92,246,0.3)); }
+        .nav-brand:hover .logo-mark svg { transform: scale(1.1) translateY(-2px); }
+
+        .brand-text { display: flex; flex-direction: column; gap: 4px; }
+        .brand-name {
+            font-family: 'Sora', sans-serif; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;
+            background: linear-gradient(160deg, #FFF 0%, #E2E8F0 40%, #CBD5E1 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .brand-tagline {
+            font-size: 9.5px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+            background: linear-gradient(90deg, #00F5FF 0%, #8B5CF6 50%, #EC4899 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+
+        .nav-links { display: flex; align-items: center; gap: 8px; }
+        .nav-link {
+            padding: 10px 18px; color: var(--text-secondary); text-decoration: none;
+            font-weight: 600; font-size: 14px; border-radius: 10px; transition: all 0.3s ease; position: relative;
+        }
+        .nav-link:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+        .nav-link::after {
+            content: ''; position: absolute; bottom: 6px; left: 50%; width: 0; height: 2px;
+            background: var(--gradient-aurora); transform: translateX(-50%); transition: width 0.3s ease; border-radius: 2px;
+        }
+        .nav-link:hover::after { width: 60%; }
+
+        .nav-cta {
+            position: relative; padding: 12px 28px; background: transparent; border: none; border-radius: 12px;
+            font-weight: 700; font-size: 14px; color: var(--bg-void); text-decoration: none; cursor: pointer;
+            overflow: hidden; transition: all 0.3s ease;
+        }
+        .nav-cta::before {
+            content: ''; position: absolute; inset: 0; background: var(--gradient-aurora);
+            background-size: 200% 200%; animation: textGradient 3s ease infinite; border-radius: 12px;
+        }
+        .nav-cta::after {
+            content: ''; position: absolute; inset: 2px; background: var(--bg-void);
+            border-radius: 10px; opacity: 0; transition: opacity 0.3s ease;
+        }
+        .nav-cta span { position: relative; z-index: 1; }
+        .nav-cta:hover { transform: translateY(-2px); box-shadow: var(--glow-cyan); }
+
+        /* ===== HERO ===== */
+        .hero {
+            min-height: 100vh; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; text-align: center; padding: 10rem 2rem 6rem; position: relative;
+        }
+        .hero-orb { position: absolute; border-radius: 50%; filter: blur(80px); animation: orbFloat 8s ease-in-out infinite; }
+        .hero-orb.cyan { width: 400px; height: 400px; background: rgba(0,245,255,0.15); top: 10%; left: 10%; }
+        .hero-orb.violet { width: 350px; height: 350px; background: rgba(139,92,246,0.15); top: 20%; right: 15%; animation-delay: 2s; }
+        .hero-orb.pink { width: 300px; height: 300px; background: rgba(236,72,153,0.1); bottom: 20%; left: 20%; animation-delay: 4s; }
+        @keyframes orbFloat { 0%, 100% { transform: translate(0,0) scale(1); } 50% { transform: translate(30px,-30px) scale(1.1); } }
+
+        .status-pill {
+            display: inline-flex; align-items: center; gap: 10px; padding: 8px 20px;
+            background: rgba(0,245,255,0.08); border: 1px solid rgba(0,245,255,0.2);
+            border-radius: 100px; margin-bottom: 2.5rem; animation: fadeInUp 0.8s ease 0.1s both;
+        }
+        .status-dot {
+            width: 10px; height: 10px; background: var(--aurora-mint); border-radius: 50%;
+            box-shadow: 0 0 15px var(--aurora-mint); animation: statusPulse 2s ease-in-out infinite;
+        }
+        @keyframes statusPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.3); } }
+        .status-text { font-size: 14px; font-weight: 600; color: var(--aurora-cyan); }
+
+        .hero-title {
+            font-family: 'Sora', sans-serif; font-size: clamp(3rem,10vw,5.5rem); font-weight: 900;
+            line-height: 1.05; margin-bottom: 1.5rem; letter-spacing: -2px; animation: fadeInUp 0.8s ease 0.2s both;
+        }
+        .hero-title .line1 {
+            display: block; background: var(--gradient-aurora); background-size: 300% 300%;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: gradientFlow 6s ease infinite;
+        }
+        .hero-title .line2 { display: block; color: var(--text-primary); text-shadow: 0 4px 30px rgba(0,0,0,0.3); }
+        @keyframes gradientFlow { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+
+        .hero-subtitle {
+            font-size: clamp(1.1rem,2.5vw,1.3rem); color: var(--text-secondary); max-width: 680px;
+            margin-bottom: 3rem; line-height: 1.8; animation: fadeInUp 0.8s ease 0.3s both;
+        }
+
+        .hero-cta { display: flex; gap: 1.25rem; flex-wrap: wrap; justify-content: center; animation: fadeInUp 0.8s ease 0.4s both; }
+        .btn-primary {
+            position: relative; display: inline-flex; align-items: center; gap: 10px;
+            padding: 18px 36px; background: var(--gradient-aurora); background-size: 200% 200%;
+            border: none; border-radius: 16px; font-family: 'Sora', sans-serif; font-weight: 700;
+            font-size: 16px; color: var(--bg-void); text-decoration: none; cursor: pointer;
+            overflow: hidden; transition: all 0.4s ease; animation: textGradient 4s ease infinite;
+        }
+        .btn-primary::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent); transition: left 0.5s ease;
+        }
+        .btn-primary:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 20px 50px rgba(0,245,255,0.4), var(--glow-cyan); }
+        .btn-primary:hover::before { left: 100%; }
+
+        .btn-outline {
+            display: inline-flex; align-items: center; gap: 10px; padding: 18px 36px;
+            background: transparent; border: 2px solid var(--border-glow); border-radius: 16px;
+            font-family: 'Sora', sans-serif; font-weight: 700; font-size: 16px;
+            color: var(--text-primary); text-decoration: none; cursor: pointer;
+            transition: all 0.3s ease; position: relative; overflow: hidden;
+        }
+        .btn-outline::before {
+            content: ''; position: absolute; inset: 0; background: var(--gradient-aurora);
+            opacity: 0; transition: opacity 0.3s ease; border-radius: 14px;
+        }
+        .btn-outline span { position: relative; z-index: 1; }
+        .btn-outline:hover { border-color: transparent; transform: translateY(-4px); box-shadow: var(--glow-violet); }
+        .btn-outline:hover::before { opacity: 0.15; }
+
+        /* Trust Bar */
+        .trust-bar {
+            display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap;
+            margin-top: 4rem; padding-top: 3rem; border-top: 1px solid var(--border-subtle);
+            animation: fadeInUp 0.8s ease 0.5s both;
+        }
+        .trust-item { text-align: center; }
+        .trust-value {
+            font-family: 'Sora', sans-serif; font-size: 2.5rem; font-weight: 900;
+            background: var(--gradient-aurora); background-size: 200% 200%;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: textGradient 4s ease infinite; line-height: 1.2;
+        }
+        .trust-label {
+            font-size: 13px; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 1px; margin-top: 6px;
+        }
+
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes textGradient { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+
+        /* ===== SECTIONS ===== */
+        .section { padding: 7rem 2rem; max-width: 1400px; margin: 0 auto; position: relative; }
+        .section-header { text-align: center; margin-bottom: 4rem; }
+        .section-label {
+            display: inline-block; font-family: 'Space Grotesk', sans-serif; font-size: 13px;
+            font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+            background: var(--gradient-aurora); background-size: 200% 200%;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: textGradient 4s ease infinite; margin-bottom: 1rem;
+        }
+        .section-title {
+            font-family: 'Sora', sans-serif; font-size: clamp(2rem,5vw,3.2rem);
+            font-weight: 900; letter-spacing: -1px; margin-bottom: 1rem;
+        }
+        .section-desc { font-size: 1.1rem; color: var(--text-secondary); max-width: 620px; margin: 0 auto; }
+
+        /* ===== HOW IT WORKS ===== */
+        .how-it-works-bg { background: linear-gradient(180deg, transparent 0%, rgba(0,245,255,0.02) 50%, transparent 100%); }
+        .steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; position: relative; }
+        .step-connector {
+            position: absolute; top: 52px; left: 0; right: 0; height: 2px; z-index: 0;
+            background: linear-gradient(90deg, transparent 5%, rgba(0,245,255,0.2) 25%, rgba(139,92,246,0.2) 50%, rgba(236,72,153,0.2) 75%, transparent 95%);
+        }
+        .step-card {
+            position: relative; z-index: 1; background: var(--bg-card); backdrop-filter: blur(20px);
+            border-radius: 20px; padding: 2rem 1.5rem; text-align: center; border: 1px solid var(--border-subtle);
+            transition: all 0.4s ease;
+        }
+        .step-card:hover { transform: translateY(-8px); border-color: rgba(0,245,255,0.3); box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+        .step-number {
+            width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1.25rem; font-family: 'Sora', sans-serif; font-weight: 900; font-size: 18px;
+            background: var(--gradient-aurora); color: var(--bg-void);
+        }
+        .step-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+        .step-title { font-family: 'Sora', sans-serif; font-weight: 800; font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .step-desc { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; }
+
+        /* ===== FEATURE CARDS ===== */
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.75rem; }
+        .feature-card {
+            position: relative; background: var(--bg-card); backdrop-filter: blur(20px);
+            border-radius: 24px; padding: 2.25rem; overflow: hidden; transition: all 0.5s cubic-bezier(0.4,0,0.2,1);
+        }
+        .feature-card::before {
+            content: ''; position: absolute; inset: 0; border-radius: 24px; padding: 1px;
+            background: linear-gradient(135deg, rgba(0,245,255,0.3) 0%, transparent 50%, rgba(139,92,246,0.3) 100%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.5; transition: opacity 0.5s ease;
+        }
+        .feature-card::after {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle at center, var(--card-glow, rgba(0,245,255,0.1)) 0%, transparent 50%);
+            opacity: 0; transition: opacity 0.5s ease; pointer-events: none;
+        }
+        .feature-card:hover { transform: translateY(-8px) scale(1.01); box-shadow: 0 25px 60px rgba(0,0,0,0.4); }
+        .feature-card:hover::before { opacity: 1; background: var(--gradient-aurora); }
+        .feature-card:hover::after { opacity: 1; }
+
+        .feature-icon {
+            width: 64px; height: 64px; border-radius: 18px; display: flex; align-items: center; justify-content: center;
+            font-size: 1.75rem; margin-bottom: 1.5rem; position: relative; z-index: 1; transition: all 0.4s ease;
+        }
+        .feature-icon.cyan { background: linear-gradient(135deg, rgba(0,245,255,0.2), rgba(0,200,255,0.1)); box-shadow: 0 0 30px rgba(0,245,255,0.2); }
+        .feature-icon.violet { background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(168,85,247,0.1)); box-shadow: 0 0 30px rgba(139,92,246,0.2); }
+        .feature-icon.mint { background: linear-gradient(135deg, rgba(15,240,179,0.2), rgba(16,185,129,0.1)); box-shadow: 0 0 30px rgba(15,240,179,0.2); }
+        .feature-icon.pink { background: linear-gradient(135deg, rgba(236,72,153,0.2), rgba(244,63,94,0.1)); box-shadow: 0 0 30px rgba(236,72,153,0.2); }
+        .feature-icon.orange { background: linear-gradient(135deg, rgba(249,115,22,0.2), rgba(245,158,11,0.1)); box-shadow: 0 0 30px rgba(249,115,22,0.2); }
+        .feature-icon.blue { background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(99,102,241,0.1)); box-shadow: 0 0 30px rgba(59,130,246,0.2); }
+        .feature-icon.gold { background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(217,119,6,0.1)); box-shadow: 0 0 30px rgba(245,158,11,0.2); }
+        .feature-icon.rose { background: linear-gradient(135deg, rgba(244,63,94,0.2), rgba(225,29,72,0.1)); box-shadow: 0 0 30px rgba(244,63,94,0.2); }
+        .feature-card:hover .feature-icon { transform: scale(1.1) rotate(5deg); }
+
+        .feature-title { font-family: 'Sora', sans-serif; font-size: 1.25rem; font-weight: 800; margin-bottom: 0.6rem; position: relative; z-index: 1; }
+        .feature-desc { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.7; position: relative; z-index: 1; }
+        .feature-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 1.25rem; position: relative; z-index: 1; }
+        .feature-tag {
+            padding: 5px 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle);
+            border-radius: 8px; font-size: 11px; font-weight: 600; color: var(--text-secondary); transition: all 0.3s ease;
+        }
+        .feature-card:hover .feature-tag { background: rgba(0,245,255,0.1); border-color: rgba(0,245,255,0.3); color: var(--aurora-cyan); }
+
+        /* ===== HIGHLIGHT BOXES (for deep-dive sections) ===== */
+        .highlight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+        .highlight-box {
+            background: var(--bg-card); backdrop-filter: blur(20px); border-radius: 20px;
+            padding: 2rem; border: 1px solid var(--border-subtle); transition: all 0.4s ease;
+        }
+        .highlight-box:hover { transform: translateY(-6px); border-color: rgba(0,245,255,0.2); }
+        .highlight-box h4 {
+            font-family: 'Sora', sans-serif; font-size: 1.05rem; font-weight: 800;
+            margin-bottom: 0.75rem; display: flex; align-items: center; gap: 10px;
+        }
+        .highlight-box p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; }
+        .highlight-box ul { list-style: none; padding: 0; margin: 0; }
+        .highlight-box ul li {
+            padding: 6px 0; color: var(--text-secondary); font-size: 0.9rem;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .highlight-box ul li::before { content: '\2713'; color: var(--aurora-mint); font-weight: 700; font-size: 14px; }
+
+        /* ===== BROKER CARDS ===== */
+        .brokers-bg { background: linear-gradient(180deg, transparent 0%, rgba(0,245,255,0.02) 50%, transparent 100%); }
+        .broker-grid {
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.25rem;
+            max-width: 1200px; margin: 0 auto;
+        }
+        .broker-card {
+            position: relative; background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(24px);
+            border-radius: 20px; padding: 2rem 1.5rem; text-align: center; overflow: hidden;
+            transition: all 0.5s cubic-bezier(0.16,1,0.3,1); border: 1px solid var(--border-subtle);
+        }
+        .broker-card::before {
+            content: ''; position: absolute; inset: 0; border-radius: 20px; padding: 1px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent 60%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+        }
+        .broker-card::after {
+            content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 60%; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-glow), transparent); opacity: 0; transition: opacity 0.5s;
+        }
+        .broker-card:hover {
+            transform: translateY(-10px) scale(1.02); border-color: rgba(0,245,255,0.15);
+            box-shadow: 0 30px 60px -12px rgba(0,0,0,0.5), 0 0 40px -8px var(--card-accent, rgba(0,245,255,0.1));
+        }
+        .broker-card:hover::after { opacity: 1; }
+        .broker-logo {
+            width: 80px; height: 80px; border-radius: 20px; display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1.25rem; transition: all 0.5s cubic-bezier(0.16,1,0.3,1); overflow: hidden; position: relative;
+        }
+        .broker-logo img { width: 56px; height: 56px; object-fit: contain; filter: brightness(1.1); }
+        .broker-logo svg { width: 56px; height: 56px; }
+        .broker-logo.webull { background: linear-gradient(135deg, #00D4AA 0%, #008B6B 100%); box-shadow: 0 8px 32px rgba(0,212,170,0.25); --accent: rgba(0,212,170,0.3); }
+        .broker-logo.schwab { background: linear-gradient(135deg, #00A3E0 0%, #005E8C 100%); box-shadow: 0 8px 32px rgba(0,163,224,0.25); --accent: rgba(0,163,224,0.3); }
+        .broker-logo.alpaca { background: linear-gradient(135deg, #FFCD00 0%, #E5A800 100%); box-shadow: 0 8px 32px rgba(255,205,0,0.25); --accent: rgba(255,205,0,0.3); }
+        .broker-logo.ibkr { background: linear-gradient(135deg, #D71920 0%, #8B0E13 100%); box-shadow: 0 8px 32px rgba(215,25,32,0.25); --accent: rgba(215,25,32,0.3); }
+        .broker-logo.tastytrade { background: linear-gradient(135deg, #FF4444 0%, #B30000 100%); box-shadow: 0 8px 32px rgba(255,68,68,0.25); --accent: rgba(255,68,68,0.3); }
+        .broker-card:hover .broker-logo { transform: scale(1.08); box-shadow: 0 12px 40px var(--accent, rgba(0,245,255,0.3)); }
+        .broker-name { font-family: 'Sora', sans-serif; font-size: 1.15rem; font-weight: 700; margin-bottom: 0.6rem; letter-spacing: -0.3px; }
+        .broker-modes { display: flex; justify-content: center; gap: 8px; margin-bottom: 0.6rem; flex-wrap: wrap; }
+        .mode-badge { padding: 4px 12px; border-radius: 100px; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+        .mode-badge.live { background: rgba(236,72,153,0.12); color: var(--aurora-pink); border: 1px solid rgba(236,72,153,0.25); }
+        .mode-badge.paper { background: rgba(15,240,179,0.12); color: var(--aurora-mint); border: 1px solid rgba(15,240,179,0.25); }
+        .mode-badge.oco { background: rgba(0,245,255,0.12); color: var(--aurora-cyan); border: 1px solid rgba(0,245,255,0.25); }
+        .mode-badge.stream { background: rgba(139,92,246,0.12); color: var(--aurora-violet); border: 1px solid rgba(139,92,246,0.25); }
+        .broker-features { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+        .broker-asset-types { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 0.75rem; }
+        .asset-tag { padding: 3px 10px; border-radius: 8px; font-size: 10px; font-weight: 600; background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.06); }
+
+        /* ===== PIPELINE FLOW ===== */
+        .pipeline-bg { background: linear-gradient(180deg, transparent 0%, rgba(139,92,246,0.03) 50%, transparent 100%); }
+        .pipeline-container { max-width: 1000px; margin: 0 auto; }
+        .pipeline-row {
+            display: flex; align-items: stretch; gap: 0; margin-bottom: 1.5rem;
+        }
+        .pipeline-node {
+            flex: 1; background: var(--bg-card); backdrop-filter: blur(20px); border-radius: 16px;
+            padding: 1.5rem; border: 1px solid var(--border-subtle); text-align: center; transition: all 0.4s ease;
+        }
+        .pipeline-node:hover { border-color: rgba(0,245,255,0.3); transform: translateY(-4px); }
+        .pipeline-node .node-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .pipeline-node .node-title { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; }
+        .pipeline-node .node-desc { color: var(--text-muted); font-size: 0.8rem; }
+        .pipeline-arrow {
+            display: flex; align-items: center; justify-content: center; padding: 0 0.75rem;
+            color: var(--aurora-cyan); font-size: 1.25rem; flex-shrink: 0;
+        }
+
+        /* ===== CAPABILITIES ===== */
+        .capabilities-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+        .capability-item {
+            position: relative; background: var(--bg-card); backdrop-filter: blur(20px);
+            border-radius: 20px; padding: 1.75rem 1.25rem; text-align: center; overflow: hidden; transition: all 0.4s ease;
+        }
+        .capability-item::before {
+            content: ''; position: absolute; inset: 0; border-radius: 20px; padding: 1px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude; transition: background 0.4s ease;
+        }
+        .capability-item:hover { transform: translateY(-6px) scale(1.03); }
+        .capability-item:hover::before { background: var(--gradient-aurora); }
+        .capability-icon { font-size: 2rem; margin-bottom: 0.75rem; transition: transform 0.4s ease; }
+        .capability-item:hover .capability-icon { transform: scale(1.2); }
+        .capability-text { font-weight: 700; font-size: 14px; }
+
+        /* ===== LEADERBOARD SHOWCASE ===== */
+        .showcase-bg { background: linear-gradient(180deg, transparent 0%, rgba(139,92,246,0.03) 50%, transparent 100%); }
+        .showcase-mockup { max-width: 900px; margin: 0 auto; }
+        .mockup-window {
+            background: var(--bg-elevated); border-radius: 16px; border: 1px solid var(--border-subtle);
+            overflow: hidden; box-shadow: 0 25px 80px rgba(0,0,0,0.5), 0 0 60px rgba(139,92,246,0.15);
+        }
+        .mockup-header {
+            background: linear-gradient(180deg, #1f2937, #111827); padding: 14px 18px;
+            display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--border-subtle);
+        }
+        .mockup-dots { display: flex; gap: 8px; }
+        .mockup-dots .dot { width: 14px; height: 14px; border-radius: 50%; }
+        .mockup-dots .dot.red { background: #ff5f57; }
+        .mockup-dots .dot.yellow { background: #febc2e; }
+        .mockup-dots .dot.green { background: #28c840; }
+        .mockup-title { color: var(--text-muted); font-size: 13px; font-weight: 500; }
+        .mockup-content { padding: 24px; }
+        .leaderboard-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+        .leaderboard-table th {
+            text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 700;
+            color: var(--aurora-cyan); text-transform: uppercase; letter-spacing: 1px;
+            background: rgba(0,245,255,0.08);
+        }
+        .leaderboard-table th:first-child { border-radius: 10px 0 0 10px; }
+        .leaderboard-table th:last-child { border-radius: 0 10px 10px 0; }
+        .leaderboard-table td { padding: 16px; background: rgba(255,255,255,0.02); transition: all 0.3s ease; }
+        .leaderboard-table tr:hover td { background: rgba(255,255,255,0.05); }
+        .leaderboard-table td:first-child { border-radius: 10px 0 0 10px; }
+        .leaderboard-table td:last-child { border-radius: 0 10px 10px 0; }
+        .gold-row td { background: rgba(255,215,0,0.08); border-left: 3px solid #ffd700; }
+        .silver-row td { background: rgba(192,192,192,0.06); border-left: 3px solid #c0c0c0; }
+        .bronze-row td { background: rgba(205,127,50,0.06); border-left: 3px solid #cd7f32; }
+        .you-row td { background: rgba(0,245,255,0.08); border-left: 3px solid var(--aurora-cyan); }
+        .rank {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; border-radius: 10px; font-weight: 800; font-size: 14px;
+        }
+        .rank.gold { background: linear-gradient(135deg, #ffd700, #ffb700); color: #1a1a1a; }
+        .rank.silver { background: linear-gradient(135deg, #e8e8e8, #c0c0c0); color: #1a1a1a; }
+        .rank.bronze { background: linear-gradient(135deg, #cd7f32, #b87333); color: #fff; }
+        .rank.you { background: var(--gradient-aurora); color: #1a1a1a; }
+        .trader-name { font-weight: 600; color: var(--text-secondary); }
+        .pnl-positive { color: var(--aurora-mint); font-weight: 700; }
+        .tqs-bar {
+            position: relative; width: 60px; height: 28px; background: rgba(255,255,255,0.1);
+            border-radius: 6px; overflow: hidden;
+        }
+        .tqs-bar::before {
+            content: ''; position: absolute; left: 0; top: 0; height: 100%; width: var(--tqs);
+            background: var(--gradient-aurora); border-radius: 6px;
+        }
+        .tqs-bar span { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; height: 100%; font-weight: 700; font-size: 12px; }
+
+        /* ===== SIMULATION ===== */
+        .simulation-bg { background: linear-gradient(180deg, transparent 0%, rgba(15,240,179,0.03) 50%, transparent 100%); }
+        .sim-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 1000px; margin: 0 auto; }
+        .sim-input-card, .sim-results-card {
+            background: var(--bg-card); backdrop-filter: blur(20px); border-radius: 20px;
+            padding: 2rem; border: 1px solid var(--border-subtle);
+        }
+        .sim-input-card h4, .sim-results-card h4 {
+            font-family: 'Sora', sans-serif; font-size: 1.1rem; font-weight: 700;
+            margin-bottom: 1.5rem; color: var(--aurora-cyan);
+        }
+        .sim-field { display: flex; justify-content: space-between; align-items: center; padding: 0.9rem 0; border-bottom: 1px solid var(--border-subtle); }
+        .sim-field label { color: var(--text-secondary); font-size: 14px; }
+        .sim-value { font-weight: 700; font-size: 15px; background: var(--gradient-aurora); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .sim-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+        .sim-stat { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 1.25rem; text-align: center; }
+        .sim-stat .stat-label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+        .sim-stat .stat-value { font-family: 'Sora', sans-serif; font-size: 1.4rem; font-weight: 800; }
+        .sim-stat .stat-value.positive { color: var(--aurora-mint); }
+        .sim-stat .stat-value.warning { color: var(--warning); }
+        .sim-extras { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); display: flex; flex-wrap: wrap; gap: 10px; }
+        .sim-extra-item { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: rgba(0,245,255,0.08); border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--aurora-cyan); }
+
+        /* ===== CTA ===== */
+        .cta-section { text-align: center; padding: 8rem 2rem; position: relative; overflow: hidden; }
+        .cta-glow {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            width: 800px; height: 500px;
+            background: radial-gradient(ellipse, rgba(0,245,255,0.15) 0%, rgba(139,92,246,0.08) 40%, transparent 70%);
+            filter: blur(100px); animation: ctaPulse 5s ease-in-out infinite;
+        }
+        @keyframes ctaPulse { 0%, 100% { opacity: 0.6; transform: translate(-50%,-50%) scale(1); } 50% { opacity: 1; transform: translate(-50%,-50%) scale(1.1); } }
+        .cta-title { font-family: 'Sora', sans-serif; font-size: clamp(2.5rem,6vw,3.5rem); font-weight: 900; margin-bottom: 1.25rem; position: relative; z-index: 1; }
+        .cta-desc { font-size: 1.15rem; color: var(--text-secondary); max-width: 550px; margin: 0 auto 2rem; position: relative; z-index: 1; }
+        .waitlist-form { position: relative; z-index: 1; max-width: 600px; margin: 0 auto; }
+        .waitlist-form .form-row { display: flex; gap: 12px; }
+        .waitlist-input {
+            flex: 1; padding: 18px 24px; background: rgba(255,255,255,0.05); border: 2px solid var(--border-subtle);
+            border-radius: 16px; color: var(--text-primary); font-size: 16px;
+            font-family: 'Outfit', sans-serif; transition: all 0.3s ease;
+        }
+        .waitlist-input:focus { outline: none; border-color: var(--aurora-cyan); box-shadow: 0 0 20px rgba(0,245,255,0.2); }
+        .waitlist-input::placeholder { color: var(--text-muted); }
+
+        /* ===== REFERRAL ===== */
+        .referral-bg { background: linear-gradient(180deg, transparent 0%, rgba(236,72,153,0.03) 50%, transparent 100%); }
+        .referral-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; max-width: 900px; margin: 0 auto 3rem; }
+        .referral-card {
+            background: var(--bg-card); backdrop-filter: blur(20px); border-radius: 20px;
+            padding: 2.5rem 2rem; text-align: center; border: 1px solid var(--border-subtle); transition: all 0.4s ease;
+        }
+        .referral-card:hover { transform: translateY(-8px); box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+        .referral-card.featured { background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(236,72,153,0.1)); border-color: rgba(139,92,246,0.4); transform: scale(1.05); }
+        .referral-card.featured:hover { transform: scale(1.05) translateY(-8px); }
+        .reward-count { font-family: 'Sora', sans-serif; font-size: 3rem; font-weight: 900; background: var(--gradient-aurora); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .reward-label { font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .reward-value { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin-top: 0.5rem; }
+        .share-buttons { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
+        .share-btn {
+            display: inline-flex; align-items: center; gap: 10px; padding: 14px 24px;
+            border-radius: 12px; font-weight: 600; font-size: 14px; border: none; cursor: pointer; transition: all 0.3s ease;
+        }
+        .share-btn.twitter { background: rgba(29,161,242,0.15); color: #1DA1F2; border: 1px solid rgba(29,161,242,0.3); }
+        .share-btn.discord { background: rgba(88,101,242,0.15); color: #5865F2; border: 1px solid rgba(88,101,242,0.3); }
+        .share-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+
+        /* ===== PREMIUM FOOTER ===== */
+        .footer {
+            border-top: 1px solid var(--border-subtle); padding: 0;
+            background: linear-gradient(180deg, var(--bg-void) 0%, #050510 100%);
+        }
+        .footer-main {
+            max-width: 1400px; margin: 0 auto; padding: 4rem 2rem 3rem;
+            display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 3rem;
+        }
+        .footer-brand { display: flex; flex-direction: column; gap: 1rem; }
+        .footer-brand-name {
+            font-family: 'Sora', sans-serif; font-size: 1.5rem; font-weight: 800;
+            background: var(--gradient-aurora); background-size: 200% 200%;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: textGradient 4s ease infinite;
+        }
+        .footer-brand-desc { color: var(--text-muted); font-size: 14px; line-height: 1.7; max-width: 320px; }
+        .footer-col h5 {
+            font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-secondary); margin-bottom: 1.25rem;
+        }
+        .footer-col ul { list-style: none; padding: 0; }
+        .footer-col ul li { margin-bottom: 0.6rem; }
+        .footer-col ul li a { color: var(--text-muted); text-decoration: none; font-size: 14px; transition: color 0.2s ease; }
+        .footer-col ul li a:hover { color: var(--aurora-cyan); }
+
+        .footer-divider { border: none; border-top: 1px solid var(--border-subtle); margin: 0; }
+
+        .footer-disclaimer {
+            max-width: 1400px; margin: 0 auto; padding: 2rem 2rem 1.5rem;
+        }
+        .disclaimer-title {
+            font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 1rem;
+        }
+        .disclaimer-text {
+            color: var(--text-muted); font-size: 12px; line-height: 1.8; opacity: 0.8;
+        }
+        .disclaimer-text strong { color: var(--text-secondary); font-weight: 600; }
+
+        .footer-bottom {
+            max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem 2rem;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+        }
+        .footer-copyright { color: var(--text-muted); font-size: 13px; }
+        .footer-legal-links { display: flex; gap: 1.5rem; }
+        .footer-legal-links a { color: var(--text-muted); font-size: 13px; text-decoration: none; transition: color 0.2s ease; }
+        .footer-legal-links a:hover { color: var(--aurora-cyan); }
+
+        /* ===== SCROLL ANIMATIONS ===== */
+        .animate-on-scroll { opacity: 0; transform: translateY(50px); transition: all 0.8s cubic-bezier(0.4,0,0.2,1); }
+        .animate-on-scroll.visible { opacity: 1; transform: translateY(0); }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1100px) {
+            .broker-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+        @media (max-width: 1000px) {
+            .steps-grid { grid-template-columns: repeat(2, 1fr); }
+            .step-connector { display: none; }
+            .capabilities-grid { grid-template-columns: repeat(2, 1fr); }
+            .pipeline-row { flex-direction: column; }
+            .pipeline-arrow { transform: rotate(90deg); padding: 0.5rem; }
+            .footer-main { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 768px) {
+            .nav-bar { padding: 1rem; }
+            .nav-links { display: none; }
+            .hero { padding: 7rem 1.5rem 4rem; }
+            .hero-title { letter-spacing: -1px; }
+            .trust-bar { gap: 2rem; }
+            .trust-value { font-size: 2rem; }
+            .section { padding: 5rem 1.5rem; }
+            .features-grid { grid-template-columns: 1fr; }
+            .broker-grid { grid-template-columns: repeat(2, 1fr); }
+            .steps-grid { grid-template-columns: 1fr; }
+            .capabilities-grid { grid-template-columns: 1fr; }
+            .sim-grid { grid-template-columns: 1fr; }
+            .referral-grid { grid-template-columns: 1fr; }
+            .footer-main { grid-template-columns: 1fr; gap: 2rem; }
+            .waitlist-form .form-row { flex-direction: column; }
+        }
+        @media (max-width: 480px) {
+            .broker-grid { grid-template-columns: 1fr; }
+        }
+
+        @media print {
+            .nav-bar, .aurora-bg, .particles, .grid-pattern, .cta-section { display: none; }
+            body { background: white; color: black; }
+            .section { padding: 2rem 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="aurora-bg"></div>
+    <div class="particles"><div class="particle"></div><div class="particle"></div><div class="particle"></div><div class="particle"></div><div class="particle"></div><div class="particle"></div><div class="particle"></div><div class="particle"></div></div>
+    <div class="grid-pattern"></div>
+
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <a href="/architecture" class="nav-brand">
+            <div class="logo-mark">
+                <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="btBdr" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%"><animate attributeName="stop-color" values="#00F5FF;#A855F7;#EC4899;#00F5FF" dur="6s" repeatCount="indefinite"/></stop>
+                            <stop offset="50%"><animate attributeName="stop-color" values="#8B5CF6;#F43F5E;#00F5FF;#8B5CF6" dur="6s" repeatCount="indefinite"/></stop>
+                            <stop offset="100%"><animate attributeName="stop-color" values="#EC4899;#00F5FF;#A855F7;#EC4899" dur="6s" repeatCount="indefinite"/></stop>
+                        </linearGradient>
+                        <radialGradient id="btFill" cx="38%" cy="32%" r="68%" gradientUnits="objectBoundingBox">
+                            <stop offset="0%" stop-color="#0E1525"/><stop offset="50%" stop-color="#080C1A"/><stop offset="100%" stop-color="#040610"/>
+                        </radialGradient>
+                        <linearGradient id="btMetal" x1="0" y1="14" x2="0" y2="42" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="#D0D8E8"/><stop offset="12%" stop-color="#FFFFFF"/><stop offset="30%" stop-color="#7DD3FC"/>
+                            <stop offset="48%" stop-color="#FFFFFF"/><stop offset="65%" stop-color="#DDD6FE"/><stop offset="82%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#9CAFE0"/>
+                        </linearGradient>
+                        <linearGradient id="btChart" x1="10" y1="40" x2="48" y2="14" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="#00F5FF" stop-opacity="0"/><stop offset="25%" stop-color="#00F5FF" stop-opacity="0.18"/>
+                            <stop offset="60%" stop-color="#8B5CF6" stop-opacity="0.14"/><stop offset="100%" stop-color="#EC4899" stop-opacity="0"/>
+                        </linearGradient>
+                        <linearGradient id="btHL" x1="28" y1="4" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="white" stop-opacity="0.1"/><stop offset="100%" stop-color="white" stop-opacity="0"/>
+                        </linearGradient>
+                        <linearGradient id="btShm" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="white" stop-opacity="0"/><stop offset="42%" stop-color="white" stop-opacity="0"/>
+                            <stop offset="50%" stop-color="white" stop-opacity="0.18"/><stop offset="58%" stop-color="white" stop-opacity="0"/><stop offset="100%" stop-color="white" stop-opacity="0"/>
+                            <animateTransform attributeName="gradientTransform" type="translate" values="-34,-34;34,34;34,34;34,34" keyTimes="0;0.35;0.6;1" dur="4.5s" repeatCount="indefinite"/>
+                        </linearGradient>
+                        <filter id="btEmb" x="-8%" y="-8%" width="116%" height="116%">
+                            <feOffset in="SourceAlpha" dx="0.7" dy="1.2" result="sOff"/><feGaussianBlur in="sOff" stdDeviation="0.7" result="sBlur"/>
+                            <feFlood flood-color="#000" flood-opacity="0.55" result="sClr"/><feComposite in="sClr" in2="sBlur" operator="in" result="shadow"/>
+                            <feOffset in="SourceAlpha" dx="-0.3" dy="-0.5" result="hOff"/><feGaussianBlur in="hOff" stdDeviation="0.3" result="hBlur"/>
+                            <feFlood flood-color="#fff" flood-opacity="0.2" result="hClr"/><feComposite in="hClr" in2="hBlur" operator="in" result="hilite"/>
+                            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/><feMergeNode in="hilite"/></feMerge>
+                        </filter>
+                        <clipPath id="btCl"><rect x="4" y="4" width="48" height="48" rx="13.5"/></clipPath>
+                    </defs>
+                    <rect x="0.5" y="0.5" width="55" height="55" rx="17" fill="none" stroke="url(#btBdr)" stroke-width="2.5" opacity="0.07"/>
+                    <rect x="2" y="2" width="52" height="52" rx="15.5" fill="none" stroke="url(#btBdr)" stroke-width="2.2"/>
+                    <rect x="4" y="4" width="48" height="48" rx="13.5" fill="url(#btFill)"/>
+                    <rect x="4" y="4" width="48" height="48" rx="13.5" fill="none" stroke="white" stroke-width="0.5" opacity="0.05"/>
+                    <rect x="4" y="4" width="48" height="48" rx="13.5" fill="url(#btHL)"/>
+                    <path d="M12 40 C18 38 23 32 28 27 C33 22 38 19 46 16" stroke="url(#btChart)" stroke-width="1.5" stroke-linecap="round" fill="none" clip-path="url(#btCl)"/>
+                    <text x="28" y="37" text-anchor="middle" font-family="'Sora','Segoe UI',system-ui,sans-serif" font-weight="900" font-size="26" letter-spacing="-1" fill="url(#btMetal)" filter="url(#btEmb)">BT</text>
+                    <rect x="4" y="4" width="48" height="48" rx="13.5" fill="url(#btShm)" clip-path="url(#btCl)"/>
+                    <circle cx="48" cy="8.5" r="1.8" fill="url(#btBdr)" opacity="0.45"><animate attributeName="opacity" values="0.25;0.55;0.25" dur="3s" repeatCount="indefinite"/></circle>
+                </svg>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">BotifyTrades</span>
+                <span class="brand-tagline">Automated Trading</span>
+            </div>
+        </a>
+        <div class="nav-links">
+            <a href="#features" class="nav-link">Features</a>
+            <a href="#brokers" class="nav-link">Brokers</a>
+            <a href="#how-it-works" class="nav-link">How It Works</a>
+            <a href="#waitlist" class="nav-link">Waitlist</a>
+            <a href="/login" class="nav-link nav-signin">Sign In</a>
+            <a href="/signup" class="nav-cta"><span>Get Started</span></a>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-orb cyan"></div>
+        <div class="hero-orb violet"></div>
+        <div class="hero-orb pink"></div>
+
+        <div class="status-pill">
+            <span class="status-dot"></span>
+            <span class="status-text">Automated Multi-Broker Execution Platform</span>
+        </div>
+
+        <h1 class="hero-title">
+            <span class="line1">Execute Smarter.</span>
+            <span class="line2">Trade Faster.</span>
+        </h1>
+
+        <p class="hero-subtitle">
+            From Discord signal to broker execution in under one second. Manage 7 brokers, intelligent risk brackets, and real-time position monitoring from a single dashboard.
+        </p>
+
+        <div class="hero-cta">
+            <a href="https://x.com/BotifyTrades" target="_blank" class="btn-primary">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                Follow on X
+            </a>
+            <a href="https://discord.gg/sr9YJFgXMc" target="_blank" class="btn-outline">
+                <span style="display:inline-flex;align-items:center;gap:10px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="position:relative;z-index:1;"><path d="M20.317 4.37a19.79 19.79 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.618-1.25.077.077 0 00-.079-.037A19.74 19.74 0 003.677 4.37a.07.07 0 00-.032.028C.533 9.046-.32 13.58.099 18.057a.08.08 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.11 13.11 0 01-1.872-.892.077.077 0 01-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 01.078-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.009c.12.099.246.198.373.292a.077.077 0 01-.006.127 12.3 12.3 0 01-1.873.892.076.076 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.84 19.84 0 006.002-3.03.077.077 0 00.031-.055c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.029zM8.02 15.33c-1.183 0-2.157-1.086-2.157-2.419s.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42 0 1.332-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.086-2.157-2.419s.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42 0 1.332-.946 2.418-2.157 2.418z"/></svg>
+                    Join Discord
+                </span>
+            </a>
+        </div>
+
+        <div class="trust-bar">
+            <div class="trust-item"><div class="trust-value">5</div><div class="trust-label">Brokers Supported</div></div>
+            <div class="trust-item"><div class="trust-value">109+</div><div class="trust-label">Signal Formats</div></div>
+            <div class="trust-item"><div class="trust-value">&lt;1s</div><div class="trust-label">Execution Latency</div></div>
+            <div class="trust-item"><div class="trust-value">24/7</div><div class="trust-label">Position Monitoring</div></div>
+            <div class="trust-item"><div class="trust-value">4-Tier</div><div class="trust-label">Risk Brackets</div></div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="section how-it-works-bg" id="how-it-works">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">How It Works</div>
+            <h2 class="section-title">Signal to Execution in Seconds</h2>
+            <p class="section-desc">A fully automated pipeline from signal detection to multi-broker order placement with intelligent risk management</p>
+        </div>
+        <div class="steps-grid animate-on-scroll" style="position: relative;">
+            <div class="step-connector"></div>
+            <div class="step-card">
+                <div class="step-number">1</div>
+                <div class="step-icon">📡</div>
+                <div class="step-title">Signal Detection</div>
+                <div class="step-desc">Monitors Discord and Telegram channels in real-time. Captures entries, exits, trims, stop-loss updates, and conditional breakout alerts.</div>
+            </div>
+            <div class="step-card">
+                <div class="step-number">2</div>
+                <div class="step-icon">🧠</div>
+                <div class="step-title">Smart Parsing</div>
+                <div class="step-desc">AI-powered format registry matches 109+ signal patterns. Extracts ticker, price, action, strike, expiry, and risk parameters automatically.</div>
+            </div>
+            <div class="step-card">
+                <div class="step-number">3</div>
+                <div class="step-icon">🛡️</div>
+                <div class="step-title">Risk Evaluation</div>
+                <div class="step-desc">Applies per-channel risk settings: position sizing, max exposure, bracket configuration, and dynamic stop-loss escalation rules.</div>
+            </div>
+            <div class="step-card">
+                <div class="step-number">4</div>
+                <div class="step-icon">⚡</div>
+                <div class="step-title">Multi-Broker Execution</div>
+                <div class="step-desc">Simultaneously places orders across all enabled brokers. OCO brackets, trailing stops, and progressive profit targets fire automatically.</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section class="section" id="features">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Platform Features</div>
+            <h2 class="section-title">Built for Serious Traders</h2>
+            <p class="section-desc">Professional-grade automation with the depth and reliability that active trading demands</p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(0,245,255,0.15);">
+                <div class="feature-icon cyan">🔀</div>
+                <h3 class="feature-title">Multi-Broker Execution</h3>
+                <p class="feature-desc">Execute on Webull, Schwab, Alpaca, IBKR, and Tastytrade simultaneously from a single signal. Supports stocks, options, and index options.</p>
+                <div class="feature-tags"><span class="feature-tag">5 Brokers</span><span class="feature-tag">LIVE + PAPER</span><span class="feature-tag">Stocks & Options</span></div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(139,92,246,0.15);">
+                <div class="feature-icon violet">🧠</div>
+                <h3 class="feature-title">Signal Intelligence Engine</h3>
+                <p class="feature-desc">109+ signal format parsers detect entries, exits, trims, SL updates, and conditional orders. Pattern learning auto-adapts to new analyst formats over time.</p>
+                <div class="feature-tags"><span class="feature-tag">109+ Formats</span><span class="feature-tag">Auto-Learning</span><span class="feature-tag">Multi-Channel</span></div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(15,240,179,0.15);">
+                <div class="feature-icon mint">🛡️</div>
+                <h3 class="feature-title">4-Tier Risk Brackets</h3>
+                <p class="feature-desc">Automatic profit targets (up to 4 tiers), stop losses, dynamic SL escalation, and trailing stops. OCO bracket orders on supported brokers for hardware-level protection.</p>
+                <div class="feature-tags"><span class="feature-tag">OCO Brackets</span><span class="feature-tag">Dynamic SL</span><span class="feature-tag">Trailing Stop</span><span class="feature-tag">Per-Channel</span></div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(59,130,246,0.15);">
+                <div class="feature-icon blue">📊</div>
+                <h3 class="feature-title">Real-Time Streaming</h3>
+                <p class="feature-desc">Schwab WebSocket streaming and unified price hub aggregate live quotes across all brokers. Sub-second price updates drive exit decisions and risk calculations.</p>
+                <div class="feature-tags"><span class="feature-tag">WebSocket</span><span class="feature-tag">Unified Price Hub</span><span class="feature-tag">Live Quotes</span></div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(236,72,153,0.15);">
+                <div class="feature-icon pink">🔄</div>
+                <h3 class="feature-title">Position Sync & Recovery</h3>
+                <p class="feature-desc">4-layer bracket fill bridge reconciles positions across runtime, API, sync, and restart. Auto-save with heartbeat ensures crash recovery with zero position loss.</p>
+                <div class="feature-tags"><span class="feature-tag">4-Layer Bridge</span><span class="feature-tag">Auto-Recovery</span><span class="feature-tag">Reconciliation</span></div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(249,115,22,0.15);">
+                <div class="feature-icon orange">📋</div>
+                <h3 class="feature-title">Options Chain Viewer</h3>
+                <p class="feature-desc">Real-time options chains with live price updates, ATM highlighting, Greeks display, and one-click order placement directly from the web interface.</p>
+                <div class="feature-tags"><span class="feature-tag">Live Chains</span><span class="feature-tag">Greeks</span><span class="feature-tag">One-Click Orders</span></div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(245,158,11,0.15);">
+                <div class="feature-icon gold">🎯</div>
+                <h3 class="feature-title">Conditional Orders</h3>
+                <p class="feature-desc">Breakout triggers, time-based entries, and price-level conditional orders. Set entries that only fire when price breaks above or below key levels.</p>
+                <div class="feature-tags"><span class="feature-tag">Breakout Triggers</span><span class="feature-tag">Price Conditions</span><span class="feature-tag">Auto-Execute</span></div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(244,63,94,0.15);">
+                <div class="feature-icon rose">🔔</div>
+                <h3 class="feature-title">Discord Notifications</h3>
+                <p class="feature-desc">Instant webhook alerts for fills, P&L milestones, bracket triggers, system health, and error conditions. Full audit trail of every execution decision.</p>
+                <div class="feature-tags"><span class="feature-tag">Webhooks</span><span class="feature-tag">Fill Alerts</span><span class="feature-tag">Audit Trail</span></div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(99,102,241,0.15);">
+                <div class="feature-icon blue">🏆</div>
+                <h3 class="feature-title">Analytics & Leaderboard</h3>
+                <p class="feature-desc">Track P&L per trade, per channel, and per broker. Trade Quality Score (TQS) algorithm ranks signal providers. Portfolio simulation projects future returns.</p>
+                <div class="feature-tags"><span class="feature-tag">P&L Tracking</span><span class="feature-tag">TQS Ranking</span><span class="feature-tag">Simulation</span></div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(16,185,129,0.15);">
+                <div class="feature-icon mint">🔐</div>
+                <h3 class="feature-title">Security & Encryption</h3>
+                <p class="feature-desc">RSA-encrypted credential storage, secure token handling with auto-refresh, and local-only data processing. Your broker credentials never leave your machine.</p>
+                <div class="feature-tags"><span class="feature-tag">RSA Encryption</span><span class="feature-tag">Local Processing</span><span class="feature-tag">Auto-Refresh</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Risk Engine Deep Dive -->
+    <section class="section pipeline-bg">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Risk Architecture</div>
+            <h2 class="section-title">Multi-Layer Risk Engine</h2>
+            <p class="section-desc">Every position is protected by configurable risk brackets with automatic escalation and broker-native order protection</p>
+        </div>
+
+        <div class="highlight-grid animate-on-scroll">
+            <div class="highlight-box">
+                <h4>🎯 Progressive Profit Targets</h4>
+                <ul>
+                    <li>Up to 4 independent PT tiers per position</li>
+                    <li>Configurable % allocation per tier</li>
+                    <li>Dynamic SL raises after each tier hit</li>
+                    <li>Remaining runner rides with trailing stop</li>
+                </ul>
+            </div>
+            <div class="highlight-box">
+                <h4>🛡️ Stop Loss Protection</h4>
+                <ul>
+                    <li>Fixed, percentage, or ATR-based stops</li>
+                    <li>Dynamic escalation profiles (standard/aggressive/conservative)</li>
+                    <li>Break-even auto-move after PT1 hit</li>
+                    <li>OCO bracket orders on Schwab, Alpaca, IBKR</li>
+                </ul>
+            </div>
+            <div class="highlight-box">
+                <h4>📐 Position Sizing</h4>
+                <ul>
+                    <li>Fixed dollar, fixed shares, or % of portfolio</li>
+                    <li>Max position limits per channel and global</li>
+                    <li>Duplicate entry prevention</li>
+                    <li>Per-broker allocation control</li>
+                </ul>
+            </div>
+            <div class="highlight-box">
+                <h4>🔄 Bracket Fill Bridge</h4>
+                <ul>
+                    <li>Layer 1: Runtime fill detection via order polling</li>
+                    <li>Layer 2: Enriched API with fill-leg attribution</li>
+                    <li>Layer 3: Sync attribution with price fallback</li>
+                    <li>Layer 4: Restart reconciliation with dynamic SL</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Supported Brokers -->
+    <section class="section brokers-bg" id="brokers">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Integrations</div>
+            <h2 class="section-title">5 Brokers. One Platform.</h2>
+            <p class="section-desc">Trade with your preferred broker or all of them simultaneously for maximum diversification</p>
+        </div>
+
+        <div class="broker-grid">
+            <!-- Webull — actual logo: smile/bowl icon from webull.com SVG -->
+            <div class="broker-card animate-on-scroll" style="--card-accent: rgba(0,212,170,0.2);">
+                <div class="broker-logo webull">
+                    <svg viewBox="0 0 45 26" width="48" height="28" fill="white">
+                        <path d="M41.78,0 C41.95,0 42.09,0.09 42.17,0.22 C43.83,2.67 44.77,5.46 44.77,8.43 C44.77,18.13 34.75,26 22.38,26 C10.02,26 0,18.13 0,8.43 C0,5.47 0.94,2.67 2.59,0.22 C2.67,0.09 2.82,0 2.98,0 C3.23,0 3.43,0.2 3.43,0.45 C3.43,0.48 3.43,0.5 3.42,0.53 L3.42,0.55 C3.38,0.86 3.36,1.18 3.36,1.49 C3.36,7.98 11.21,12.57 22.38,12.57 C33.55,12.57 41.41,7.98 41.41,1.49 C41.41,1.18 41.39,0.87 41.35,0.56 C41.34,0.52 41.34,0.49 41.34,0.45 C41.34,0.2 41.54,0 41.78,0 Z"/>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Webull</h3>
+                <div class="broker-modes"><span class="mode-badge live">LIVE</span><span class="mode-badge paper">PAPER</span></div>
+                <div class="broker-asset-types">
+                    <span class="asset-tag">Stocks</span><span class="asset-tag">Options</span><span class="asset-tag">SPX</span>
+                </div>
+            </div>
+            <!-- Charles Schwab — actual logo: stylized script from schwab.com SVG -->
+            <div class="broker-card animate-on-scroll" style="--card-accent: rgba(0,163,224,0.2);">
+                <div class="broker-logo schwab">
+                    <svg viewBox="25 130 200 50" width="52" height="16" fill="white">
+                        <path d="M26.2,146.6c0,4.9,3.9,7.5,7.6,9.5l1.6,0.8c3.8,1.9,5.3,3.8,5.3,6.7c0,3.3-2.1,5.7-5.2,5.7c-4.9,0-7.7-5.1-8.9-8.2l0-0.1l-1.7,0.6l0,0.1c0.5,3.1,1.1,6.5,1.5,7.8l0,0l0.8,0.3l2.2,0.8c1.5,0.5,3.3,0.9,5.1,0.9c6.9,0,11.6-4.2,11.6-10.3c0-5.7-4.4-8.3-7.6-9.8l-1.3-0.6c-4.2-1.9-5.9-3.8-5.9-6.4c0-2.6,1.6-5.2,5.1-5.2c4.1,0,5.7,3.2,6.7,6.4l0,0.1l1.8-0.3l0-0.1c-0.4-2.5-0.8-4.7-1-6.8l0-0.1l-1.2-0.4l-1-0.3c-1.3-0.5-3-0.7-4.6-0.7C30.7,136.9,26.2,140.9,26.2,146.6M49.9,154.7c0,8.3,5.8,16.7,18.7,16.7c3.3,0,7.7-1,9.5-1.5c0.9-2,2.1-6.3,2.6-8.5l0-0.1l-1.6-0.3l0,0.1c-2.6,5.3-5.1,8.2-10.6,8.2c-7.1,0-11.9-6.4-11.9-15.8c0-6.6,3.1-14.3,11.9-14.3c5.2,0,8,2.2,9.4,7.4l0,0.1l1.6-0.2l-0.2-2.3l-0.7-5.9h-0.1l-0.9-0.2c-1.7-0.4-4.6-1.1-8.2-1.1C58,136.9,49.9,144.2,49.9,154.7M118.5,137.6h-14.4v1.6l0.1,0c3.7,0.3,4.2,0.5,4.2,6.1v6.7H93.1v-6.7c0-5.5,0.5-5.8,4.1-6.1l0.1,0v-1.6H82.7v1.6l0.1,0c4.3,0.3,4.6,0.7,4.6,6.1V163c0,5.3-0.3,5.8-4.4,6.1l-0.1,0v1.6h14.6v-1.6l-0.1,0c-3.8-0.3-4.3-0.6-4.3-6.1v-8.5h15.2v8.5c0,5.4-0.3,5.8-4.6,6.1l-0.1,0v1.6h14.8v-1.6l-0.1,0c-3.8-0.3-4.3-0.5-4.3-6.1v-17.7c0-5.4,0.3-5.8,4.3-6.1l0.1,0L118.5,137.6z M169.2,137.6h-11.7v1.6l1.8,0.1c1,0.1,1.5,0.3,1.8,0.7c0.2,0.2,0.2,0.5,0.2,1c0,0.5-0.1,1.3-0.4,2.3c-0.1,0.5-2.9,11.4-5.1,18.8c-0.4-1-8.8-23.9-8.8-23.9l0-0.1H145c0,0-7.5,23.6-7.6,24c-0.3-1.1-5.9-19.6-5.9-19.6c-0.2-0.7-0.3-1.3-0.3-1.7c0-0.3,0.1-0.6,0.2-0.7c0.3-0.4,0.8-0.6,1.7-0.7c0,0,1.6-0.1,1.6-0.1v-0.1v-1.5h-13.8v1.6l0.1,0c2.7,0.3,3.5,0.6,4.9,4.9l8.3,27h2.4c0,0,7.8-23.3,7.8-23.6c0.4,1,8.6,23.5,8.6,23.5l0,0.1h2.4l0-0.1c4.7-15.6,8.5-26.6,8.5-26.7c1.7-4.6,2.1-4.8,5.2-5.1l0.1,0L169.2,137.6z M177.8,145.6c0,0.1-3.8,10.7-3.9,10.9h7.8C181.6,156.3,177.9,145.7,177.8,145.6z M190.6,164c1.7,4.6,2.5,4.8,5.3,5.1l0.1,0v1.6h-13.5v-1.6l1.5-0.2c0.9-0.1,1.4-0.3,1.6-0.6c0.1-0.1,0.1-0.3,0.1-0.5c0-0.4-0.1-0.8-0.3-1.5c-0.5-1.5-1.7-4.5-2.7-7.2h-9.3c-0.6,1.3-1.3,3.6-2,5.6l-0.3,0.8c-0.3,0.9-0.4,1.5-0.4,2c0,0.3,0.1,0.5,0.2,0.7c0.3,0.4,0.8,0.6,1.9,0.7l1.5,0.2v1.6h-11.4v-1.6l0.1,0c3.1-0.4,3.6-0.6,5.4-5.1l10.3-26.5l2.1-0.2l0.1,0l3.4,9.2L190.6,164z M208.1,152h1.9c4.5,0,7-2.2,7-6.2c0-5.6-4.8-6.1-6.3-6.1c-1.6,0-2.2,0.2-2.3,0.2c-0.4,0.2-0.4,1.1-0.4,2.2V152z M212.4,137.6c3.8,0,5.9,0.4,7.8,1.7c1.9,1.3,2.9,3.2,2.9,5.8c0,4.6-4.5,6.8-7,7.3c5.6,0.8,8.9,3.9,8.9,8.5c0,3.3-1.5,5.8-4.6,7.7c-2.2,1.3-5.7,2-9.7,2H198v-1.6l0.1,0c3.8-0.3,4.3-0.6,4.3-6.1v-17.7c0-5.5-0.4-5.8-4-6.1l-0.1,0v-1.6h0.1H212.4z M208.1,154v8.9c0,2.5,0.2,4.1,1,4.9c0.5,0.5,1.3,0.7,2.8,0.7c3.2,0,6.7-1.8,6.7-7c0-4.8-3.2-7.5-8.8-7.5H208.1z"/>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Charles Schwab</h3>
+                <div class="broker-modes"><span class="mode-badge live">LIVE</span><span class="mode-badge oco">OCO</span><span class="mode-badge stream">STREAM</span></div>
+                <div class="broker-asset-types">
+                    <span class="asset-tag">Stocks</span><span class="asset-tag">Options</span><span class="asset-tag">Brackets</span>
+                </div>
+            </div>
+            <!-- Alpaca — actual logo: alpaca figure in circle from alpaca.markets SVG -->
+            <div class="broker-card animate-on-scroll" style="--card-accent: rgba(255,205,0,0.2);">
+                <div class="broker-logo alpaca">
+                    <svg viewBox="0 0 310 310" width="48" height="48" fill="white">
+                        <path d="M106.7 301.2l12.1-128.4h-1.1c-9.7 0-17.7-3.5-25.1-9.8-7.4-6.3-12.3-15.1-13.8-24.8l22.9-14.9v-.2c0-10.1 3.9-19.9 10.9-27.2 7-7.3 16.5-11.7 26.6-12.1h6.8v-24c4.8 0 9.5 1.7 13.2 4.9 3.7 3.1 6.1 7.5 7 12.3h.3V59.8c3.6 0 7.2 1 10.3 2.8 3.1 1.8 5.7 4.5 7.5 7.7 1.8 3.2 2.7 6.8 2.6 10.4-.1 3.6-1.1 7.2-3 10.3 6.1 4 11.2 9.6 14.7 16.1 3.5 6.5 5.3 13.8 5.3 21.2v155c0 2.3.9 4.4 2.5 6.1 1.6 1.6 3.8 2.5 6 2.5h10.1c49.8-25.4 83.9-77.5 83.9-137.5C306.4 69.3 237.8.3 153.2.3 68.6.2 0 69.2 0 154.3c0 68.8 44.9 127.1 106.7 146.9z" fill-rule="evenodd" clip-rule="evenodd"/>
+                        <path d="M123.4 130.4c0-1.2.5-2.4 1.4-3.3.9-.9 2.1-1.4 3.3-1.4h13.6c0 2.5-1 4.9-2.7 6.7-1.8 1.8-4.1 2.8-6.6 2.8H123l.4-4.8z"/>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Alpaca</h3>
+                <div class="broker-modes"><span class="mode-badge live">LIVE</span><span class="mode-badge paper">PAPER</span><span class="mode-badge oco">OCO</span></div>
+                <div class="broker-asset-types">
+                    <span class="asset-tag">Stocks</span><span class="asset-tag">Options</span><span class="asset-tag">Brackets</span>
+                </div>
+            </div>
+            <!-- Interactive Brokers — actual logo: geometric figure mark from IBKR SVG -->
+            <div class="broker-card animate-on-scroll" style="--card-accent: rgba(215,25,32,0.2);">
+                <div class="broker-logo ibkr">
+                    <svg viewBox="-2 -2 34 70" width="28" height="48" fill="white">
+                        <polygon points="0.9,33.4 0.9,64.6 29.3,0.5" opacity="0.95"/>
+                        <polygon points="0.9,64.6 0.9,33.4 29.3,64.6" opacity="0.7"/>
+                        <circle cx="15" cy="49" r="8.5" opacity="0.85"/>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Interactive Brokers</h3>
+                <div class="broker-modes"><span class="mode-badge live">LIVE</span><span class="mode-badge paper">PAPER</span></div>
+                <div class="broker-asset-types">
+                    <span class="asset-tag">Stocks</span><span class="asset-tag">Options</span><span class="asset-tag">Futures</span><span class="asset-tag">SPX</span>
+                </div>
+            </div>
+            <!-- Tastytrade — brand mark: cherry icon from tastytrade.com -->
+            <div class="broker-card animate-on-scroll" style="--card-accent: rgba(255,68,68,0.2);">
+                <div class="broker-logo tastytrade">
+                    <svg viewBox="0 0 56 56" width="44" height="44" fill="white">
+                        <circle cx="22" cy="38" r="12"/>
+                        <circle cx="36" cy="40" r="10" opacity="0.85"/>
+                        <path d="M26 26c-2-8 2-16 8-20" stroke="white" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+                        <path d="M32 28c2-6 6-12 12-14" stroke="white" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+                        <path d="M34 10c2 2 3 5 2 8" stroke="white" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.7"/>
+                        <ellipse cx="38" cy="8" rx="5" ry="3" transform="rotate(-30 38 8)" opacity="0.6"/>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Tastytrade</h3>
+                <div class="broker-modes"><span class="mode-badge live">LIVE</span></div>
+                <div class="broker-asset-types">
+                    <span class="asset-tag">Stocks</span><span class="asset-tag">Options</span><span class="asset-tag">Greeks</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Capabilities -->
+    <section class="section">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Capabilities</div>
+            <h2 class="section-title">Everything at Your Fingertips</h2>
+        </div>
+        <div class="capabilities-grid">
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">📈</div><div class="capability-text">Real-time P&L Tracking</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">⚡</div><div class="capability-text">Sub-Second Execution</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">🎯</div><div class="capability-text">OCO Bracket Orders</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">📋</div><div class="capability-text">Full Trade Audit Log</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">🔐</div><div class="capability-text">RSA-Encrypted Credentials</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">📊</div><div class="capability-text">Options Chain Viewer</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">🏆</div><div class="capability-text">Leaderboard & TQS</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">⚙️</div><div class="capability-text">Per-Channel Configuration</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">🔄</div><div class="capability-text">Auto-Save & Recovery</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">📡</div><div class="capability-text">WebSocket Streaming</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">🧩</div><div class="capability-text">Conditional Breakouts</div></div>
+            <div class="capability-item animate-on-scroll"><div class="capability-icon">📱</div><div class="capability-text">Web + Desktop App</div></div>
+        </div>
+    </section>
+
+    <!-- Leaderboard Showcase -->
+    <section class="section showcase-bg">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Performance Tracking</div>
+            <h2 class="section-title">Leaderboard & P&L Analytics</h2>
+            <p class="section-desc">Track your performance, compare with other traders, and analyze every execution</p>
+        </div>
+        <div class="showcase-mockup animate-on-scroll">
+            <div class="mockup-window">
+                <div class="mockup-header">
+                    <div class="mockup-dots"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
+                    <span class="mockup-title">BotifyTrades - Leaderboard</span>
+                </div>
+                <div class="mockup-content">
+                    <table class="leaderboard-table">
+                        <thead><tr><th>Rank</th><th>Trader</th><th>Total P&L</th><th>Win Rate</th><th>TQS</th></tr></thead>
+                        <tbody>
+                            <tr class="gold-row"><td><span class="rank gold">1</span></td><td><span class="trader-name">&#x1F3C6; &#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;</span></td><td class="pnl-positive">+$47,892</td><td>87.3%</td><td><div class="tqs-bar" style="--tqs: 94%"><span>94</span></div></td></tr>
+                            <tr class="silver-row"><td><span class="rank silver">2</span></td><td><span class="trader-name">&#x1F948; &#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;</span></td><td class="pnl-positive">+$38,451</td><td>82.1%</td><td><div class="tqs-bar" style="--tqs: 89%"><span>89</span></div></td></tr>
+                            <tr class="bronze-row"><td><span class="rank bronze">3</span></td><td><span class="trader-name">&#x1F949; &#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;</span></td><td class="pnl-positive">+$31,204</td><td>79.5%</td><td><div class="tqs-bar" style="--tqs: 85%"><span>85</span></div></td></tr>
+                            <tr class="you-row"><td><span class="rank you">5</span></td><td><span class="trader-name">&#x2B50; You</span></td><td class="pnl-positive">+$18,934</td><td>74.2%</td><td><div class="tqs-bar" style="--tqs: 78%"><span>78</span></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Portfolio Simulation -->
+    <section class="section simulation-bg">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Projections</div>
+            <h2 class="section-title">Portfolio Simulation Engine</h2>
+            <p class="section-desc">Project future portfolio growth based on real trader performance statistics</p>
+        </div>
+        <div class="sim-grid animate-on-scroll">
+            <div class="sim-input-card">
+                <h4>Configuration</h4>
+                <div class="sim-field"><label>Simulation Target</label><div class="sim-value">User / Channel</div></div>
+                <div class="sim-field"><label>Starting Portfolio</label><div class="sim-value">$3,000</div></div>
+                <div class="sim-field"><label>Simulation Period</label><div class="sim-value">30 Days</div></div>
+                <div class="sim-field"><label>Risk Per Trade</label><div class="sim-value">$300 Fixed</div></div>
+            </div>
+            <div class="sim-results-card">
+                <h4>Projected Results</h4>
+                <div class="sim-stats">
+                    <div class="sim-stat"><span class="stat-label">Final Balance</span><span class="stat-value positive">$5,847</span></div>
+                    <div class="sim-stat"><span class="stat-label">Total Return</span><span class="stat-value positive">+94.9%</span></div>
+                    <div class="sim-stat"><span class="stat-label">Monthly Est.</span><span class="stat-value positive">$2,847</span></div>
+                    <div class="sim-stat"><span class="stat-label">Edge Quality</span><span class="stat-value warning">Strong</span></div>
+                </div>
+                <div class="sim-extras">
+                    <div class="sim-extra-item">&#x1F4C8; Growth Chart</div>
+                    <div class="sim-extra-item">&#x1F4A1; Strategy Tips</div>
+                    <div class="sim-extra-item">&#x1F4CB; Daily Breakdown</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section" id="waitlist">
+        <div class="cta-glow"></div>
+        <h2 class="cta-title">Ready to Automate Your Trading?</h2>
+        <p class="cta-desc">Join our waitlist for early access and exclusive launch pricing</p>
+        <form class="waitlist-form" action="/waitlist/signup" method="POST" onsubmit="return handleWaitlistSubmit(event)">
+            <div class="form-row">
+                <input type="email" name="email" class="waitlist-input" placeholder="Enter your email address" required>
+                <button type="submit" class="btn-primary">Join Waitlist <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Referral -->
+    <section class="section referral-bg">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Earn Rewards</div>
+            <h2 class="section-title">Invite Friends, Get Free Access</h2>
+            <p class="section-desc">Share your referral code and earn bonus days for every friend who joins</p>
+        </div>
+        <div class="referral-grid animate-on-scroll">
+            <div class="referral-card"><div class="reward-tier"><span class="reward-count">1</span><span class="reward-label">Referral</span></div><div class="reward-value">+7 Days Free</div></div>
+            <div class="referral-card featured"><div class="reward-tier"><span class="reward-count">3</span><span class="reward-label">Referrals</span></div><div class="reward-value">+30 Days Free</div></div>
+            <div class="referral-card"><div class="reward-tier"><span class="reward-count">5</span><span class="reward-label">Referrals</span></div><div class="reward-value">+60 Days + Priority</div></div>
+        </div>
+        <div class="share-buttons animate-on-scroll">
+            <button class="share-btn twitter" onclick="shareTwitter()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg> Share on X
+            </button>
+            <button class="share-btn discord" onclick="joinDiscord()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.79 19.79 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.618-1.25.077.077 0 00-.079-.037A19.74 19.74 0 003.677 4.37a.07.07 0 00-.032.028C.533 9.046-.32 13.58.099 18.057a.08.08 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.11 13.11 0 01-1.872-.892.077.077 0 01-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 01.078-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.009c.12.099.246.198.373.292a.077.077 0 01-.006.127 12.3 12.3 0 01-1.873.892.076.076 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.84 19.84 0 006.002-3.03.077.077 0 00.031-.055c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.029zM8.02 15.33c-1.183 0-2.157-1.086-2.157-2.419s.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42 0 1.332-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.086-2.157-2.419s.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42 0 1.332-.946 2.418-2.157 2.418z"/></svg> Join Discord
+            </button>
+        </div>
+        <p class="animate-on-scroll" style="color: var(--text-muted); font-size: 14px; margin-top: 1.5rem;">Feedback? Reach us on X <a href="https://x.com/BotifyTrades" target="_blank" style="color: var(--aurora-cyan); text-decoration: none; font-weight: 600;">@BotifyTrades</a></p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-main">
+            <div class="footer-brand">
+                <div class="footer-brand-name">BotifyTrades</div>
+                <p class="footer-brand-desc">Automated multi-broker trade execution platform. From signal detection to order placement in under one second.</p>
+                <div style="display: flex; gap: 12px; margin-top: 1rem;">
+                    <a href="https://x.com/BotifyTrades" target="_blank" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); transition: all 0.3s;" title="Follow @BotifyTrades on X">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                    </a>
+                    <a href="javascript:void(0)" onclick="joinDiscord()" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); transition: all 0.3s;" title="Join Discord">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.79 19.79 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.618-1.25.077.077 0 00-.079-.037A19.74 19.74 0 003.677 4.37a.07.07 0 00-.032.028C.533 9.046-.32 13.58.099 18.057a.08.08 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.11 13.11 0 01-1.872-.892.077.077 0 01-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 01.078-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.009c.12.099.246.198.373.292a.077.077 0 01-.006.127 12.3 12.3 0 01-1.873.892.076.076 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.84 19.84 0 006.002-3.03.077.077 0 00.031-.055c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.029zM8.02 15.33c-1.183 0-2.157-1.086-2.157-2.419s.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42 0 1.332-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.086-2.157-2.419s.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42 0 1.332-.946 2.418-2.157 2.418z"/></svg>
+                    </a>
+                </div>
+            </div>
+            <div class="footer-col">
+                <h5>Platform</h5>
+                <ul>
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#brokers">Supported Brokers</a></li>
+                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#waitlist">Join Waitlist</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5>Resources</h5>
+                <ul>
+                    <li><a href="/">Dashboard</a></li>
+                    <li><a href="/login">Sign In</a></li>
+                    <li><a href="/signup">Create Account</a></li>
+                    <li><a href="javascript:void(0)" onclick="joinDiscord()">Discord Community</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5>Legal</h5>
+                <ul>
+                    <li><a href="#">Terms of Service</a></li>
+                    <li><a href="#">Privacy Policy</a></li>
+                    <li><a href="#">Risk Disclosure</a></li>
+                    <li><a href="#">Refund Policy</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <hr class="footer-divider">
+
+        <div class="footer-disclaimer">
+            <div class="disclaimer-title">Important Disclaimer</div>
+            <p class="disclaimer-text">
+                <strong>BotifyTrades is a software tool for trade execution automation only.</strong> It is not a financial advisor, broker-dealer, investment advisor, or signal provider. BotifyTrades does not provide financial advice, investment recommendations, trading signals, or any form of solicitation to buy or sell securities.
+            </p>
+            <p class="disclaimer-text" style="margin-top: 0.75rem;">
+                <strong>No financial advice.</strong> Nothing on this platform constitutes investment advice, financial advice, trading advice, or any other sort of advice. You should not treat any of the platform's content or features as such. BotifyTrades does not recommend that any security, portfolio, transaction, or investment strategy is suitable for any specific person.
+            </p>
+            <p class="disclaimer-text" style="margin-top: 0.75rem;">
+                <strong>No signal recommendations.</strong> BotifyTrades does not create, endorse, recommend, or verify any trading signals. The platform merely automates the execution of signals sourced from third-party channels selected by the user. Signal quality, accuracy, and reliability are entirely the responsibility of the signal provider and the user's own due diligence.
+            </p>
+            <p class="disclaimer-text" style="margin-top: 0.75rem;">
+                <strong>Trading involves substantial risk.</strong> Trading stocks, options, and other financial instruments involves significant risk of loss and is not suitable for all investors. Past performance is not indicative of future results. You could lose some or all of your invested capital. Only trade with money you can afford to lose.
+            </p>
+            <p class="disclaimer-text" style="margin-top: 0.75rem;">
+                <strong>User responsibility.</strong> By using BotifyTrades, you acknowledge that all trading decisions and their outcomes are solely your responsibility. You are responsible for evaluating the risks associated with the use of any trading signals, strategies, or automated execution. Any simulated or hypothetical performance results shown have inherent limitations and do not represent actual trading.
+            </p>
+        </div>
+
+        <hr class="footer-divider">
+
+        <div class="footer-bottom">
+            <div class="footer-copyright">&copy; 2026 BotifyTrades. All rights reserved.</div>
+            <div class="footer-legal-links">
+                <a href="#">Terms</a>
+                <a href="#">Privacy</a>
+                <a href="#">Risk Disclosure</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const observerOptions = { threshold: 0.1, rootMargin: '0px 0px -50px 0px' };
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+        }, observerOptions);
+        document.querySelectorAll('.animate-on-scroll').forEach(el => observer.observe(el));
+
+        window.addEventListener('scroll', () => {
+            const navbar = document.querySelector('.nav-bar');
+            navbar.classList.toggle('scrolled', window.scrollY > 100);
+        });
+
+        const shareUrl = window.location.origin;
+        const shareText = 'Check out @BotifyTrades - Automate your trading execution across 5 brokers!';
+        function shareTwitter() { window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`, '_blank'); }
+        function joinDiscord() { window.open('https://discord.gg/sr9YJFgXMc', '_blank'); }
+
+        function handleWaitlistSubmit(event) {
+            event.preventDefault();
+            const form = event.target;
+            const email = form.querySelector('input[name="email"]').value;
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = 'Joining...'; submitBtn.disabled = true;
+
+            fetch('/api/waitlist/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const discordLink = data.discord_link || 'https://discord.gg/sr9YJFgXMc';
+                    form.innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:48px;margin-bottom:16px;">&#x1F389;</div><h3 style="color:#0FF0B3;font-size:1.5rem;margin-bottom:12px;">You\'re on the list!</h3><p style="color:#94A3B8;margin-bottom:24px;">Check your email for the Discord invite link and community updates.</p><a href="' + discordLink + '" target="_blank" style="display:inline-flex;align-items:center;gap:10px;background:#5865F2;color:white;text-decoration:none;padding:14px 28px;border-radius:12px;font-weight:700;font-size:16px;">Join Discord Community</a></div>';
+                } else { submitBtn.innerHTML = originalText; submitBtn.disabled = false; alert(data.error || 'Something went wrong.'); }
+            })
+            .catch(() => { submitBtn.innerHTML = originalText; submitBtn.disabled = false; alert('Something went wrong.'); });
+            return false;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BotifyTrades Mobile — Architecture &amp; Design</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg-primary: #06080f;
+    --bg-secondary: #0d1117;
+    --bg-card: #151b28;
+    --bg-card-alt: #1a2236;
+    --border: #232e45;
+    --border-light: #2d3b56;
+    --text-primary: #f0f4fc;
+    --text-secondary: #8b9dc3;
+    --text-muted: #5a6e8c;
+    --accent-blue: #3b82f6;
+    --accent-cyan: #06b6d4;
+    --accent-purple: #8b5cf6;
+    --accent-green: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --accent-pink: #ec4899;
+    --accent-indigo: #6366f1;
+    --gradient-hero: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+    --gradient-blue: linear-gradient(135deg, #3b82f6, #06b6d4);
+    --gradient-green: linear-gradient(135deg, #10b981, #06b6d4);
+    --gradient-purple: linear-gradient(135deg, #8b5cf6, #6366f1);
+    --gradient-amber: linear-gradient(135deg, #f59e0b, #ef4444);
+    --gradient-pink: linear-gradient(135deg, #ec4899, #8b5cf6);
+    --shadow-xl: 0 25px 80px rgba(0,0,0,0.5);
+    --shadow-card: 0 8px 32px rgba(0,0,0,0.3);
+    --shadow-glow-blue: 0 0 60px rgba(59,130,246,0.12);
+    --shadow-glow-purple: 0 0 60px rgba(139,92,246,0.12);
+    --radius: 16px;
+    --radius-sm: 10px;
+    --radius-xs: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg-primary); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+
+  /* ── Layout ── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
+
+  /* ── Navigation ── */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; height: 64px;
+    background: rgba(6,8,15,0.88); backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px; z-index: 1000;
+  }
+  .nav-brand { display: flex; align-items: center; gap: 14px; }
+  .nav-logo {
+    width: 38px; height: 38px; background: var(--gradient-hero);
+    border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 15px; color: white; letter-spacing: -0.5px;
+  }
+  .nav-title { font-weight: 700; font-size: 1.05rem; color: var(--text-primary); }
+  .nav-subtitle { font-size: 0.75rem; color: var(--text-muted); font-weight: 400; margin-left: 4px; }
+  .nav-links { display: flex; gap: 8px; }
+  .nav-links a {
+    color: var(--text-secondary); text-decoration: none; font-size: 0.82rem;
+    padding: 6px 14px; border-radius: 8px; font-weight: 500;
+    transition: all 0.2s;
+  }
+  .nav-links a:hover { color: var(--text-primary); background: rgba(59,130,246,0.1); }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 140px 0 80px; text-align: center; position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+    width: 900px; height: 900px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, rgba(139,92,246,0.04) 40%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 18px;
+    background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25);
+    border-radius: 100px; font-size: 0.78rem; color: var(--accent-blue);
+    font-weight: 600; margin-bottom: 28px; letter-spacing: 0.5px;
+  }
+  .hero-badge .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .hero h1 {
+    font-size: 3.6rem; font-weight: 900; letter-spacing: -1.5px; line-height: 1.1;
+    background: var(--gradient-hero); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 20px;
+  }
+  .hero .subtitle {
+    font-size: 1.2rem; color: var(--text-secondary); max-width: 700px; margin: 0 auto 40px;
+    font-weight: 400; line-height: 1.8;
+  }
+
+  /* ── Sections ── */
+  .section { padding: 80px 0; position: relative; }
+  .section-alt { background: var(--bg-secondary); }
+  .section-label {
+    display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px;
+    border-radius: 100px; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 16px;
+  }
+  .section-title {
+    font-size: 2.2rem; font-weight: 800; letter-spacing: -0.8px; margin-bottom: 14px;
+  }
+  .section-desc {
+    font-size: 1.05rem; color: var(--text-secondary); max-width: 680px; margin-bottom: 48px;
+    line-height: 1.8;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 32px; transition: all 0.3s ease;
+  }
+  .card:hover { border-color: var(--border-light); transform: translateY(-2px); box-shadow: var(--shadow-card); }
+
+  /* ── Architecture Diagram ── */
+  .arch-diagram {
+    display: flex; align-items: center; justify-content: center; gap: 0;
+    padding: 60px 20px; flex-wrap: nowrap; position: relative;
+  }
+  .arch-node {
+    background: var(--bg-card); border: 2px solid var(--border); border-radius: var(--radius);
+    padding: 28px 24px; text-align: center; min-width: 220px; max-width: 260px;
+    position: relative; z-index: 2;
+  }
+  .arch-node.desktop { border-color: var(--accent-blue); box-shadow: 0 0 30px rgba(59,130,246,0.1); }
+  .arch-node.server { border-color: var(--accent-purple); box-shadow: 0 0 30px rgba(139,92,246,0.1); }
+  .arch-node.mobile { border-color: var(--accent-green); box-shadow: 0 0 30px rgba(16,185,129,0.1); }
+  .arch-node-icon {
+    width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px; font-size: 26px;
+  }
+  .arch-node.desktop .arch-node-icon { background: rgba(59,130,246,0.15); }
+  .arch-node.server .arch-node-icon { background: rgba(139,92,246,0.15); }
+  .arch-node.mobile .arch-node-icon { background: rgba(16,185,129,0.15); }
+  .arch-node h3 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+  .arch-node p { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; }
+  .arch-node .tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 12px; }
+  .arch-node .tag {
+    font-size: 0.65rem; padding: 3px 8px; border-radius: 4px; font-weight: 600;
+    background: rgba(255,255,255,0.05); color: var(--text-muted);
+  }
+
+  .arch-arrow {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 0 8px; z-index: 1; min-width: 120px;
+  }
+  .arch-arrow-line {
+    width: 80px; height: 2px; position: relative;
+    background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+  }
+  .arch-arrow-line::after {
+    content: ''; position: absolute; right: -4px; top: -4px;
+    width: 0; height: 0; border-left: 8px solid var(--accent-cyan);
+    border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+  }
+  .arch-arrow-line.bidir::before {
+    content: ''; position: absolute; left: -4px; top: -4px;
+    width: 0; height: 0; border-right: 8px solid var(--accent-cyan);
+    border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+  }
+  .arch-arrow-label {
+    font-size: 0.65rem; color: var(--accent-cyan); font-weight: 600;
+    white-space: nowrap; text-align: center; letter-spacing: 0.3px;
+  }
+  .arch-arrow-sublabel {
+    font-size: 0.58rem; color: var(--text-muted); white-space: nowrap; text-align: center;
+  }
+
+  /* ── Principle Cards ── */
+  .principles-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 40px;
+  }
+  .principle-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 28px; position: relative; overflow: hidden;
+  }
+  .principle-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  }
+  .principle-card.p1::before { background: var(--gradient-blue); }
+  .principle-card.p2::before { background: var(--gradient-green); }
+  .principle-card.p3::before { background: var(--gradient-purple); }
+  .principle-icon {
+    width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center;
+    justify-content: center; font-size: 20px; margin-bottom: 16px;
+  }
+  .p1 .principle-icon { background: rgba(59,130,246,0.12); }
+  .p2 .principle-icon { background: rgba(16,185,129,0.12); }
+  .p3 .principle-icon { background: rgba(139,92,246,0.12); }
+  .principle-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+  .principle-card p { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.7; }
+
+  /* ── Data Flow ── */
+  .flow-container { margin: 40px 0; }
+  .flow-scenario {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 32px; margin-bottom: 24px;
+  }
+  .flow-scenario h3 {
+    font-size: 1.05rem; font-weight: 700; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .flow-scenario .flow-desc {
+    font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 24px;
+  }
+  .flow-steps {
+    display: flex; flex-direction: column; gap: 0; position: relative;
+    padding-left: 30px;
+  }
+  .flow-steps::before {
+    content: ''; position: absolute; left: 11px; top: 12px; bottom: 12px;
+    width: 2px; background: linear-gradient(to bottom, var(--accent-blue), var(--accent-purple), var(--accent-green));
+    border-radius: 1px;
+  }
+  .flow-step {
+    display: flex; align-items: flex-start; gap: 16px; padding: 10px 0; position: relative;
+  }
+  .flow-step-dot {
+    width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 11px; font-weight: 700; color: white;
+    flex-shrink: 0; margin-left: -42px; position: relative; z-index: 1;
+  }
+  .flow-step-dot.desktop { background: var(--accent-blue); }
+  .flow-step-dot.server { background: var(--accent-purple); }
+  .flow-step-dot.mobile { background: var(--accent-green); }
+  .flow-step-content { flex: 1; }
+  .flow-step-actor {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+    margin-bottom: 2px;
+  }
+  .flow-step-actor.desktop { color: var(--accent-blue); }
+  .flow-step-actor.server { color: var(--accent-purple); }
+  .flow-step-actor.mobile { color: var(--accent-green); }
+  .flow-step-text { font-size: 0.85rem; color: var(--text-secondary); }
+  .flow-step-msg {
+    display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+    background: rgba(255,255,255,0.04); padding: 4px 10px; border-radius: 4px;
+    color: var(--accent-cyan); margin-top: 4px; border: 1px solid rgba(6,182,212,0.15);
+  }
+
+  /* ── Security Model ── */
+  .security-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 40px 0;
+  }
+  .security-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 28px; position: relative; overflow: hidden;
+  }
+  .security-card.safe { border-color: rgba(16,185,129,0.3); }
+  .security-card.never { border-color: rgba(239,68,68,0.3); }
+  .security-card h3 {
+    font-size: 0.95rem; font-weight: 700; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .security-list { list-style: none; }
+  .security-list li {
+    font-size: 0.85rem; color: var(--text-secondary); padding: 6px 0;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .security-list .icon-safe { color: var(--accent-green); }
+  .security-list .icon-block { color: var(--accent-red); }
+
+  /* ── Phone Mockup ── */
+  .phone-section { display: flex; align-items: flex-start; gap: 60px; }
+  .phone-details { flex: 1; }
+  .phone-mockup-wrapper { flex-shrink: 0; }
+  .phone-mockup {
+    width: 280px; height: 560px; background: #0d1117; border: 3px solid #2d3b56;
+    border-radius: 36px; padding: 12px; position: relative; box-shadow: var(--shadow-xl);
+  }
+  .phone-notch {
+    width: 100px; height: 24px; background: #06080f; border-radius: 0 0 14px 14px;
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 5;
+  }
+  .phone-screen {
+    width: 100%; height: 100%; background: var(--bg-primary); border-radius: 24px;
+    overflow: hidden; position: relative;
+  }
+  .phone-statusbar {
+    height: 36px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; font-size: 11px; color: var(--text-muted); font-weight: 600;
+  }
+  .phone-header {
+    padding: 8px 16px 12px; border-bottom: 1px solid var(--border);
+  }
+  .phone-header h4 { font-size: 1.1rem; font-weight: 800; }
+  .phone-header .bot-status {
+    display: flex; align-items: center; gap: 6px; font-size: 0.7rem;
+    color: var(--accent-green); font-weight: 600; margin-top: 2px;
+  }
+  .phone-header .bot-status .online-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  .phone-content { padding: 12px 14px; }
+
+  .phone-pnl-card {
+    background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 12px; padding: 14px; margin-bottom: 12px; text-align: center;
+  }
+  .phone-pnl-label { font-size: 0.65rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
+  .phone-pnl-value { font-size: 1.8rem; font-weight: 900; color: var(--accent-green); margin: 2px 0; }
+  .phone-pnl-sub { font-size: 0.68rem; color: var(--text-secondary); }
+
+  .phone-stat-row {
+    display: flex; gap: 8px; margin-bottom: 12px;
+  }
+  .phone-stat {
+    flex: 1; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px; text-align: center;
+  }
+  .phone-stat .val { font-size: 1.1rem; font-weight: 800; }
+  .phone-stat .lbl { font-size: 0.6rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+  .phone-position {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px;
+  }
+  .phone-position .pos-header {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .phone-position .pos-symbol { font-weight: 800; font-size: 0.85rem; }
+  .phone-position .pos-pnl { font-weight: 700; font-size: 0.8rem; }
+  .phone-position .pos-pnl.green { color: var(--accent-green); }
+  .phone-position .pos-pnl.red { color: var(--accent-red); }
+  .phone-position .pos-details {
+    display: flex; gap: 12px; margin-top: 4px; font-size: 0.65rem; color: var(--text-muted);
+  }
+  .phone-position .pos-broker {
+    font-size: 0.58rem; padding: 2px 6px; border-radius: 3px;
+    font-weight: 700; background: rgba(59,130,246,0.15); color: var(--accent-blue);
+  }
+
+  .phone-btn-row { display: flex; gap: 8px; margin-top: 12px; }
+  .phone-btn {
+    flex: 1; padding: 8px; border-radius: 8px; text-align: center;
+    font-size: 0.7rem; font-weight: 700; border: none; cursor: pointer;
+  }
+  .phone-btn.pause { background: rgba(245,158,11,0.15); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.3); }
+  .phone-btn.close { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+
+  /* ── Screen List ── */
+  .screens-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 40px 0;
+  }
+  .screen-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; text-align: center;
+  }
+  .screen-icon {
+    width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center;
+    justify-content: center; font-size: 22px; margin: 0 auto 14px;
+    background: rgba(99,102,241,0.1);
+  }
+  .screen-card h4 { font-size: 0.9rem; font-weight: 700; margin-bottom: 6px; }
+  .screen-card p { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.6; }
+
+  /* ── Pairing Flow ── */
+  .pairing-flow {
+    display: flex; align-items: stretch; gap: 0; margin: 40px 0; justify-content: center;
+  }
+  .pairing-step {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 28px 24px; text-align: center; flex: 1; max-width: 240px;
+    position: relative;
+  }
+  .pairing-step .step-num {
+    width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 0.8rem; font-weight: 800; color: white;
+    margin: 0 auto 14px; background: var(--gradient-hero);
+  }
+  .pairing-step h4 { font-size: 0.9rem; font-weight: 700; margin-bottom: 6px; }
+  .pairing-step p { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; }
+  .pairing-connector {
+    display: flex; align-items: center; padding: 0 8px; color: var(--text-muted); font-size: 1.2rem;
+  }
+
+  /* ── WS Protocol ── */
+  .protocol-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 40px 0;
+  }
+  .protocol-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; overflow: hidden;
+  }
+  .protocol-card h3 {
+    font-size: 0.9rem; font-weight: 700; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .protocol-card .arrow-up { color: var(--accent-blue); }
+  .protocol-card .arrow-down { color: var(--accent-green); }
+  .msg-item {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+    background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 6px;
+    margin-bottom: 6px; border-left: 3px solid var(--border);
+    color: var(--text-secondary); line-height: 1.5;
+  }
+  .msg-item .msg-type { color: var(--accent-cyan); font-weight: 600; }
+  .msg-item .msg-key { color: var(--accent-purple); }
+  .msg-item .msg-val { color: var(--accent-amber); }
+  .msg-item .msg-str { color: var(--accent-green); }
+
+  /* ── Push Notifications ── */
+  .push-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 40px 0;
+  }
+  .push-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 20px; display: flex; align-items: flex-start; gap: 14px;
+  }
+  .push-icon {
+    width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center;
+    justify-content: center; font-size: 16px; flex-shrink: 0;
+  }
+  .push-card .push-title { font-size: 0.82rem; font-weight: 700; margin-bottom: 2px; }
+  .push-card .push-example {
+    font-size: 0.75rem; color: var(--text-secondary); font-style: italic; line-height: 1.5;
+  }
+  .push-card .push-priority {
+    font-size: 0.6rem; font-weight: 700; padding: 2px 6px; border-radius: 3px;
+    margin-top: 6px; display: inline-block; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .priority-critical { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+  .priority-high { background: rgba(245,158,11,0.15); color: var(--accent-amber); }
+  .priority-medium { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+  .priority-low { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+
+  /* ── Timeline ── */
+  .timeline { margin: 40px 0; position: relative; }
+  .timeline::before {
+    content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px;
+    background: linear-gradient(to bottom, var(--accent-blue), var(--accent-purple), var(--accent-green), var(--accent-amber));
+    transform: translateX(-50%);
+  }
+  .timeline-item {
+    display: flex; margin-bottom: 40px; position: relative;
+  }
+  .timeline-item:nth-child(odd) { flex-direction: row; }
+  .timeline-item:nth-child(even) { flex-direction: row-reverse; }
+  .timeline-content {
+    width: 44%; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px;
+  }
+  .timeline-item:nth-child(odd) .timeline-content { margin-right: auto; }
+  .timeline-item:nth-child(even) .timeline-content { margin-left: auto; }
+  .timeline-dot {
+    width: 16px; height: 16px; border-radius: 50%; position: absolute;
+    left: 50%; top: 28px; transform: translateX(-50%); z-index: 2;
+    border: 3px solid var(--bg-primary);
+  }
+  .timeline-item:nth-child(1) .timeline-dot { background: var(--accent-blue); }
+  .timeline-item:nth-child(2) .timeline-dot { background: var(--accent-purple); }
+  .timeline-item:nth-child(3) .timeline-dot { background: var(--accent-green); }
+  .timeline-item:nth-child(4) .timeline-dot { background: var(--accent-amber); }
+  .timeline-content .phase-label {
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .timeline-content h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 8px; }
+  .timeline-content p { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px; }
+  .timeline-content .duration {
+    font-size: 0.72rem; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+    display: inline-block;
+  }
+  .timeline-checklist {
+    list-style: none; margin-top: 12px;
+  }
+  .timeline-checklist li {
+    font-size: 0.78rem; color: var(--text-secondary); padding: 3px 0;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .timeline-checklist .check { color: var(--accent-green); font-size: 0.7rem; }
+
+  /* ── Cost Table ── */
+  .cost-table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; margin: 40px 0;
+  }
+  .cost-table th {
+    background: var(--bg-card-alt); padding: 14px 20px; text-align: left;
+    font-size: 0.78rem; font-weight: 700; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid var(--border);
+  }
+  .cost-table td {
+    padding: 12px 20px; font-size: 0.85rem; border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .cost-table tr:last-child td { border-bottom: none; }
+  .cost-table .cost-highlight {
+    color: var(--accent-green); font-weight: 700; font-size: 1rem;
+  }
+  .cost-table .cost-total td {
+    background: rgba(16,185,129,0.06); font-weight: 700; color: var(--text-primary);
+  }
+
+  /* ── Tech Stack ── */
+  .stack-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 40px 0;
+  }
+  .stack-item {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; text-align: center;
+  }
+  .stack-item .stack-icon { font-size: 28px; margin-bottom: 10px; }
+  .stack-item h4 { font-size: 0.85rem; font-weight: 700; margin-bottom: 4px; }
+  .stack-item p { font-size: 0.72rem; color: var(--text-muted); }
+
+  /* ── E2E Encryption ── */
+  .e2e-diagram {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 32px; margin: 40px 0; text-align: center;
+  }
+  .e2e-flow {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    flex-wrap: wrap; margin-top: 20px;
+  }
+  .e2e-box {
+    padding: 12px 20px; border-radius: 10px; font-size: 0.8rem; font-weight: 600;
+    border: 1px solid;
+  }
+  .e2e-box.encrypt { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); color: var(--accent-blue); }
+  .e2e-box.relay { background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.3); color: var(--accent-purple); }
+  .e2e-box.decrypt { background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.3); color: var(--accent-green); }
+  .e2e-arrow { color: var(--text-muted); font-size: 1.2rem; }
+
+  /* ── Desktop Settings Mockup ── */
+  .desktop-mockup {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 0; overflow: hidden; max-width: 600px; margin: 40px auto;
+    box-shadow: var(--shadow-xl);
+  }
+  .desktop-titlebar {
+    height: 36px; background: #1a1f2e; display: flex; align-items: center;
+    padding: 0 14px; gap: 8px; border-bottom: 1px solid var(--border);
+  }
+  .desktop-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .desktop-dot.red { background: #ff5f57; }
+  .desktop-dot.yellow { background: #febc2e; }
+  .desktop-dot.green { background: #28c840; }
+  .desktop-titlebar span { font-size: 0.75rem; color: var(--text-muted); margin-left: 8px; }
+  .desktop-body { padding: 24px 28px; }
+  .desktop-body h3 {
+    font-size: 1rem; font-weight: 700; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .desktop-field {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .desktop-field:last-child { border-bottom: none; }
+  .desktop-field .field-label { font-size: 0.82rem; color: var(--text-secondary); }
+  .desktop-field .field-value {
+    font-size: 0.82rem; font-weight: 600;
+  }
+  .desktop-field .field-value.online { color: var(--accent-green); }
+  .desktop-field .field-value.code {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;
+    color: var(--accent-cyan); letter-spacing: 3px;
+  }
+  .desktop-toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0;
+  }
+  .desktop-toggle .toggle-label { font-size: 0.8rem; color: var(--text-secondary); }
+  .toggle-switch {
+    width: 36px; height: 20px; border-radius: 10px; position: relative;
+  }
+  .toggle-switch.on { background: var(--accent-green); }
+  .toggle-switch.off { background: var(--text-muted); }
+  .toggle-switch::after {
+    content: ''; width: 16px; height: 16px; border-radius: 50%;
+    background: white; position: absolute; top: 2px;
+  }
+  .toggle-switch.on::after { right: 2px; }
+  .toggle-switch.off::after { left: 2px; }
+  .desktop-btns { display: flex; gap: 10px; margin-top: 16px; }
+  .desktop-btn {
+    padding: 8px 18px; border-radius: 8px; font-size: 0.78rem; font-weight: 600;
+    border: 1px solid; cursor: pointer;
+  }
+  .desktop-btn.primary { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.35); color: var(--accent-blue); }
+  .desktop-btn.danger { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.25); color: var(--accent-red); }
+
+  /* ── Summary ── */
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 40px 0;
+  }
+  .summary-item {
+    display: flex; align-items: center; gap: 14px; padding: 16px 20px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  }
+  .summary-item .s-label { font-size: 0.82rem; color: var(--text-secondary); flex: 1; }
+  .summary-item .s-value { font-size: 0.88rem; font-weight: 700; color: var(--text-primary); }
+
+  /* ── Footer ── */
+  .footer {
+    padding: 48px 0; border-top: 1px solid var(--border); text-align: center;
+    color: var(--text-muted); font-size: 0.8rem;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .hero h1 { font-size: 2.4rem; }
+    .principles-grid, .protocol-grid, .security-grid, .push-grid, .screens-grid { grid-template-columns: 1fr; }
+    .arch-diagram { flex-direction: column; gap: 24px; }
+    .arch-arrow { transform: rotate(90deg); padding: 8px 0; min-width: auto; }
+    .phone-section { flex-direction: column; align-items: center; }
+    .timeline::before { left: 20px; }
+    .timeline-item, .timeline-item:nth-child(even) { flex-direction: row; }
+    .timeline-content { width: 100%; margin-left: 40px !important; margin-right: 0 !important; }
+    .timeline-dot { left: 20px; }
+    .pairing-flow { flex-direction: column; align-items: center; }
+    .pairing-connector { transform: rotate(90deg); }
+    .stack-grid { grid-template-columns: repeat(2, 1fr); }
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">BT</div>
+    <span class="nav-title">BotifyTrades <span class="nav-subtitle">Mobile Architecture</span></span>
+  </div>
+  <div class="nav-links">
+    <a href="#architecture">Architecture</a>
+    <a href="#data-flow">Data Flow</a>
+    <a href="#mobile-app">Mobile App</a>
+    <a href="#security">Security</a>
+    <a href="#timeline">Timeline</a>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge"><span class="dot"></span> Architecture Document v1.0</div>
+    <h1>Mobile Companion App</h1>
+    <p class="subtitle">
+      Monitor and control your desktop trading bot from anywhere.
+      Your domain. Your data. Your machine. Zero SaaS.
+    </p>
+  </div>
+</section>
+
+<!-- ============ CORE ARCHITECTURE ============ -->
+<section class="section" id="architecture">
+  <div class="container">
+    <div class="section-label" style="background: rgba(59,130,246,0.1); color: var(--accent-blue);">01 &mdash; Core Architecture</div>
+    <h2 class="section-title">Hub-and-Spoke Relay</h2>
+    <p class="section-desc">
+      botifytrades.com acts as a lightweight relay &mdash; it authenticates users and bridges WebSocket messages between the desktop bot and mobile app. All trading execution stays 100% local on the user's machine.
+    </p>
+
+    <!-- Diagram -->
+    <div class="arch-diagram">
+      <div class="arch-node desktop">
+        <div class="arch-node-icon">&#128187;</div>
+        <h3>Desktop Bot</h3>
+        <p>User's PC &mdash; runs locally with all broker connections, risk engine, and trade execution</p>
+        <div class="tags">
+          <span class="tag">Schwab</span>
+          <span class="tag">IBKR</span>
+          <span class="tag">Webull</span>
+          <span class="tag">Risk Engine</span>
+          <span class="tag">Signals</span>
+        </div>
+      </div>
+
+      <div class="arch-arrow">
+        <div class="arch-arrow-label">WSS Outbound</div>
+        <div class="arch-arrow-line bidir"></div>
+        <div class="arch-arrow-sublabel">Status &bull; Positions &bull; Alerts</div>
+        <div class="arch-arrow-sublabel">&#8592; Commands</div>
+      </div>
+
+      <div class="arch-node server">
+        <div class="arch-node-icon">&#9729;&#65039;</div>
+        <h3>botifytrades.com</h3>
+        <p>Relay server &mdash; authenticates users, forwards messages. Never trades. Never stores credentials.</p>
+        <div class="tags">
+          <span class="tag">Auth (JWT)</span>
+          <span class="tag">WS Relay</span>
+          <span class="tag">Push (FCM)</span>
+          <span class="tag">Bot Registry</span>
+        </div>
+      </div>
+
+      <div class="arch-arrow">
+        <div class="arch-arrow-label">HTTPS + WSS</div>
+        <div class="arch-arrow-line bidir"></div>
+        <div class="arch-arrow-sublabel">Dashboard &bull; Alerts</div>
+        <div class="arch-arrow-sublabel">&#8592; Pause &bull; Close</div>
+      </div>
+
+      <div class="arch-node mobile">
+        <div class="arch-node-icon">&#128241;</div>
+        <h3>Mobile App</h3>
+        <p>Flutter app (iOS + Android) &mdash; real-time positions, P&L, alerts, and remote controls</p>
+        <div class="tags">
+          <span class="tag">Dashboard</span>
+          <span class="tag">Positions</span>
+          <span class="tag">Push Alerts</span>
+          <span class="tag">Controls</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Principles -->
+    <div class="principles-grid">
+      <div class="principle-card p1">
+        <div class="principle-icon">&#128274;</div>
+        <h3>Privacy First</h3>
+        <p>Broker credentials, API keys, and Discord tokens never leave the desktop. The server is a dumb pipe &mdash; it relays encrypted WebSocket messages without reading trade data.</p>
+      </div>
+      <div class="principle-card p2">
+        <div class="principle-icon">&#9889;</div>
+        <h3>Zero Infrastructure</h3>
+        <p>Works behind NAT, firewalls, and routers. The desktop bot connects outbound to the relay &mdash; no port forwarding, no dynamic DNS, no VPN. Just works.</p>
+      </div>
+      <div class="principle-card p3">
+        <div class="principle-icon">&#128176;</div>
+        <h3>Not SaaS</h3>
+        <p>The server costs ~$15/month to run. No per-user compute, no broker API proxying, no trade execution in the cloud. All heavy lifting stays on the user's machine.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PAIRING ============ -->
+<section class="section section-alt" id="pairing">
+  <div class="container">
+    <div class="section-label" style="background: rgba(139,92,246,0.1); color: var(--accent-purple);">02 &mdash; Pairing Flow</div>
+    <h2 class="section-title">Connect in 30 Seconds</h2>
+    <p class="section-desc">
+      Users pair their mobile app to their desktop bot with a simple 6-digit code. No token copy-paste, no QR scanning required.
+    </p>
+
+    <div class="pairing-flow">
+      <div class="pairing-step">
+        <div class="step-num">1</div>
+        <h4>Create Account</h4>
+        <p>Sign up on botifytrades.com or in the mobile app with email &amp; password</p>
+      </div>
+      <div class="pairing-connector">&#10132;</div>
+      <div class="pairing-step">
+        <div class="step-num">2</div>
+        <h4>Get Pairing Code</h4>
+        <p>Desktop bot Settings &rarr; Remote Access &rarr; shows a 6-digit code (valid 10 min)</p>
+      </div>
+      <div class="pairing-connector">&#10132;</div>
+      <div class="pairing-step">
+        <div class="step-num">3</div>
+        <h4>Enter on Phone</h4>
+        <p>Open mobile app &rarr; Add Bot &rarr; enter the 6-digit code &rarr; instantly paired</p>
+      </div>
+      <div class="pairing-connector">&#10132;</div>
+      <div class="pairing-step">
+        <div class="step-num">4</div>
+        <h4>Live Dashboard</h4>
+        <p>Mobile app shows real-time positions, P&L, and alerts from your desktop bot</p>
+      </div>
+    </div>
+
+    <!-- Desktop Settings Mockup -->
+    <div class="desktop-mockup">
+      <div class="desktop-titlebar">
+        <div class="desktop-dot red"></div>
+        <div class="desktop-dot yellow"></div>
+        <div class="desktop-dot green"></div>
+        <span>BotifyTrades &mdash; Settings &rarr; Remote Access</span>
+      </div>
+      <div class="desktop-body">
+        <h3>&#128241; Remote Access</h3>
+        <div class="desktop-field">
+          <span class="field-label">Connection Status</span>
+          <span class="field-value online">&#9679; Connected to botifytrades.com</span>
+        </div>
+        <div class="desktop-field">
+          <span class="field-label">Bot ID</span>
+          <span class="field-value" style="color: var(--text-primary);">BTF-a8x92k</span>
+        </div>
+        <div class="desktop-field">
+          <span class="field-label">Pairing Code</span>
+          <span class="field-value code">4 8 2 9 1 6</span>
+        </div>
+        <div class="desktop-field">
+          <span class="field-label">Mobile Devices</span>
+          <span class="field-value" style="color: var(--text-primary);">1 paired (iPhone 15)</span>
+        </div>
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+          <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 12px;">Permissions</div>
+          <div class="desktop-toggle">
+            <span class="toggle-label">&#10003; Send trade notifications</span>
+            <div class="toggle-switch on"></div>
+          </div>
+          <div class="desktop-toggle">
+            <span class="toggle-label">&#10003; Send risk alerts</span>
+            <div class="toggle-switch on"></div>
+          </div>
+          <div class="desktop-toggle">
+            <span class="toggle-label">&#10003; Allow remote pause/resume</span>
+            <div class="toggle-switch on"></div>
+          </div>
+          <div class="desktop-toggle">
+            <span class="toggle-label">&#10007; Allow remote position close</span>
+            <div class="toggle-switch off"></div>
+          </div>
+          <div class="desktop-toggle">
+            <span class="toggle-label">&#10007; Allow remote close all</span>
+            <div class="toggle-switch off"></div>
+          </div>
+        </div>
+        <div class="desktop-btns">
+          <div class="desktop-btn primary">Generate New Code</div>
+          <div class="desktop-btn danger">Disconnect</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MOBILE APP ============ -->
+<section class="section" id="mobile-app">
+  <div class="container">
+    <div class="section-label" style="background: rgba(16,185,129,0.1); color: var(--accent-green);">03 &mdash; Mobile App</div>
+    <h2 class="section-title">Your Bot in Your Pocket</h2>
+    <p class="section-desc">
+      Built with Flutter for iOS and Android from a single codebase. Real-time WebSocket updates, push notifications, and intuitive controls.
+    </p>
+
+    <div class="phone-section">
+      <!-- Phone Mockup -->
+      <div class="phone-mockup-wrapper">
+        <div class="phone-mockup">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div class="phone-statusbar">
+              <span>9:41</span>
+              <span>&#9679;&#9679;&#9679;&#9679; &#128268;</span>
+            </div>
+            <div class="phone-header">
+              <h4>BotifyTrades</h4>
+              <div class="bot-status"><span class="online-dot"></span> Bot Online</div>
+            </div>
+            <div class="phone-content">
+              <div class="phone-pnl-card">
+                <div class="phone-pnl-label">Today's P&amp;L</div>
+                <div class="phone-pnl-value">+$345.80</div>
+                <div class="phone-pnl-sub">8 trades &bull; 75% win rate</div>
+              </div>
+              <div class="phone-stat-row">
+                <div class="phone-stat">
+                  <div class="val" style="color: var(--accent-blue);">3</div>
+                  <div class="lbl">Positions</div>
+                </div>
+                <div class="phone-stat">
+                  <div class="val" style="color: var(--accent-green);">4</div>
+                  <div class="lbl">Brokers</div>
+                </div>
+                <div class="phone-stat">
+                  <div class="val" style="color: var(--accent-amber);">2</div>
+                  <div class="lbl">Cond. Orders</div>
+                </div>
+              </div>
+              <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;">Open Positions</div>
+              <div class="phone-position">
+                <div class="pos-header">
+                  <span class="pos-symbol">AAPL 185C</span>
+                  <span class="pos-pnl green">+$67.00</span>
+                </div>
+                <div class="pos-details">
+                  <span>5 contracts</span>
+                  <span>Entry $3.50</span>
+                  <span>Now $3.84</span>
+                  <span class="pos-broker">SCHWAB</span>
+                </div>
+              </div>
+              <div class="phone-position">
+                <div class="pos-header">
+                  <span class="pos-symbol">SPY 450P</span>
+                  <span class="pos-pnl red">-$23.00</span>
+                </div>
+                <div class="pos-details">
+                  <span>2 contracts</span>
+                  <span>Entry $2.10</span>
+                  <span>Now $1.95</span>
+                  <span class="pos-broker">IBKR</span>
+                </div>
+              </div>
+              <div class="phone-position">
+                <div class="pos-header">
+                  <span class="pos-symbol">OSG</span>
+                  <span class="pos-pnl green">+$42.00</span>
+                </div>
+                <div class="pos-details">
+                  <span>100 shares</span>
+                  <span>Entry $5.38</span>
+                  <span>Now $5.80</span>
+                  <span class="pos-broker">IBKR</span>
+                </div>
+              </div>
+              <div class="phone-btn-row">
+                <div class="phone-btn pause">&#9208; Pause Trading</div>
+                <div class="phone-btn close">&#10006; Close All</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screen Descriptions -->
+      <div class="phone-details">
+        <div class="screens-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <div class="screen-card">
+            <div class="screen-icon">&#127968;</div>
+            <h4>Dashboard</h4>
+            <p>Daily P&L, bot status, open positions count, active brokers, risk state, quick pause/resume</p>
+          </div>
+          <div class="screen-card">
+            <div class="screen-icon" style="background: rgba(59,130,246,0.1);">&#128200;</div>
+            <h4>Positions</h4>
+            <p>Live positions with entry, current price, P&L, SL/PT levels, broker badge, and close button</p>
+          </div>
+          <div class="screen-card">
+            <div class="screen-icon" style="background: rgba(245,158,11,0.1);">&#9201;</div>
+            <h4>Conditional Orders</h4>
+            <p>Active orders with trigger price, current price, distance progress bar, cancel button</p>
+          </div>
+          <div class="screen-card">
+            <div class="screen-icon" style="background: rgba(16,185,129,0.1);">&#128203;</div>
+            <h4>Trade History</h4>
+            <p>Today's fills with P&L, filter by broker, running total, win/loss stats</p>
+          </div>
+          <div class="screen-card">
+            <div class="screen-icon" style="background: rgba(239,68,68,0.1);">&#128276;</div>
+            <h4>Alerts</h4>
+            <p>Trade fills, risk exits, daily limits, bot disconnect/reconnect, mark as read</p>
+          </div>
+          <div class="screen-card">
+            <div class="screen-icon" style="background: rgba(139,92,246,0.1);">&#9881;</div>
+            <h4>Settings</h4>
+            <p>Notification preferences, bot management (pair/unpair), account, dark/light theme</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DATA FLOW ============ -->
+<section class="section section-alt" id="data-flow">
+  <div class="container">
+    <div class="section-label" style="background: rgba(6,182,212,0.1); color: var(--accent-cyan);">04 &mdash; Data Flow</div>
+    <h2 class="section-title">How It Works</h2>
+    <p class="section-desc">
+      Three real-world scenarios showing exactly how data flows between the desktop bot, relay server, and mobile app.
+    </p>
+
+    <div class="flow-container">
+      <!-- Scenario 1 -->
+      <div class="flow-scenario">
+        <h3>&#128200; Scenario 1: Check Positions on Phone</h3>
+        <div class="flow-desc">User opens the mobile app and sees their live positions and P&L in real-time.</div>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="flow-step-dot mobile">1</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor mobile">Mobile App</div>
+              <div class="flow-step-text">Connects via WebSocket with JWT auth token</div>
+              <div class="flow-step-msg">WSS wss://botifytrades.com/ws/mobile</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot server">2</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor server">Relay Server</div>
+              <div class="flow-step-text">Validates JWT, finds user's paired bot, forwards request</div>
+              <div class="flow-step-msg">{"type": "command", "action": "request_positions"}</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot desktop">3</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor desktop">Desktop Bot</div>
+              <div class="flow-step-text">Gathers current positions from all connected brokers</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot desktop">4</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor desktop">Desktop Bot</div>
+              <div class="flow-step-text">Sends position data back through relay</div>
+              <div class="flow-step-msg">{"type": "positions", "data": [{symbol, qty, entry, current, pnl, broker}]}</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot mobile">5</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor mobile">Mobile App</div>
+              <div class="flow-step-text">Renders positions list with live P&L — continues receiving updates via WebSocket every 5 seconds</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario 2 -->
+      <div class="flow-scenario">
+        <h3>&#128680; Scenario 2: Stop Loss Triggered &rarr; Push Notification</h3>
+        <div class="flow-desc">A stop loss fires on the desktop bot. The user gets an instant push notification on their phone, even when the app is closed.</div>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="flow-step-dot desktop">1</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor desktop">Desktop Bot</div>
+              <div class="flow-step-text">Risk engine triggers SL on AAPL 185C &mdash; position closed at -$120</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot desktop">2</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor desktop">Desktop Bot</div>
+              <div class="flow-step-text">Sends alert through WebSocket to relay</div>
+              <div class="flow-step-msg">{"type": "alert", "level": "high", "msg": "SL triggered AAPL 185C -$120"}</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot server">3</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor server">Relay Server</div>
+              <div class="flow-step-text">Forwards via WebSocket (if app open) + sends FCM/APNS push notification</div>
+              <div class="flow-step-msg">Push: "SL Triggered: AAPL 185C closed at -$120.00"</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot mobile">4</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor mobile">Mobile App</div>
+              <div class="flow-step-text">Phone buzzes with push notification. User taps &rarr; opens alert detail in app.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario 3 -->
+      <div class="flow-scenario">
+        <h3>&#128683; Scenario 3: Close Position from Phone</h3>
+        <div class="flow-desc">User sees a losing position on their phone and decides to close it remotely (requires permission enabled on desktop).</div>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="flow-step-dot mobile">1</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor mobile">Mobile App</div>
+              <div class="flow-step-text">User taps "Close" on SPY 450P position &rarr; confirmation dialog &rarr; confirmed</div>
+              <div class="flow-step-msg">{"type": "command", "action": "close_position", "symbol": "SPY 450P", "broker": "IBKR"}</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot server">2</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor server">Relay Server</div>
+              <div class="flow-step-text">Validates JWT, checks rate limit, forwards command to user's paired bot</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot desktop">3</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor desktop">Desktop Bot</div>
+              <div class="flow-step-text">Checks permissions &mdash; "allow_close" must be enabled. If allowed, executes STC on IBKR locally.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot desktop">4</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor desktop">Desktop Bot</div>
+              <div class="flow-step-text">Sends acknowledgement + trade result back through relay</div>
+              <div class="flow-step-msg">{"type": "command_ack", "success": true} + {"type": "trade", "action": "STC", "pnl": -23.00}</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-dot mobile">5</div>
+            <div class="flow-step-content">
+              <div class="flow-step-actor mobile">Mobile App</div>
+              <div class="flow-step-text">Shows success toast. Position disappears from list. Trade logged in history.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WEBSOCKET PROTOCOL ============ -->
+<section class="section" id="protocol">
+  <div class="container">
+    <div class="section-label" style="background: rgba(6,182,212,0.1); color: var(--accent-cyan);">05 &mdash; WebSocket Protocol</div>
+    <h2 class="section-title">Message Format</h2>
+    <p class="section-desc">
+      All communication uses JSON over WebSocket. The bot pushes status upstream; the server relays commands downstream.
+    </p>
+
+    <div class="protocol-grid">
+      <div class="protocol-card">
+        <h3><span class="arrow-up">&#9650;</span> Bot &rarr; Server (Upstream)</h3>
+        <div class="msg-item">
+          <span class="msg-type">heartbeat</span> &mdash; every 30s to keep connection alive<br>
+          <span class="msg-key">"ts"</span>: <span class="msg-val">1716000000</span>
+        </div>
+        <div class="msg-item">
+          <span class="msg-type">status</span> &mdash; every 15s, bot health snapshot<br>
+          <span class="msg-key">"brokers"</span>: [<span class="msg-str">"SCHWAB"</span>, <span class="msg-str">"IBKR"</span>],
+          <span class="msg-key">"positions"</span>: <span class="msg-val">3</span>,
+          <span class="msg-key">"pnl"</span>: <span class="msg-val">345.80</span>
+        </div>
+        <div class="msg-item">
+          <span class="msg-type">positions</span> &mdash; every 5s (when open positions exist)<br>
+          [{<span class="msg-key">"symbol"</span>: <span class="msg-str">"AAPL"</span>, <span class="msg-key">"pnl"</span>: <span class="msg-val">67.0</span>, <span class="msg-key">"broker"</span>: <span class="msg-str">"SCHWAB"</span>}]
+        </div>
+        <div class="msg-item">
+          <span class="msg-type">alert</span> &mdash; instant, triggers push notification<br>
+          <span class="msg-key">"level"</span>: <span class="msg-str">"high"</span>,
+          <span class="msg-key">"msg"</span>: <span class="msg-str">"SL triggered AAPL -$120"</span>
+        </div>
+        <div class="msg-item">
+          <span class="msg-type">trade</span> &mdash; instant, every fill<br>
+          <span class="msg-key">"action"</span>: <span class="msg-str">"BTO"</span>,
+          <span class="msg-key">"symbol"</span>: <span class="msg-str">"SPY 450C"</span>,
+          <span class="msg-key">"price"</span>: <span class="msg-val">3.50</span>
+        </div>
+      </div>
+
+      <div class="protocol-card">
+        <h3><span class="arrow-down">&#9660;</span> Server &rarr; Bot (Commands)</h3>
+        <div class="msg-item">
+          <span class="msg-type">command</span>: <span class="msg-str">"pause_trading"</span><br>
+          Pauses all signal processing and order execution
+        </div>
+        <div class="msg-item">
+          <span class="msg-type">command</span>: <span class="msg-str">"resume_trading"</span><br>
+          Resumes normal trading operations
+        </div>
+        <div class="msg-item">
+          <span class="msg-type">command</span>: <span class="msg-str">"close_position"</span><br>
+          <span class="msg-key">"symbol"</span>: <span class="msg-str">"AAPL"</span>,
+          <span class="msg-key">"broker"</span>: <span class="msg-str">"SCHWAB"</span>
+        </div>
+        <div class="msg-item">
+          <span class="msg-type">command</span>: <span class="msg-str">"close_all"</span><br>
+          Emergency close all positions across all brokers
+        </div>
+        <div class="msg-item">
+          <span class="msg-type">command</span>: <span class="msg-str">"cancel_conditional"</span><br>
+          <span class="msg-key">"order_id"</span>: <span class="msg-val">55</span>
+        </div>
+        <div class="msg-item">
+          <span class="msg-type">command</span>: <span class="msg-str">"request_status"</span><br>
+          Force immediate status update from bot
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PUSH NOTIFICATIONS ============ -->
+<section class="section section-alt" id="push">
+  <div class="container">
+    <div class="section-label" style="background: rgba(236,72,153,0.1); color: var(--accent-pink);">06 &mdash; Push Notifications</div>
+    <h2 class="section-title">Never Miss a Trade</h2>
+    <p class="section-desc">
+      Firebase Cloud Messaging (FCM) for Android + Apple Push Notification Service (APNS) for iOS. Users configure which alerts they receive.
+    </p>
+
+    <div class="push-grid">
+      <div class="push-card">
+        <div class="push-icon" style="background: rgba(16,185,129,0.12);">&#128184;</div>
+        <div>
+          <div class="push-title">Trade Fill</div>
+          <div class="push-example">"BTO AAPL 185C x5 @ $3.50 via Schwab"</div>
+          <div class="push-priority priority-high">High Priority</div>
+        </div>
+      </div>
+      <div class="push-card">
+        <div class="push-icon" style="background: rgba(239,68,68,0.12);">&#128680;</div>
+        <div>
+          <div class="push-title">Position Exit (SL/PT)</div>
+          <div class="push-example">"STC AAPL 185C &mdash; SL triggered, P&L: -$120.00"</div>
+          <div class="push-priority priority-high">High Priority</div>
+        </div>
+      </div>
+      <div class="push-card">
+        <div class="push-icon" style="background: rgba(239,68,68,0.15);">&#9888;</div>
+        <div>
+          <div class="push-title">Risk Alert</div>
+          <div class="push-example">"Daily loss limit reached &mdash; trading automatically paused"</div>
+          <div class="push-priority priority-critical">Critical</div>
+        </div>
+      </div>
+      <div class="push-card">
+        <div class="push-icon" style="background: rgba(245,158,11,0.12);">&#9889;</div>
+        <div>
+          <div class="push-title">Conditional Order Triggered</div>
+          <div class="push-example">"Order #55 OSG triggered at $5.02 &mdash; BTO executed"</div>
+          <div class="push-priority priority-high">High Priority</div>
+        </div>
+      </div>
+      <div class="push-card">
+        <div class="push-icon" style="background: rgba(59,130,246,0.12);">&#128268;</div>
+        <div>
+          <div class="push-title">Bot Offline</div>
+          <div class="push-example">"Your bot disconnected at 10:32 AM EST"</div>
+          <div class="push-priority priority-medium">Medium</div>
+        </div>
+      </div>
+      <div class="push-card">
+        <div class="push-icon" style="background: rgba(16,185,129,0.12);">&#9989;</div>
+        <div>
+          <div class="push-title">Bot Back Online</div>
+          <div class="push-example">"Your bot reconnected &mdash; 3 brokers active"</div>
+          <div class="push-priority priority-low">Low</div>
+        </div>
+      </div>
+      <div class="push-card">
+        <div class="push-icon" style="background: rgba(139,92,246,0.12);">&#128202;</div>
+        <div>
+          <div class="push-title">Daily Summary</div>
+          <div class="push-example">"Daily P&L: +$345 (8 trades, 75% win rate)"</div>
+          <div class="push-priority priority-low">Low &bull; Market Close</div>
+        </div>
+      </div>
+      <div class="push-card">
+        <div class="push-icon" style="background: rgba(245,158,11,0.12);">&#128176;</div>
+        <div>
+          <div class="push-title">Broker Disconnect</div>
+          <div class="push-example">"Schwab connection lost &mdash; re-authentication needed"</div>
+          <div class="push-priority priority-medium">Medium</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECURITY ============ -->
+<section class="section" id="security">
+  <div class="container">
+    <div class="section-label" style="background: rgba(16,185,129,0.1); color: var(--accent-green);">07 &mdash; Security Model</div>
+    <h2 class="section-title">Privacy by Architecture</h2>
+    <p class="section-desc">
+      The relay server is designed to know as little as possible. Broker credentials never leave the desktop. Optional end-to-end encryption makes the server completely blind to message content.
+    </p>
+
+    <div class="security-grid">
+      <div class="security-card safe">
+        <h3><span style="color: var(--accent-green);">&#9679;</span> What the Server Knows</h3>
+        <ul class="security-list">
+          <li><span class="icon-safe">&#10003;</span> User email + hashed password</li>
+          <li><span class="icon-safe">&#10003;</span> Bot online/offline status</li>
+          <li><span class="icon-safe">&#10003;</span> Bot version number</li>
+          <li><span class="icon-safe">&#10003;</span> Mobile device push tokens</li>
+          <li><span class="icon-safe">&#10003;</span> Relay messages (transient, not stored)</li>
+        </ul>
+      </div>
+      <div class="security-card never">
+        <h3><span style="color: var(--accent-red);">&#9679;</span> What the Server NEVER Sees</h3>
+        <ul class="security-list">
+          <li><span class="icon-block">&#10007;</span> Broker credentials or API keys</li>
+          <li><span class="icon-block">&#10007;</span> Discord token</li>
+          <li><span class="icon-block">&#10007;</span> Account numbers or balances</li>
+          <li><span class="icon-block">&#10007;</span> Full trade history (permanent)</li>
+          <li><span class="icon-block">&#10007;</span> Position sizes or portfolio value</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- E2E Encryption -->
+    <div class="e2e-diagram">
+      <h3 style="margin-bottom: 8px;">Optional End-to-End Encryption</h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0;">
+        For maximum privacy, bot and mobile share an AES-256-GCM key during pairing. The server relays encrypted blobs it cannot read.
+      </p>
+      <div class="e2e-flow">
+        <div class="e2e-box encrypt">&#128187; Desktop Bot<br><small>Encrypt with shared key</small></div>
+        <div class="e2e-arrow">&#10132;</div>
+        <div class="e2e-box relay">&#9729;&#65039; botifytrades.com<br><small>Relays encrypted blob</small><br><small style="color: var(--accent-red);">Cannot read content</small></div>
+        <div class="e2e-arrow">&#10132;</div>
+        <div class="e2e-box decrypt">&#128241; Mobile App<br><small>Decrypt with shared key</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TECH STACK ============ -->
+<section class="section section-alt" id="tech">
+  <div class="container">
+    <div class="section-label" style="background: rgba(99,102,241,0.1); color: var(--accent-indigo);">08 &mdash; Tech Stack</div>
+    <h2 class="section-title">Technology Choices</h2>
+    <p class="section-desc">
+      Each technology chosen for a specific reason. Optimized for low cost, reliability, and developer speed.
+    </p>
+
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="stack-icon">&#9883;</div>
+        <h4>Flutter</h4>
+        <p>Mobile app &mdash; single codebase for iOS + Android</p>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">&#9889;</div>
+        <h4>FastAPI / Node.js</h4>
+        <p>Relay server &mdash; async, WebSocket-native</p>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">&#128268;</div>
+        <h4>Socket.IO</h4>
+        <p>WebSocket with auto-reconnect + rooms</p>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">&#128272;</div>
+        <h4>JWT Auth</h4>
+        <p>Stateless tokens for bot + mobile</p>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">&#128478;</div>
+        <h4>PostgreSQL</h4>
+        <p>User accounts, bot registry, devices</p>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">&#128276;</div>
+        <h4>Firebase (FCM)</h4>
+        <p>Cross-platform push notifications</p>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">&#128274;</div>
+        <h4>Let's Encrypt</h4>
+        <p>Free TLS/SSL for WSS connections</p>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">&#128187;</div>
+        <h4>Python (Bot)</h4>
+        <p>relay_client.py &mdash; ~400 lines added to desktop bot</p>
+      </div>
+    </div>
+
+    <!-- Cost Table -->
+    <table class="cost-table">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Monthly Cost</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>VPS (relay server)</td>
+          <td>$5 &ndash; $12</td>
+          <td>DigitalOcean / Hostinger &mdash; 1 vCPU handles 500+ users</td>
+        </tr>
+        <tr>
+          <td>Domain</td>
+          <td class="cost-highlight">$0</td>
+          <td>Already owned &mdash; botifytrades.com</td>
+        </tr>
+        <tr>
+          <td>SSL Certificate</td>
+          <td class="cost-highlight">$0</td>
+          <td>Let's Encrypt / Cloudflare</td>
+        </tr>
+        <tr>
+          <td>Firebase (FCM)</td>
+          <td class="cost-highlight">$0</td>
+          <td>Free tier: 500K push notifications/day</td>
+        </tr>
+        <tr>
+          <td>PostgreSQL</td>
+          <td class="cost-highlight">$0</td>
+          <td>Runs on same VPS</td>
+        </tr>
+        <tr>
+          <td>Apple Developer</td>
+          <td>~$8</td>
+          <td>$99/year for App Store</td>
+        </tr>
+        <tr>
+          <td>Google Play</td>
+          <td class="cost-highlight">$0</td>
+          <td>$25 one-time registration</td>
+        </tr>
+        <tr class="cost-total">
+          <td>Total</td>
+          <td class="cost-highlight" style="font-size: 1.1rem;">~$15/mo</td>
+          <td>Scales to hundreds of users with no per-user cost</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ TIMELINE ============ -->
+<section class="section" id="timeline">
+  <div class="container">
+    <div class="section-label" style="background: rgba(245,158,11,0.1); color: var(--accent-amber);">09 &mdash; Implementation Timeline</div>
+    <h2 class="section-title">4-Phase Rollout</h2>
+    <p class="section-desc">
+      From relay server to App Store in ~10 weeks. Each phase delivers usable value.
+    </p>
+
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="phase-label" style="color: var(--accent-blue);">Phase 1 &mdash; 2&ndash;3 Weeks</div>
+          <h3>Relay Server + Desktop Integration</h3>
+          <p>Build the relay server on botifytrades.com and add the WebSocket client to the desktop bot. Test with a web dashboard before building the mobile app.</p>
+          <ul class="timeline-checklist">
+            <li><span class="check">&#9675;</span> User registration/login API (JWT)</li>
+            <li><span class="check">&#9675;</span> WebSocket relay server</li>
+            <li><span class="check">&#9675;</span> Bot registration + pairing code</li>
+            <li><span class="check">&#9675;</span> relay_client.py in desktop bot</li>
+            <li><span class="check">&#9675;</span> Settings UI for Remote Access</li>
+            <li><span class="check">&#9675;</span> Web dashboard at botifytrades.com/dashboard</li>
+          </ul>
+          <span class="duration" style="background: rgba(59,130,246,0.12); color: var(--accent-blue);">Foundation</span>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="phase-label" style="color: var(--accent-purple);">Phase 2 &mdash; 3&ndash;4 Weeks</div>
+          <h3>Mobile App MVP</h3>
+          <p>Flutter app with core features: login, pairing, dashboard, positions, and push notifications.</p>
+          <ul class="timeline-checklist">
+            <li><span class="check">&#9675;</span> Flutter project (iOS + Android)</li>
+            <li><span class="check">&#9675;</span> Login/register screens</li>
+            <li><span class="check">&#9675;</span> Bot pairing (6-digit code)</li>
+            <li><span class="check">&#9675;</span> Dashboard (P&L, status, brokers)</li>
+            <li><span class="check">&#9675;</span> Positions list (real-time WebSocket)</li>
+            <li><span class="check">&#9675;</span> Push notifications (FCM/APNS)</li>
+            <li><span class="check">&#9675;</span> Pause/resume command</li>
+          </ul>
+          <span class="duration" style="background: rgba(139,92,246,0.12); color: var(--accent-purple);">Core Mobile</span>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="phase-label" style="color: var(--accent-green);">Phase 3 &mdash; 2&ndash;3 Weeks</div>
+          <h3>Full Feature Set</h3>
+          <p>Complete the mobile app with conditional orders, trade history, close position, alerts inbox, and app store submission.</p>
+          <ul class="timeline-checklist">
+            <li><span class="check">&#9675;</span> Conditional orders screen</li>
+            <li><span class="check">&#9675;</span> Trade history (today)</li>
+            <li><span class="check">&#9675;</span> Close position from mobile</li>
+            <li><span class="check">&#9675;</span> Alert inbox (read/unread)</li>
+            <li><span class="check">&#9675;</span> Daily P&L summary push</li>
+            <li><span class="check">&#9675;</span> App Store + Play Store submission</li>
+          </ul>
+          <span class="duration" style="background: rgba(16,185,129,0.12); color: var(--accent-green);">Ship to Stores</span>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+          <div class="phase-label" style="color: var(--accent-amber);">Phase 4 &mdash; Ongoing</div>
+          <h3>Enhancements</h3>
+          <p>Multi-bot support, E2E encryption, P&L charts, Apple Watch, home screen widget, biometric lock.</p>
+          <ul class="timeline-checklist">
+            <li><span class="check">&#9675;</span> Multi-bot support</li>
+            <li><span class="check">&#9675;</span> End-to-end encryption</li>
+            <li><span class="check">&#9675;</span> P&L charts (daily/weekly)</li>
+            <li><span class="check">&#9675;</span> Apple Watch complication</li>
+            <li><span class="check">&#9675;</span> Home screen widget</li>
+            <li><span class="check">&#9675;</span> Biometric lock (Face ID)</li>
+          </ul>
+          <span class="duration" style="background: rgba(245,158,11,0.12); color: var(--accent-amber);">Polish &amp; Expand</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SUMMARY ============ -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="section-label" style="background: rgba(236,72,153,0.1); color: var(--accent-pink);">10 &mdash; Summary</div>
+    <h2 class="section-title">At a Glance</h2>
+
+    <div class="summary-grid">
+      <div class="summary-item">
+        <span class="s-label">Architecture</span>
+        <span class="s-value">Hub-and-spoke relay (not SaaS)</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Server Role</span>
+        <span class="s-value">Auth + WebSocket relay only</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Trade Execution</span>
+        <span class="s-value">100% on desktop (local)</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Broker Credentials</span>
+        <span class="s-value">Never leave the desktop</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Mobile Framework</span>
+        <span class="s-value">Flutter (iOS + Android)</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Server Tech</span>
+        <span class="s-value">FastAPI + PostgreSQL</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Push Notifications</span>
+        <span class="s-value">FCM + APNS</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Pairing</span>
+        <span class="s-value">6-digit code (30 seconds)</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Security</span>
+        <span class="s-value">JWT + optional E2E encryption</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Server Cost</span>
+        <span class="s-value" style="color: var(--accent-green);">~$15/month</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Timeline to MVP</span>
+        <span class="s-value">5&ndash;7 weeks</span>
+      </div>
+      <div class="summary-item">
+        <span class="s-label">Timeline to App Store</span>
+        <span class="s-value">8&ndash;10 weeks</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+  <div class="container">
+    <p>BotifyTrades Mobile Architecture &mdash; v1.0 &mdash; May 2026</p>
+    <p style="margin-top: 4px; color: var(--text-muted);">botifytrades.com &bull; Private &amp; Confidential</p>
+  </div>
+</footer>
+
+</body>
+</html>

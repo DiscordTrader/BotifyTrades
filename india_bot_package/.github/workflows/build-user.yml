@@ -1,0 +1,292 @@
+name: Build User (Public Release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        type: string
+  repository_dispatch:
+    types: [user_release_ready]
+
+env:
+  VERSION: ${{ github.event.inputs.version || github.event.client_payload.version }}
+  APP_NAME: IndiaTradingBot
+
+jobs:
+  set-build-type:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set BUILD_TYPE to USER
+        run: |
+          sed -i "s/^BUILD_TYPE = .*/BUILD_TYPE = 'USER'  # Set by CI/" src/main.py
+          echo "BUILD_TYPE set to USER"
+      
+      - name: Update version
+        run: |
+          BUILD_DATE=$(date +%Y-%m-%d)
+          sed -i "s/APP_VERSION = \"[^\"]*\"/APP_VERSION = \"${{ env.VERSION }}\"/" upgrade/version.py
+          sed -i "s/BUILD_DATE = \"[^\"]*\"/BUILD_DATE = \"$BUILD_DATE\"/" upgrade/version.py
+      
+      - name: Upload modified source
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-user
+          path: .
+          retention-days: 1
+
+  build-windows:
+    needs: set-build-type
+    runs-on: windows-latest
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        shell: powershell
+        run: |
+          $bytes = [Convert]::FromBase64String("${{ secrets.PYARMOR_LICENSE }}")
+          [IO.File]::WriteAllBytes("pyarmor-regfile.zip", $bytes)
+          pyarmor reg pyarmor-regfile.zip
+          Remove-Item pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate source code
+        shell: powershell
+        run: |
+          chcp 65001
+          $env:PYTHONIOENCODING = "utf-8"
+          pyarmor gen --output obfuscated src/
+          
+          Write-Host "=== PyArmor output structure ==="
+          Get-ChildItem -Path obfuscated -Recurse | Select-Object FullName
+      
+      - name: Build with PyInstaller
+        shell: powershell
+        run: |
+          Copy-Item -Path src -Destination src_backup -Recurse
+          Copy-Item -Path obfuscated/src/* -Destination src/ -Recurse -Force
+          
+          Get-ChildItem -Path obfuscated -Directory -Filter "pyarmor_runtime_*" | ForEach-Object {
+            Write-Host "Copying PyArmor runtime: $($_.Name)"
+            Copy-Item -Path $_.FullName -Destination "src/$($_.Name)" -Recurse -Force
+          }
+          
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          Remove-Item -Path src -Recurse -Force
+          Move-Item -Path src_backup -Destination src
+          Rename-Item -Path dist/IndiaTradingBot.exe -NewName ${{ env.APP_NAME }}-Windows.exe
+      
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-Windows-v${{ env.VERSION }}
+          path: dist/${{ env.APP_NAME }}-Windows.exe
+          retention-days: 90
+
+  build-linux:
+    needs: set-build-type
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        run: |
+          echo "${{ secrets.PYARMOR_LICENSE }}" | base64 -d > pyarmor-regfile.zip
+          pyarmor reg pyarmor-regfile.zip
+          rm pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate and Build
+        run: |
+          pyarmor gen --output obfuscated src/
+          
+          cp -r src src_backup
+          cp -r obfuscated/src/* src/
+          
+          for runtime_dir in obfuscated/pyarmor_runtime_*; do
+            if [ -d "$runtime_dir" ]; then
+              runtime_name=$(basename "$runtime_dir")
+              cp -r "$runtime_dir" "src/$runtime_name"
+            fi
+          done
+          
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          rm -rf src && mv src_backup src
+          mv dist/IndiaTradingBot dist/${{ env.APP_NAME }}-Linux
+      
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-Linux-v${{ env.VERSION }}
+          path: dist/${{ env.APP_NAME }}-Linux
+          retention-days: 90
+
+  build-macos-intel:
+    needs: set-build-type
+    runs-on: macos-13
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        run: |
+          echo "${{ secrets.PYARMOR_LICENSE }}" | base64 -d > pyarmor-regfile.zip
+          pyarmor reg pyarmor-regfile.zip
+          rm pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate and Build
+        run: |
+          pyarmor gen --output obfuscated src/
+          
+          cp -r src src_backup
+          cp -r obfuscated/src/* src/
+          
+          for runtime_dir in obfuscated/pyarmor_runtime_*; do
+            if [ -d "$runtime_dir" ]; then
+              runtime_name=$(basename "$runtime_dir")
+              cp -r "$runtime_dir" "src/$runtime_name"
+            fi
+          done
+          
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          rm -rf src && mv src_backup src
+          mv dist/IndiaTradingBot dist/${{ env.APP_NAME }}-macOS-Intel
+      
+      - name: Sign and package
+        run: |
+          chmod +x dist/${{ env.APP_NAME }}-macOS-Intel
+          codesign --force --deep --sign - dist/${{ env.APP_NAME }}-macOS-Intel
+          xattr -cr dist/${{ env.APP_NAME }}-macOS-Intel
+          cd dist && tar -czvf ${{ env.APP_NAME }}-macOS-Intel.tar.gz ${{ env.APP_NAME }}-macOS-Intel
+      
+      - name: Upload macOS Intel build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-macOS-Intel-v${{ env.VERSION }}
+          path: dist/${{ env.APP_NAME }}-macOS-Intel.tar.gz
+          retention-days: 90
+
+  build-macos-silicon:
+    needs: set-build-type
+    runs-on: macos-14
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        run: |
+          echo "${{ secrets.PYARMOR_LICENSE }}" | base64 -d > pyarmor-regfile.zip
+          pyarmor reg pyarmor-regfile.zip
+          rm pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate and Build
+        run: |
+          pyarmor gen --output obfuscated src/
+          
+          cp -r src src_backup
+          cp -r obfuscated/src/* src/
+          
+          for runtime_dir in obfuscated/pyarmor_runtime_*; do
+            if [ -d "$runtime_dir" ]; then
+              runtime_name=$(basename "$runtime_dir")
+              cp -r "$runtime_dir" "src/$runtime_name"
+            fi
+          done
+          
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          rm -rf src && mv src_backup src
+          mv dist/IndiaTradingBot dist/${{ env.APP_NAME }}-macOS-Silicon
+      
+      - name: Sign and package
+        run: |
+          chmod +x dist/${{ env.APP_NAME }}-macOS-Silicon
+          codesign --force --deep --sign - dist/${{ env.APP_NAME }}-macOS-Silicon
+          xattr -cr dist/${{ env.APP_NAME }}-macOS-Silicon
+          cd dist && tar -czvf ${{ env.APP_NAME }}-macOS-Silicon.tar.gz ${{ env.APP_NAME }}-macOS-Silicon
+      
+      - name: Upload macOS Silicon build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-macOS-Silicon-v${{ env.VERSION }}
+          path: dist/${{ env.APP_NAME }}-macOS-Silicon.tar.gz
+          retention-days: 90
+
+  cleanup:
+    needs: [build-windows, build-linux, build-macos-intel, build-macos-silicon]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Delete source artifact
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: source-user

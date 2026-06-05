@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - BotifyTrades Admin{% endblock %}
+{% block page_title %}Server Settings{% endblock %}
+
+{% block content %}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px;">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Server Information</h3>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                    <span style="color: var(--text-muted);">Server Version</span>
+                    <span style="font-weight: 600;">v2.1.2</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                    <span style="color: var(--text-muted);">Server URL</span>
+                    <span class="license-key" style="font-size: 11px;">{{ server_url }}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                    <span style="color: var(--text-muted);">Database</span>
+                    <span class="badge badge-active"><span class="badge-dot"></span>Connected</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 12px 0;">
+                    <span style="color: var(--text-muted);">RSA Signing</span>
+                    <span class="badge badge-active"><span class="badge-dot"></span>Enabled</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">License Configuration</h3>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                    <span style="color: var(--text-muted);">Default License Duration</span>
+                    <span style="font-weight: 600;">365 days</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                    <span style="color: var(--text-muted);">Default Max Devices</span>
+                    <span style="font-weight: 600;">1 device</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                    <span style="color: var(--text-muted);">Offline Grace Period</span>
+                    <span style="font-weight: 600;">168 hours (7 days)</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 12px 0;">
+                    <span style="color: var(--text-muted);">Heartbeat Interval</span>
+                    <span style="font-weight: 600;">30 minutes</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Security Keys</h3>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div style="padding: 16px; background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 600;">RSA Private Key</span>
+                        <span class="badge badge-active"><span class="badge-dot"></span>Loaded</span>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted);">Used for signing license tokens. Keep secure.</p>
+                </div>
+                <div style="padding: 16px; background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 600;">RSA Public Key</span>
+                        <span class="badge badge-active"><span class="badge-dot"></span>Embedded in Client</span>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted);">Used by clients to verify signed tokens.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Admin Account</h3>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
+                <div style="width: 56px; height: 56px; background: var(--accent-gradient); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: var(--bg-primary);">
+                    {{ admin_username[0]|upper if admin_username else 'A' }}
+                </div>
+                <div>
+                    <div style="font-size: 18px; font-weight: 600;">{{ admin_username }}</div>
+                    <div style="font-size: 13px; color: var(--text-muted);">Administrator</div>
+                </div>
+            </div>
+            <button class="btn btn-secondary" style="width: 100%;" onclick="showPasswordModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                Change Password
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="password-modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Change Password</h2>
+            <button class="modal-close" onclick="closePasswordModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <form id="password-form">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Current Password</label>
+                    <input type="password" name="current_password" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">New Password</label>
+                    <input type="password" name="new_password" class="form-input" required minlength="8">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirm New Password</label>
+                    <input type="password" name="confirm_password" class="form-input" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closePasswordModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Update Password</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showPasswordModal() {
+        document.getElementById('password-modal').classList.add('active');
+    }
+    
+    function closePasswordModal() {
+        document.getElementById('password-modal').classList.remove('active');
+        document.getElementById('password-form').reset();
+    }
+    
+    document.getElementById('password-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData);
+        
+        if (data.new_password !== data.confirm_password) {
+            showToast('Passwords do not match', 'error');
+            return;
+        }
+        
+        try {
+            const res = await fetch('/api/admin/password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.success) {
+                showToast('Password updated successfully', 'success');
+                closePasswordModal();
+            } else {
+                showToast(result.error || 'Failed to update password', 'error');
+            }
+        } catch (err) {
+            showToast('Failed to update password', 'error');
+        }
+    });
+</script>
+{% endblock %}

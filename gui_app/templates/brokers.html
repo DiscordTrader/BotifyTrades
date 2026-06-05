@@ -1,0 +1,1120 @@
+{% extends "base.html" %}
+
+{% block title %}Broker Configuration - BotifyTrades{% endblock %}
+
+{% block content %}
+<style>
+.brokers-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+}
+
+.page-header h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: #00d4ff;
+    margin: 0;
+}
+
+.country-tabs {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+}
+
+.country-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
+    border: 2px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 15px;
+    font-weight: 600;
+    color: #8ab4c4;
+}
+
+.country-tab:hover {
+    border-color: rgba(0, 212, 255, 0.5);
+    background: linear-gradient(135deg, #0f3a4f 0%, #1a4a5f 100%);
+}
+
+.country-tab.active {
+    border-color: #00d4ff;
+    background: linear-gradient(135deg, #0a3a4a 0%, #0d4a5f 100%);
+    color: #00d4ff;
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+}
+
+.country-tab .flag {
+    font-size: 24px;
+}
+
+.country-tab .country-name {
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.country-tab .broker-count {
+    background: rgba(0, 212, 255, 0.2);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    color: #00d4ff;
+}
+
+.brokers-section {
+    display: none;
+}
+
+.brokers-section.active {
+    display: block;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.section-header .flag {
+    font-size: 32px;
+}
+
+.section-header h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+
+.section-header .currency {
+    background: rgba(0, 212, 255, 0.15);
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #00d4ff;
+    font-weight: 600;
+}
+
+.broker-selector {
+    margin-bottom: 24px;
+}
+
+.broker-selector label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #8ab4c4;
+    margin-bottom: 8px;
+}
+
+.broker-dropdown {
+    width: 100%;
+    max-width: 400px;
+    padding: 12px 16px;
+    background: #0a1a24;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.broker-dropdown:hover, .broker-dropdown:focus {
+    border-color: #00d4ff;
+    outline: none;
+}
+
+.broker-card {
+    background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 24px;
+    display: none;
+}
+
+.broker-card.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.broker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.15);
+}
+
+.broker-info h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 8px 0;
+}
+
+.broker-meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.broker-meta span {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.3);
+    color: #8ab4c4;
+}
+
+.broker-meta .library {
+    color: #a78bfa;
+}
+
+.broker-meta .expiry {
+    color: #fbbf24;
+}
+
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.connection-status.connected {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.connection-status.pending {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-dot.connected { background: #10b981; }
+.status-dot.disconnected { background: #ef4444; }
+.status-dot.pending { background: #fbbf24; }
+
+.credentials-form {
+    margin-bottom: 24px;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #8ab4c4;
+    margin-bottom: 6px;
+    text-transform: capitalize;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px 16px;
+    background: #0a1a24;
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.form-group input:focus {
+    border-color: #00d4ff;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+}
+
+.form-group input::placeholder {
+    color: #4a6a7a;
+}
+
+.form-group .field-hint {
+    font-size: 11px;
+    color: #5a7a8a;
+    margin-top: 4px;
+}
+
+.button-group {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 100%);
+    color: #0a1a24;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #00e5ff 0%, #00b8dc 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+}
+
+.btn-secondary {
+    background: rgba(0, 212, 255, 0.1);
+    color: #00d4ff;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+}
+
+.btn-secondary:hover {
+    background: rgba(0, 212, 255, 0.2);
+    border-color: #00d4ff;
+}
+
+.btn-test {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.btn-test:hover {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: #10b981;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.status-message {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+}
+
+.status-message.success {
+    display: block;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #10b981;
+}
+
+.status-message.error {
+    display: block;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.status-message.info {
+    display: block;
+    background: rgba(0, 212, 255, 0.15);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    color: #00d4ff;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(0, 212, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #00d4ff;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.empty-state {
+    text-align: center;
+    padding: 48px;
+    color: #5a7a8a;
+}
+
+.empty-state i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    color: #3a5a6a;
+}
+
+.broker-features {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.feature-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.feature-badge.yes {
+    color: #10b981;
+}
+
+.feature-badge.no {
+    color: #6b7280;
+}
+
+@media (max-width: 768px) {
+    .brokers-container {
+        padding: 16px;
+    }
+    
+    .country-tabs {
+        flex-direction: column;
+    }
+    
+    .country-tab {
+        justify-content: center;
+    }
+    
+    .broker-header {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .button-group {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+
+<div class="brokers-container">
+    <div class="page-header">
+        <h1>Broker Configuration</h1>
+    </div>
+    
+    <div id="loadingState" class="empty-state">
+        <div class="loading-spinner" style="width: 48px; height: 48px; border-width: 4px;"></div>
+        <p style="margin-top: 16px;">Loading brokers...</p>
+    </div>
+    
+    <div id="mainContent" style="display: none;">
+        <div class="country-tabs" id="countryTabs"></div>
+        <div id="brokerSections"></div>
+        
+        <div id="upstoxPendingSection" class="upstox-pending-section" style="display: none;">
+            <div class="section-header" style="margin-top: 32px;">
+                <h2>Upstox Pending Orders (AMO Queue)</h2>
+                <div class="amo-toggle">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="amoQueueToggle" onchange="toggleAmoQueue(this.checked)">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Accept AMO Orders</span>
+                    </label>
+                </div>
+            </div>
+            <p class="pending-info">Orders placed during API blackout (12:00 AM - 5:30 AM IST) are queued here and auto-submitted after 5:30 AM.</p>
+            <div id="pendingOrdersList" class="pending-orders-list">
+                <div class="empty-state">No pending orders</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.upstox-pending-section {
+    margin-top: 32px;
+    padding: 24px;
+    background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+}
+.upstox-pending-section .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.upstox-pending-section h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+.pending-info {
+    color: #8ab4c4;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+.amo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+.toggle-label input {
+    display: none;
+}
+.toggle-slider {
+    width: 44px;
+    height: 24px;
+    background: #3a5a6a;
+    border-radius: 12px;
+    position: relative;
+    transition: background 0.3s;
+}
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.3s;
+}
+.toggle-label input:checked + .toggle-slider {
+    background: #10b981;
+}
+.toggle-label input:checked + .toggle-slider::after {
+    transform: translateX(20px);
+}
+.toggle-text {
+    font-size: 13px;
+    color: #8ab4c4;
+}
+.pending-orders-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.pending-order-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+.pending-order-item:last-child {
+    margin-bottom: 0;
+}
+.order-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.order-symbol {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 15px;
+}
+.order-meta {
+    font-size: 12px;
+    color: #8ab4c4;
+}
+.order-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.order-status.pending {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+}
+.order-status.submitted {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+.order-status.cancelled {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+.order-status.failed {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+.btn-cancel-order {
+    padding: 6px 12px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.btn-cancel-order:hover {
+    background: rgba(239, 68, 68, 0.3);
+}
+.btn-cancel-order:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+</style>
+
+<script>
+let groupedBrokers = {};
+let currentCountry = null;
+let currentBroker = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadBrokers();
+    
+    // Periodic refresh of broker status every 30 seconds
+    setInterval(refreshBrokerStatus, 30000);
+});
+
+async function refreshBrokerStatus() {
+    try {
+        const response = await fetch('/api/brokers/grouped');
+        const data = await response.json();
+        
+        if (data.success) {
+            groupedBrokers = data.grouped_brokers;
+            
+            // Update broker cards dynamically without re-rendering everything
+            for (const [code, country] of Object.entries(groupedBrokers)) {
+                for (const broker of country.brokers) {
+                    updateBrokerCardStatus(broker);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error refreshing broker status:', error);
+    }
+}
+
+function updateBrokerCardStatus(broker) {
+    const card = document.getElementById(`card-${broker.broker_name}`);
+    if (!card) return;
+    
+    const isConnected = broker.connection_status?.is_connected;
+    const statusClass = isConnected ? 'connected' : 'disconnected';
+    const statusText = isConnected ? 'Connected' : 'Not Connected';
+    
+    // Update status element
+    const statusEl = card.querySelector('.connection-status');
+    if (statusEl) {
+        statusEl.className = `connection-status ${statusClass}`;
+        statusEl.innerHTML = `
+            <span class="status-dot ${statusClass}"></span>
+            ${statusText}
+        `;
+    }
+}
+
+async function loadBrokers() {
+    try {
+        const response = await fetch('/api/brokers/grouped');
+        const data = await response.json();
+        
+        if (data.success) {
+            groupedBrokers = data.grouped_brokers;
+            renderCountryTabs();
+            renderBrokerSections();
+            
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+            
+            const countries = Object.keys(groupedBrokers);
+            if (countries.length > 0) {
+                selectCountry(countries[0]);
+            }
+        } else {
+            showError('Failed to load brokers: ' + data.error);
+        }
+    } catch (error) {
+        showError('Error loading brokers: ' + error.message);
+    }
+}
+
+function renderCountryTabs() {
+    const container = document.getElementById('countryTabs');
+    container.innerHTML = '';
+    
+    for (const [code, country] of Object.entries(groupedBrokers)) {
+        const tab = document.createElement('div');
+        tab.className = 'country-tab';
+        tab.dataset.country = code;
+        tab.onclick = () => selectCountry(code);
+        
+        tab.innerHTML = `
+            <span class="flag">${country.flag || ''}</span>
+            <span class="country-name">${country.name}</span>
+            <span class="broker-count">${country.brokers.length}</span>
+        `;
+        
+        container.appendChild(tab);
+    }
+}
+
+function renderBrokerSections() {
+    const container = document.getElementById('brokerSections');
+    container.innerHTML = '';
+    
+    for (const [code, country] of Object.entries(groupedBrokers)) {
+        const section = document.createElement('div');
+        section.className = 'brokers-section';
+        section.id = `section-${code}`;
+        
+        let brokersHtml = '';
+        for (const broker of country.brokers) {
+            brokersHtml += renderBrokerCard(broker, country);
+        }
+        
+        const dropdownOptions = country.brokers.map(b => 
+            `<option value="${b.broker_name}">${b.display_name}</option>`
+        ).join('');
+        
+        section.innerHTML = `
+            <div class="section-header">
+                <span class="flag">${country.flag || ''}</span>
+                <h2>${country.name} Brokers</h2>
+                <span class="currency">${country.currency}</span>
+            </div>
+            
+            <div class="broker-selector">
+                <label>Select Broker</label>
+                <select class="broker-dropdown" id="dropdown-${code}" onchange="selectBroker('${code}', this.value)">
+                    <option value="">-- Select a broker --</option>
+                    ${dropdownOptions}
+                </select>
+            </div>
+            
+            <div class="broker-cards" id="cards-${code}">
+                ${brokersHtml}
+            </div>
+        `;
+        
+        container.appendChild(section);
+    }
+}
+
+function renderBrokerCard(broker, country) {
+    const isConnected = broker.connection_status?.is_connected;
+    const statusClass = isConnected ? 'connected' : 'disconnected';
+    const statusText = isConnected ? 'Connected' : 'Not Connected';
+    
+    const fields = broker.credential_fields || [];
+    const fieldsHtml = fields.map(field => {
+        const label = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const isPassword = field.includes('password') || field.includes('secret') || field.includes('token');
+        
+        return `
+            <div class="form-group">
+                <label for="${broker.broker_name}_${field}">${label}</label>
+                <input type="${isPassword ? 'password' : 'text'}" 
+                       id="${broker.broker_name}_${field}"
+                       name="${field}"
+                       placeholder="Enter ${label.toLowerCase()}"
+                       autocomplete="off">
+            </div>
+        `;
+    }).join('');
+    
+    return `
+        <div class="broker-card" id="card-${broker.broker_name}" data-broker="${broker.broker_name}">
+            <div class="broker-header">
+                <div class="broker-info">
+                    <h3>${broker.display_name}</h3>
+                    <div class="broker-meta">
+                        <span class="library">${broker.python_library || 'N/A'}</span>
+                        <span class="expiry">${broker.token_expiry_info || 'N/A'}</span>
+                    </div>
+                    <div class="broker-features">
+                        <span class="feature-badge ${broker.supports_options ? 'yes' : 'no'}">
+                            ${broker.supports_options ? 'Options' : 'No Options'}
+                        </span>
+                        <span class="feature-badge ${broker.supports_stocks ? 'yes' : 'no'}">
+                            ${broker.supports_stocks ? 'Stocks' : 'No Stocks'}
+                        </span>
+                        <span class="feature-badge ${broker.supports_paper ? 'yes' : 'no'}">
+                            ${broker.supports_paper ? 'Paper Trading' : 'Live Only'}
+                        </span>
+                    </div>
+                </div>
+                <div class="connection-status ${statusClass}">
+                    <span class="status-dot ${statusClass}"></span>
+                    ${statusText}
+                </div>
+            </div>
+            
+            <form class="credentials-form" id="form-${broker.broker_name}" onsubmit="saveCredentials(event, '${broker.broker_name}')">
+                ${fieldsHtml}
+                
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary">
+                        Save Credentials
+                    </button>
+                    <button type="button" class="btn btn-test" onclick="testConnection('${broker.broker_name}')">
+                        Test Connection
+                    </button>
+                </div>
+            </form>
+            
+            <div class="status-message" id="status-${broker.broker_name}"></div>
+        </div>
+    `;
+}
+
+function selectCountry(code) {
+    currentCountry = code;
+    
+    document.querySelectorAll('.country-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.country === code);
+    });
+    
+    document.querySelectorAll('.brokers-section').forEach(section => {
+        section.classList.toggle('active', section.id === `section-${code}`);
+    });
+    
+    document.querySelectorAll('.broker-card').forEach(card => {
+        card.classList.remove('active');
+    });
+    
+    const dropdown = document.getElementById(`dropdown-${code}`);
+    if (dropdown) {
+        dropdown.value = '';
+    }
+    currentBroker = null;
+}
+
+function selectBroker(countryCode, brokerName) {
+    currentBroker = brokerName;
+    
+    document.querySelectorAll(`#cards-${countryCode} .broker-card`).forEach(card => {
+        card.classList.toggle('active', card.dataset.broker === brokerName);
+    });
+    
+    if (brokerName) {
+        loadCredentials(brokerName);
+    }
+}
+
+async function loadCredentials(brokerName) {
+    try {
+        const response = await fetch(`/api/brokers/${brokerName}/credentials`);
+        const data = await response.json();
+        
+        if (data.success && data.credentials) {
+            const form = document.getElementById(`form-${brokerName}`);
+            if (form) {
+                for (const [key, value] of Object.entries(data.credentials)) {
+                    const input = form.querySelector(`[name="${key}"]`);
+                    if (input) {
+                        input.placeholder = value || `Enter ${key.replace(/_/g, ' ')}`;
+                    }
+                }
+            }
+            
+            updateConnectionStatus(brokerName, data.is_connected, data.connection_status);
+        }
+    } catch (error) {
+        console.error('Error loading credentials:', error);
+    }
+}
+
+async function saveCredentials(event, brokerName) {
+    event.preventDefault();
+    
+    const form = document.getElementById(`form-${brokerName}`);
+    const statusEl = document.getElementById(`status-${brokerName}`);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    
+    const credentials = {};
+    const inputs = form.querySelectorAll('input');
+    inputs.forEach(input => {
+        if (input.value.trim()) {
+            credentials[input.name] = input.value.trim();
+        }
+    });
+    
+    if (Object.keys(credentials).length === 0) {
+        showStatus(statusEl, 'error', 'Please fill in at least one field');
+        return;
+    }
+    
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="loading-spinner"></span> Saving...';
+    
+    try {
+        const response = await fetch(`/api/brokers/${brokerName}/credentials`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credentials })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showStatus(statusEl, 'success', 'Credentials saved successfully!');
+            inputs.forEach(input => {
+                if (input.value.trim()) {
+                    const masked = input.value.length > 4 
+                        ? '••••' + input.value.slice(-4) 
+                        : '••••';
+                    input.value = '';
+                    input.placeholder = masked;
+                }
+            });
+        } else {
+            showStatus(statusEl, 'error', data.error || 'Failed to save credentials');
+        }
+    } catch (error) {
+        showStatus(statusEl, 'error', 'Error: ' + error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Save Credentials';
+    }
+}
+
+async function testConnection(brokerName) {
+    const statusEl = document.getElementById(`status-${brokerName}`);
+    const form = document.getElementById(`form-${brokerName}`);
+    const testBtn = form.querySelector('.btn-test');
+    
+    const credentials = {};
+    const inputs = form.querySelectorAll('input');
+    inputs.forEach(input => {
+        if (input.value.trim()) {
+            credentials[input.name] = input.value.trim();
+        }
+    });
+    
+    testBtn.disabled = true;
+    testBtn.innerHTML = '<span class="loading-spinner"></span> Testing...';
+    showStatus(statusEl, 'info', 'Testing connection...');
+    
+    try {
+        const response = await fetch(`/api/brokers/${brokerName}/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credentials: Object.keys(credentials).length > 0 ? credentials : null })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showStatus(statusEl, 'success', data.message || 'Connection successful!');
+            updateConnectionStatus(brokerName, true, data.message);
+        } else {
+            showStatus(statusEl, 'error', data.message || 'Connection failed');
+            updateConnectionStatus(brokerName, false, data.message);
+        }
+    } catch (error) {
+        showStatus(statusEl, 'error', 'Error: ' + error.message);
+        updateConnectionStatus(brokerName, false, error.message);
+    } finally {
+        testBtn.disabled = false;
+        testBtn.innerHTML = 'Test Connection';
+    }
+}
+
+function updateConnectionStatus(brokerName, isConnected, message) {
+    const card = document.getElementById(`card-${brokerName}`);
+    if (!card) return;
+    
+    const statusEl = card.querySelector('.connection-status');
+    if (statusEl) {
+        statusEl.className = `connection-status ${isConnected ? 'connected' : 'disconnected'}`;
+        statusEl.innerHTML = `
+            <span class="status-dot ${isConnected ? 'connected' : 'disconnected'}"></span>
+            ${isConnected ? 'Connected' : 'Not Connected'}
+        `;
+    }
+}
+
+function showStatus(element, type, message) {
+    element.className = `status-message ${type}`;
+    element.textContent = message;
+    element.style.display = 'block';
+    
+    if (type === 'success') {
+        setTimeout(() => {
+            element.style.display = 'none';
+        }, 5000);
+    }
+}
+
+function showError(message) {
+    document.getElementById('loadingState').innerHTML = `
+        <div style="color: #ef4444; font-size: 48px; margin-bottom: 16px;">!</div>
+        <p style="color: #ef4444;">${message}</p>
+        <button class="btn btn-secondary" onclick="location.reload()" style="margin-top: 16px;">
+            Retry
+        </button>
+    `;
+}
+
+async function loadUpstoxPendingOrders() {
+    try {
+        const [ordersRes, toggleRes] = await Promise.all([
+            fetch('/api/upstox/pending-orders'),
+            fetch('/api/upstox/amo-queue-enabled')
+        ]);
+        
+        const ordersData = await ordersRes.json();
+        const toggleData = await toggleRes.json();
+        
+        if (toggleData.success) {
+            document.getElementById('amoQueueToggle').checked = toggleData.enabled;
+        }
+        
+        if (ordersData.success) {
+            renderPendingOrders(ordersData.orders);
+            document.getElementById('upstoxPendingSection').style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error loading Upstox pending orders:', error);
+    }
+}
+
+function renderPendingOrders(orders) {
+    const container = document.getElementById('pendingOrdersList');
+    
+    if (!orders || orders.length === 0) {
+        container.innerHTML = '<div class="empty-state">No pending orders</div>';
+        return;
+    }
+    
+    let html = '';
+    for (const order of orders) {
+        const statusClass = order.status.toLowerCase();
+        const canCancel = order.status === 'PENDING';
+        const createdAt = new Date(order.created_at).toLocaleString();
+        const symbol = order.symbol_display || order.instrument_token || 'Unknown';
+        
+        html += `
+            <div class="pending-order-item" data-order-id="${order.pending_order_id}">
+                <div class="order-details">
+                    <div class="order-symbol">${order.transaction_type} ${order.quantity} ${symbol}</div>
+                    <div class="order-meta">
+                        ID: ${order.pending_order_id} | ${order.order_type} | Queued: ${createdAt}
+                    </div>
+                    ${order.error_message ? `<div class="order-meta" style="color: #ef4444;">Error: ${order.error_message}</div>` : ''}
+                    ${order.submitted_order_ids ? `<div class="order-meta" style="color: #10b981;">Submitted: ${order.submitted_order_ids}</div>` : ''}
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span class="order-status ${statusClass}">${order.status}</span>
+                    ${canCancel ? `<button class="btn-cancel-order" onclick="cancelPendingOrder('${order.pending_order_id}')">Cancel</button>` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+async function toggleAmoQueue(enabled) {
+    try {
+        const response = await fetch('/api/upstox/amo-queue-enabled', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+        });
+        
+        const data = await response.json();
+        if (!data.success) {
+            alert('Failed to update AMO queue setting: ' + data.error);
+            document.getElementById('amoQueueToggle').checked = !enabled;
+        }
+    } catch (error) {
+        alert('Error updating AMO queue setting: ' + error.message);
+        document.getElementById('amoQueueToggle').checked = !enabled;
+    }
+}
+
+async function cancelPendingOrder(orderId) {
+    if (!confirm('Cancel this pending order?')) return;
+    
+    try {
+        const response = await fetch(`/api/upstox/pending-orders/${orderId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            loadUpstoxPendingOrders();
+        } else {
+            alert('Failed to cancel order: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error cancelling order: ' + error.message);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(loadUpstoxPendingOrders, 1000);
+    setInterval(loadUpstoxPendingOrders, 30000);
+});
+</script>
+{% endblock %}

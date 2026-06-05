@@ -1,0 +1,752 @@
+{% extends "base.html" %}
+
+{% block title %}📋 Waitlist Management - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<style>
+.waitlist-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.waitlist-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+
+.stat-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 32px;
+    font-weight: 800;
+    color: #00d4ff;
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-card.pending .stat-value { color: #fbbf24; }
+.stat-card.invited .stat-value { color: #22c55e; }
+.stat-card.rejected .stat-value { color: #ef4444; }
+
+.controls-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.search-input {
+    flex: 1;
+    min-width: 200px;
+    background: rgba(0, 50, 80, 0.4);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: rgba(0, 212, 255, 0.5);
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.2);
+}
+
+.filter-select {
+    background: rgba(0, 50, 80, 0.4);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-size: 14px;
+    min-width: 140px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%);
+    color: #0a1628;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 212, 255, 0.3);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: white;
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.btn-secondary {
+    background: rgba(100, 116, 139, 0.3);
+    color: var(--text-primary);
+    border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.waitlist-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.waitlist-table th {
+    background: rgba(0, 50, 80, 0.5);
+    padding: 14px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+}
+
+.waitlist-table td {
+    padding: 14px 16px;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.05);
+}
+
+.waitlist-table tr:hover {
+    background: rgba(0, 212, 255, 0.05);
+}
+
+.waitlist-table tr:last-child td {
+    border-bottom: none;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-pending {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+}
+
+.status-invited {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+}
+
+.status-rejected {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.status-notified {
+    background: rgba(124, 58, 237, 0.2);
+    color: #a78bfa;
+}
+
+.action-btns {
+    display: flex;
+    gap: 6px;
+}
+
+.action-btn {
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+    transform: translateY(-1px);
+}
+
+.referral-code {
+    font-family: monospace;
+    background: rgba(0, 212, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #00d4ff;
+}
+
+.queue-pos {
+    font-weight: 700;
+    color: #00d4ff;
+}
+
+.checkbox-cell {
+    width: 40px;
+}
+
+.checkbox-cell input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #00d4ff;
+}
+
+.bulk-actions {
+    display: none;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(0, 212, 255, 0.1);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    align-items: center;
+}
+
+.bulk-actions.active {
+    display: flex;
+}
+
+.selected-count {
+    font-weight: 600;
+    color: #00d4ff;
+}
+
+.email-template {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.email-template.active {
+    display: flex;
+}
+
+.email-modal {
+    background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    border-radius: 16px;
+    padding: 32px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.email-modal h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 20px;
+    color: #00d4ff;
+    margin-bottom: 20px;
+}
+
+.email-modal textarea {
+    width: 100%;
+    min-height: 200px;
+    background: rgba(0, 50, 80, 0.4);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 8px;
+    padding: 14px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    margin-bottom: 16px;
+}
+
+.email-modal textarea:focus {
+    outline: none;
+    border-color: rgba(0, 212, 255, 0.5);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.empty-state svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.notification-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 16px 24px;
+    border-radius: 12px;
+    font-weight: 500;
+    z-index: 1001;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.notification-toast.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.notification-toast.success {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: white;
+}
+
+.notification-toast.error {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.time-ago {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+</style>
+
+<div class="waitlist-header">
+    <h1 class="waitlist-title">📋 Waitlist Management</h1>
+    <button class="btn btn-primary" onclick="refreshWaitlist()">
+        🔄 Refresh
+    </button>
+</div>
+
+<div class="stats-grid" id="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value" id="total-count">-</div>
+        <div class="stat-label">Total Signups</div>
+    </div>
+    <div class="stat-card pending">
+        <div class="stat-value" id="pending-count">-</div>
+        <div class="stat-label">Pending</div>
+    </div>
+    <div class="stat-card invited">
+        <div class="stat-value" id="invited-count">-</div>
+        <div class="stat-label">Invited</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="referral-count">-</div>
+        <div class="stat-label">Via Referrals</div>
+    </div>
+</div>
+
+<div class="controls-bar">
+    <input type="text" class="search-input" id="search-input" placeholder="🔍 Search by email or name..." oninput="filterWaitlist()">
+    <select class="filter-select" id="status-filter" onchange="filterWaitlist()">
+        <option value="">All Status</option>
+        <option value="pending">Pending</option>
+        <option value="invited">Invited</option>
+        <option value="notified">Notified</option>
+        <option value="rejected">Rejected</option>
+    </select>
+    <select class="filter-select" id="sort-select" onchange="filterWaitlist()">
+        <option value="queue">By Queue Position</option>
+        <option value="date">By Signup Date</option>
+        <option value="referrals">By Referral Count</option>
+    </select>
+</div>
+
+<div class="bulk-actions" id="bulk-actions">
+    <span class="selected-count"><span id="selected-count">0</span> selected</span>
+    <button class="btn btn-success" onclick="bulkInvite()">✉️ Invite Selected</button>
+    <button class="btn btn-secondary" onclick="bulkNotify()">📣 Send Update</button>
+    <button class="btn btn-danger" onclick="bulkReject()">❌ Reject Selected</button>
+    <button class="btn btn-secondary" onclick="clearSelection()">Cancel</button>
+</div>
+
+<div id="waitlist-container">
+    <table class="waitlist-table">
+        <thead>
+            <tr>
+                <th class="checkbox-cell">
+                    <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
+                </th>
+                <th>#</th>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Referral Code</th>
+                <th>Referrals</th>
+                <th>Signed Up</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="waitlist-body">
+            <tr>
+                <td colspan="9" class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M12 6v6l4 2M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+                    </svg>
+                    <p>Loading waitlist...</p>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="email-template" id="email-modal">
+    <div class="email-modal">
+        <h3 id="modal-title">Send Invite Email</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 16px;" id="modal-subtitle">
+            Customize the message to send to selected users.
+        </p>
+        <input type="text" id="email-subject" class="search-input" style="margin-bottom: 12px;" placeholder="Email Subject" value="You're Invited to BotifyTrades Beta!">
+        <textarea id="email-body">Hello {name},
+
+Congratulations! You've been selected for early access to BotifyTrades.
+
+Your queue position: #{position}
+
+Click the link below to get started:
+{invite_link}
+
+Welcome aboard!
+The BotifyTrades Team</textarea>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeEmailModal()">Cancel</button>
+            <button class="btn btn-success" id="send-email-btn" onclick="sendEmails()">Send Invites</button>
+        </div>
+    </div>
+</div>
+
+<div class="notification-toast" id="toast"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let waitlistData = [];
+let selectedIds = new Set();
+
+async function fetchWaitlist() {
+    try {
+        const response = await fetch('/api/waitlist?limit=500');
+        const data = await response.json();
+        waitlistData = data.entries || [];
+        
+        document.getElementById('total-count').textContent = data.stats?.total || 0;
+        document.getElementById('pending-count').textContent = data.stats?.pending || 0;
+        document.getElementById('invited-count').textContent = data.stats?.invited || 0;
+        document.getElementById('referral-count').textContent = data.stats?.referred_count || 0;
+        
+        renderWaitlist(waitlistData);
+    } catch (err) {
+        console.error('Failed to fetch waitlist:', err);
+        showToast('Failed to load waitlist', 'error');
+    }
+}
+
+function renderWaitlist(entries) {
+    const tbody = document.getElementById('waitlist-body');
+    
+    if (!entries || entries.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    <p>No waitlist entries yet</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = entries.map(entry => `
+        <tr data-id="${entry.id}">
+            <td class="checkbox-cell">
+                <input type="checkbox" class="entry-checkbox" value="${entry.id}" onchange="updateSelection()" ${selectedIds.has(entry.id) ? 'checked' : ''}>
+            </td>
+            <td class="queue-pos">#${entry.queue_position}</td>
+            <td>${escapeHtml(entry.email)}</td>
+            <td>${entry.name ? escapeHtml(entry.name) : '<span style="color: var(--text-muted);">-</span>'}</td>
+            <td><span class="status-badge status-${entry.status}">${entry.status}</span></td>
+            <td><span class="referral-code">${entry.referral_code}</span></td>
+            <td>${entry.referral_count || 0}</td>
+            <td><span class="time-ago">${formatTimeAgo(entry.created_at)}</span></td>
+            <td class="action-btns">
+                ${entry.status === 'pending' ? `
+                    <button class="action-btn btn-success" onclick="inviteUser(${entry.id})" title="Invite">✉️</button>
+                    <button class="action-btn btn-danger" onclick="rejectUser(${entry.id})" title="Reject">❌</button>
+                ` : `
+                    <button class="action-btn btn-secondary" onclick="resetStatus(${entry.id})" title="Reset to Pending">↩️</button>
+                `}
+                <button class="action-btn btn-danger" onclick="deleteUser(${entry.id})" title="Delete">🗑️</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function filterWaitlist() {
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const status = document.getElementById('status-filter').value;
+    const sort = document.getElementById('sort-select').value;
+    
+    let filtered = waitlistData.filter(entry => {
+        const matchesSearch = !search || 
+            entry.email.toLowerCase().includes(search) || 
+            (entry.name && entry.name.toLowerCase().includes(search));
+        const matchesStatus = !status || entry.status === status;
+        return matchesSearch && matchesStatus;
+    });
+    
+    if (sort === 'date') {
+        filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    } else if (sort === 'referrals') {
+        filtered.sort((a, b) => (b.referral_count || 0) - (a.referral_count || 0));
+    } else {
+        filtered.sort((a, b) => a.queue_position - b.queue_position);
+    }
+    
+    renderWaitlist(filtered);
+}
+
+function updateSelection() {
+    const checkboxes = document.querySelectorAll('.entry-checkbox:checked');
+    selectedIds = new Set([...checkboxes].map(cb => parseInt(cb.value)));
+    
+    document.getElementById('selected-count').textContent = selectedIds.size;
+    document.getElementById('bulk-actions').classList.toggle('active', selectedIds.size > 0);
+    document.getElementById('select-all').checked = checkboxes.length === document.querySelectorAll('.entry-checkbox').length && checkboxes.length > 0;
+}
+
+function toggleSelectAll() {
+    const selectAll = document.getElementById('select-all').checked;
+    document.querySelectorAll('.entry-checkbox').forEach(cb => cb.checked = selectAll);
+    updateSelection();
+}
+
+function clearSelection() {
+    document.querySelectorAll('.entry-checkbox').forEach(cb => cb.checked = false);
+    document.getElementById('select-all').checked = false;
+    selectedIds.clear();
+    updateSelection();
+}
+
+async function updateStatus(id, status) {
+    try {
+        const response = await fetch(`/api/waitlist/${id}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+        
+        if (response.ok) {
+            showToast(`Status updated to ${status}`, 'success');
+            await fetchWaitlist();
+        } else {
+            showToast('Failed to update status', 'error');
+        }
+    } catch (err) {
+        showToast('Error updating status', 'error');
+    }
+}
+
+async function inviteUser(id) {
+    await updateStatus(id, 'invited');
+}
+
+async function rejectUser(id) {
+    if (confirm('Are you sure you want to reject this user?')) {
+        await updateStatus(id, 'rejected');
+    }
+}
+
+async function resetStatus(id) {
+    await updateStatus(id, 'pending');
+}
+
+async function deleteUser(id) {
+    if (confirm('Are you sure you want to permanently delete this entry?')) {
+        try {
+            const response = await fetch(`/api/waitlist/${id}`, { method: 'DELETE' });
+            if (response.ok) {
+                showToast('Entry deleted', 'success');
+                await fetchWaitlist();
+            } else {
+                showToast('Failed to delete entry', 'error');
+            }
+        } catch (err) {
+            showToast('Error deleting entry', 'error');
+        }
+    }
+}
+
+function bulkInvite() {
+    if (selectedIds.size === 0) return;
+    document.getElementById('modal-title').textContent = 'Send Invite Emails';
+    document.getElementById('modal-subtitle').textContent = `Send invite email to ${selectedIds.size} selected user(s).`;
+    document.getElementById('send-email-btn').textContent = 'Send Invites';
+    document.getElementById('email-subject').value = "You're Invited to BotifyTrades Beta!";
+    document.getElementById('email-modal').classList.add('active');
+}
+
+function bulkNotify() {
+    if (selectedIds.size === 0) return;
+    document.getElementById('modal-title').textContent = 'Send Update Notification';
+    document.getElementById('modal-subtitle').textContent = `Send update to ${selectedIds.size} selected user(s).`;
+    document.getElementById('send-email-btn').textContent = 'Send Update';
+    document.getElementById('email-subject').value = 'BotifyTrades Update';
+    document.getElementById('email-body').value = `Hello {name},
+
+We have an exciting update to share with you!
+
+[Your update message here]
+
+Thank you for your patience!
+The BotifyTrades Team`;
+    document.getElementById('email-modal').classList.add('active');
+}
+
+async function bulkReject() {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Are you sure you want to reject ${selectedIds.size} users?`)) return;
+    
+    for (const id of selectedIds) {
+        await updateStatus(id, 'rejected');
+    }
+    clearSelection();
+}
+
+function closeEmailModal() {
+    document.getElementById('email-modal').classList.remove('active');
+}
+
+async function sendEmails() {
+    const subject = document.getElementById('email-subject').value;
+    const body = document.getElementById('email-body').value;
+    const ids = [...selectedIds];
+    const isInvite = document.getElementById('send-email-btn').textContent.includes('Invite');
+    
+    document.getElementById('send-email-btn').disabled = true;
+    document.getElementById('send-email-btn').textContent = 'Sending...';
+    
+    try {
+        const response = await fetch('/api/waitlist/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                ids, 
+                subject, 
+                body,
+                type: isInvite ? 'invite' : 'update'
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            let msg = `Sent ${result.count} email(s)`;
+            if (result.failed > 0) {
+                msg += `, ${result.failed} failed`;
+            }
+            showToast(msg, result.failed > 0 ? 'warning' : 'success');
+            closeEmailModal();
+            clearSelection();
+            await fetchWaitlist();
+        } else {
+            showToast(result.error || 'Failed to send notifications', 'error');
+        }
+    } catch (err) {
+        showToast('Error sending notifications', 'error');
+    } finally {
+        document.getElementById('send-email-btn').disabled = false;
+        document.getElementById('send-email-btn').textContent = isInvite ? 'Send Invites' : 'Send Update';
+    }
+}
+
+function refreshWaitlist() {
+    fetchWaitlist();
+    showToast('Refreshed', 'success');
+}
+
+function formatTimeAgo(dateStr) {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `notification-toast ${type} show`;
+    setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+document.addEventListener('DOMContentLoaded', fetchWaitlist);
+</script>
+{% endblock %}

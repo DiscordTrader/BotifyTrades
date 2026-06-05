@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Canada Markets - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<!-- Canada Market Header -->
+<div class="table-container" style="margin-bottom: 24px; background: linear-gradient(135deg, #1a0f0f 0%, #2d1f1f 50%, #1f2a1f 100%); border: 1px solid rgba(255, 0, 0, 0.3);">
+    <div style="padding: 24px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h1 style="margin: 0 0 8px 0; font-size: 28px; color: #ff0000; display: flex; align-items: center; gap: 12px;">
+                🇨🇦 Canada Market Channels
+            </h1>
+            <p style="margin: 0; color: #b4b8c5; font-size: 14px;">
+                TSX • CSE • NEO — Trade Canadian equities and ETFs
+            </p>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <div style="text-align: right;">
+                <div style="font-size: 11px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px;">Trading Hours</div>
+                <div style="font-size: 14px; color: #00ff88; font-weight: 600;">9:30 AM - 4:00 PM ET</div>
+            </div>
+            <div style="width: 1px; height: 40px; background: rgba(255, 0, 0, 0.3);"></div>
+            <div style="text-align: right;">
+                <div style="font-size: 11px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px;">Currency</div>
+                <div style="font-size: 18px; color: #ff0000; font-weight: 700;">$ CAD</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Broker Status Card -->
+<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 32px;">
+    <!-- Questrade -->
+    <div class="table-container" style="background: linear-gradient(135deg, #0f1a0f 0%, #1a2f1a 100%); border: 1px solid rgba(0, 166, 81, 0.4);">
+        <div class="table-header" style="border-bottom: 1px solid rgba(0, 166, 81, 0.2); display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="table-title" style="color: #00a651; margin: 0;">🍁 Questrade</h3>
+            <span id="questrade-status-badge" style="padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; background: rgba(142, 142, 147, 0.2); color: #8E8E93;">CHECKING...</span>
+        </div>
+        <div style="padding: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+                <div style="background: rgba(0, 166, 81, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 166, 81, 0.2);">
+                    <div style="color: #8E8E93; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Buying Power</div>
+                    <div id="questrade-buying-power" style="font-size: 18px; font-weight: bold; color: #00a651;">$0.00 CAD</div>
+                </div>
+                <div style="background: rgba(0, 166, 81, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 166, 81, 0.2);">
+                    <div style="color: #8E8E93; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Equity</div>
+                    <div id="questrade-equity" style="font-size: 18px; font-weight: bold; color: #00ff88;">$0.00 CAD</div>
+                </div>
+                <div style="background: rgba(0, 166, 81, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 166, 81, 0.2);">
+                    <div style="color: #8E8E93; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Positions</div>
+                    <div id="questrade-positions" style="font-size: 18px; font-weight: bold; color: #00d4ff;">0</div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid rgba(0, 166, 81, 0.1);">
+                <span id="questrade-status-text" style="font-size: 11px; color: #8E8E93;">Checking connection...</span>
+                <a href="/brokers" style="font-size: 11px; color: #00a651; text-decoration: none;">Configure →</a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Market Info -->
+    <div class="table-container" style="background: linear-gradient(135deg, #0a1628 0%, #162447 100%); border: 1px solid rgba(0, 212, 255, 0.3);">
+        <div class="table-header" style="border-bottom: 1px solid rgba(0, 212, 255, 0.2);">
+            <h3 class="table-title" style="color: #00d4ff;">📊 Canada Market Info</h3>
+        </div>
+        <div style="padding: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                <div>
+                    <div style="font-size: 11px; color: #8E8E93; text-transform: uppercase; margin-bottom: 4px;">Exchanges</div>
+                    <div style="font-size: 14px; color: #ffffff;">TSX, TSX-V, CSE, NEO</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; color: #8E8E93; text-transform: uppercase; margin-bottom: 4px;">Account Types</div>
+                    <div style="font-size: 14px; color: #ffffff;">TFSA, RRSP, Margin, Cash</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; color: #8E8E93; text-transform: uppercase; margin-bottom: 4px;">Commission</div>
+                    <div style="font-size: 14px; color: #00ff88;">$4.95 - $9.95/trade</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; color: #8E8E93; text-transform: uppercase; margin-bottom: 4px;">Options</div>
+                    <div style="font-size: 14px; color: #ffb700;">$9.95 + $1/contract</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Channel Management Section -->
+<div class="table-container" style="margin-bottom: 32px;">
+    <div class="table-header">
+        <div style="display: flex; gap: 16px; align-items: center;">
+            <h3 class="table-title">📡 Canada Market Channels</h3>
+            <div style="display: flex; background: rgba(255, 0, 0, 0.05); border: 1px solid var(--border-color); border-radius: 8px; padding: 4px; gap: 4px;">
+                <button id="channel-type-execute" class="channel-type-tab active" onclick="switchChannelType('EXECUTE')" style="padding: 6px 14px; border: none; border-radius: 6px; background: linear-gradient(135deg, #ff0000, #cc0000); color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    🎯 Execution
+                </button>
+                <button id="channel-type-track" class="channel-type-tab" onclick="switchChannelType('TRACK')" style="padding: 6px 14px; border: none; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    📊 Tracking
+                </button>
+            </div>
+        </div>
+        <button onclick="document.getElementById('add-channel-form').scrollIntoView({behavior: 'smooth'})" class="btn btn-primary btn-small" style="background: linear-gradient(135deg, #ff0000, #cc0000);">
+            ➕ Add Canada Channel
+        </button>
+    </div>
+    
+    <div id="channels-list">
+        <div style="text-align: center; padding: 40px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary);">Loading Canada channels...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Add New Canada Channel Form -->
+<div class="card" style="margin-top: 32px; border: 1px solid rgba(255, 0, 0, 0.3);">
+    <div class="card-header" style="background: linear-gradient(135deg, #1a0f0f 0%, #2d1f1f 100%); color: #ff0000;">➕ Add Canada Market Channel</div>
+    <div class="card-body">
+        <form id="add-channel-form" class="form-horizontal" style="max-width: 700px;">
+            <input type="hidden" id="channel-market" value="CA">
+            
+            <div class="form-group">
+                <label for="channel-type-select" class="form-label">Channel Type</label>
+                <select id="channel-type-select" class="form-control" required>
+                    <option value="EXECUTE">🎯 Execution Channel (Live Trading)</option>
+                    <option value="TRACK">📊 Tracking Channel (Paper Trading / Analysis)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="channel-name" class="form-label">Channel Name</label>
+                <input type="text" id="channel-name" class="form-control" placeholder="TSX Mining Picks" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="channel-id" class="form-label">Discord/Telegram Channel ID</label>
+                <input type="text" id="channel-id" class="form-control" placeholder="551065756557639680" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Select Canada Broker</label>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 166, 81, 0.1); border: 1px solid rgba(0, 166, 81, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                        <input type="checkbox" id="new-broker-QUESTRADE" value="QUESTRADE" style="width: 16px; height: 16px; cursor: pointer;" checked>
+                        <div>
+                            <div style="font-weight: 600; color: #00a651; font-size: 12px;">🍁 Questrade LIVE</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Real money trading</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                        <input type="checkbox" id="new-broker-QUESTRADE_PAPER" value="QUESTRADE_PAPER" style="width: 16px; height: 16px; cursor: pointer;">
+                        <div>
+                            <div style="font-weight: 600; color: #00ff88; font-size: 12px;">🍁 Questrade PAPER</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Practice account</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Default Position Size</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div>
+                        <label style="font-size: 11px; color: #8E8E93;">Shares</label>
+                        <input type="number" id="default-quantity" class="form-control" placeholder="100" min="1" value="100">
+                    </div>
+                    <div>
+                        <label style="font-size: 11px; color: #8E8E93;">% of Portfolio</label>
+                        <input type="number" id="position-size-pct" class="form-control" placeholder="5" min="0.1" max="100" step="0.1" value="5">
+                    </div>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="margin-top: 16px; background: linear-gradient(135deg, #ff0000, #cc0000);">
+                ➕ Add Canada Channel
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Signal Format Reference -->
+<div class="table-container" style="margin-top: 32px; background: rgba(0, 0, 0, 0.3);">
+    <div class="table-header">
+        <h3 class="table-title">📝 Supported Canada Signal Formats</h3>
+    </div>
+    <div style="padding: 20px;">
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+            <div style="background: rgba(255, 0, 0, 0.05); padding: 16px; border-radius: 8px; border: 1px solid rgba(255, 0, 0, 0.2);">
+                <div style="font-weight: 700; color: #ff0000; margin-bottom: 8px;">TSX Equity Format</div>
+                <code style="display: block; background: #1C1C1E; padding: 12px; border-radius: 6px; font-size: 12px; color: #00ff88;">
+                    BTO SHOP.TO @ $120.50 CAD<br>
+                    STC RY.TO @ $145.00<br>
+                    BUY TD.TO 100 shares @ $85
+                </code>
+            </div>
+            <div style="background: rgba(0, 166, 81, 0.05); padding: 16px; border-radius: 8px; border: 1px solid rgba(0, 166, 81, 0.2);">
+                <div style="font-weight: 700; color: #00a651; margin-bottom: 8px;">Mining/Resource Format</div>
+                <code style="display: block; background: #1C1C1E; padding: 12px; border-radius: 6px; font-size: 12px; color: #00ff88;">
+                    BTO NTR.TO @ $75.20<br>
+                    BTO ABX.TO @ $22.50<br>
+                    STC SU.TO @ $48.00
+                </code>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/channels_canada.js') }}"></script>
+<script>
+const MARKET = 'CA';
+
+function switchChannelType(type) {
+    console.log('[Canada] Switching to category:', type);
+    canadaChannelCategory = type;
+    document.getElementById('channel-type-execute').style.background = type === 'EXECUTE' ? 'linear-gradient(135deg, #ff0000, #cc0000)' : 'transparent';
+    document.getElementById('channel-type-execute').style.color = type === 'EXECUTE' ? 'white' : 'var(--text-secondary)';
+    document.getElementById('channel-type-track').style.background = type === 'TRACK' ? 'linear-gradient(135deg, #ff0000, #cc0000)' : 'transparent';
+    document.getElementById('channel-type-track').style.color = type === 'TRACK' ? 'white' : 'var(--text-secondary)';
+    document.getElementById('channel-type-select').value = type;
+    loadCanadaChannels();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('[Canada] Page loaded, initializing...');
+    initCanadaChannelManagement('EXECUTE');
+    loadCanadaBrokerStatus();
+    
+    document.getElementById('channel-type-select').addEventListener('change', function() {
+        switchChannelType(this.value);
+    });
+});
+</script>
+{% endblock %}
