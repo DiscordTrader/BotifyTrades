@@ -89,7 +89,7 @@ class IBKRDataHub:
 
         self.POSITION_CACHE_TTL = 15
         self.ACCOUNT_CACHE_TTL = 30
-        self.QUOTE_STALE_THRESHOLD = 120
+        self.QUOTE_STALE_THRESHOLD = 300
 
         self._risk_eval_requested = threading.Event()
         self._reconcile_task = None
@@ -133,8 +133,8 @@ class IBKRDataHub:
         self._loop = loop
         self._attach_events()
         try:
-            self._ib.reqMarketDataType(4)
-            print("[IBKR_HUB] ✓ Requested delayed-frozen market data fallback (type 4)")
+            self._ib.reqMarketDataType(1)
+            print("[IBKR_HUB] ✓ Requested LIVE market data (type 1)")
         except Exception as e:
             print(f"[IBKR_HUB] ⚠️ reqMarketDataType failed: {e}")
         self._streaming_active = True
@@ -199,6 +199,11 @@ class IBKRDataHub:
             if not self._using_delayed_data:
                 self._using_delayed_data = True
                 print("[IBKR_HUB] ⚠️ Using delayed market data (no real-time subscription)")
+                try:
+                    self._ib.reqMarketDataType(4)
+                    print("[IBKR_HUB] ✓ Switched to delayed-frozen data (type 4)")
+                except Exception:
+                    pass
         elif errorCode in (10089, 10168):
             symbol = ''
             if contract:
@@ -227,9 +232,14 @@ class IBKRDataHub:
         self._emit('disconnected', {})
 
     def _on_timeout(self, idlePeriod):
-        print(f"[IBKR_HUB] ⚠️ TWS timeout — no data received for {idlePeriod:.0f}s. Marking stale, will attempt reconnect.")
-        self._streaming_active = False
-        self._consecutive_stale_checks = self._STALE_CHECK_THRESHOLD
+        is_connected = self._ib and self._ib.isConnected()
+        if is_connected:
+            print(f"[IBKR_HUB] ⚠️ TWS timeout — no data received for {idlePeriod:.0f}s (connection alive, keeping streaming active)")
+            self._consecutive_stale_checks += 1
+        else:
+            print(f"[IBKR_HUB] ⚠️ TWS timeout — no data received for {idlePeriod:.0f}s. Connection lost, marking stale.")
+            self._streaming_active = False
+            self._consecutive_stale_checks = self._STALE_CHECK_THRESHOLD
 
     async def _attempt_reconnect(self):
         now = time.time()
@@ -446,12 +456,12 @@ class IBKRDataHub:
                 return None
             return q
 
-    def get_quote_price(self, symbol: str) -> Optional[float]:
+    def get_quote_price(self, symbol: str, allow_stale: bool = False) -> Optional[float]:
         with self._quotes_lock:
             q = self._quotes.get(symbol)
             if not q:
                 return None
-            if (time.time() - q.timestamp) > self.QUOTE_STALE_THRESHOLD:
+            if not allow_stale and (time.time() - q.timestamp) > self.QUOTE_STALE_THRESHOLD:
                 return None
             if q.last and q.last > 0:
                 return q.last
@@ -557,16 +567,16 @@ class IBKRDataHub:
         if not self._ib or not self._streaming_active:
             self._pending_subscriptions.add(symbol)
             return
+        self._subscribed_symbols.add(symbol)
         if self._loop and not self._loop.is_closed():
             asyncio.run_coroutine_threadsafe(
                 self._subscribe_on_loop(symbol, contract), self._loop
             )
         else:
+            self._subscribed_symbols.discard(symbol)
             self._pending_subscriptions.add(symbol)
 
     async def _subscribe_on_loop(self, symbol: str, contract=None):
-        if symbol in self._subscribed_symbols:
-            return
         if contract:
             self._start_market_data(symbol, contract)
         else:
@@ -579,9 +589,11 @@ class IBKRDataHub:
         import time as _time
         with self._mktdata_denied_lock:
             if symbol in self._mktdata_denied_symbols:
+                self._subscribed_symbols.discard(symbol)
                 return
         fail_ts = self._subscribe_fail_cache.get(symbol, 0)
         if fail_ts and _time.time() - fail_ts < self._SUBSCRIBE_FAIL_BACKOFF:
+            self._subscribed_symbols.discard(symbol)
             return
         try:
             from ib_insync import Stock
@@ -592,6 +604,7 @@ class IBKRDataHub:
             logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} (conId={auto_contract.conId})")
         except Exception as e:
             self._subscribe_fail_cache[symbol] = _time.time()
+            self._subscribed_symbols.discard(symbol)
             if 'event loop' in str(e).lower():
                 pass
             else:
@@ -600,6 +613,7 @@ class IBKRDataHub:
 
     def _start_market_data(self, symbol: str, contract):
         if not self._ib:
+            self._subscribed_symbols.discard(symbol)
             return
         try:
             con_id = contract.conId if contract else 0
@@ -612,6 +626,7 @@ class IBKRDataHub:
                 self._conid_to_symbol[con_id] = symbol
                 self._symbol_to_contract[symbol] = contract
         except Exception as e:
+            self._subscribed_symbols.discard(symbol)
             print(f"[IBKR_HUB] Failed to subscribe {symbol}: {e}")
 
     def unsubscribe_symbol(self, symbol: str):

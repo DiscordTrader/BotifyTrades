@@ -2959,14 +2959,8 @@ class RiskManager:
                             _bs_key = f"Webull_{symbol}"
                             _stable_meta = self._stable_option_symbols.get(_bs_key)
                             if _stable_meta:
-                                _has_real_stock = any(
-                                    p.broker == 'Webull' and p.symbol == symbol and p.asset == 'stock'
-                                    for p in getattr(self, '_last_webull_positions', []) or []
-                                    if hasattr(p, 'asset')
-                                )
-                                if not _has_real_stock:
-                                    is_option = True
-                                    print(f"[RISK] ✓ Reclassified {symbol} as option via stable symbol cache")
+                                is_option = True
+                                print(f"[RISK] ✓ Reclassified {symbol} as option via stable symbol cache (strike={_stable_meta.get('strike')}, dir={_stable_meta.get('direction')})")
 
                     if is_option:
                         ticker_id = pos.get('tickerId', 0) or pos.get('ticker', {}).get('tickerId', 0)
@@ -3139,7 +3133,8 @@ class RiskManager:
                         if position_qty <= 0:
                             continue
                         symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
-                        is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos)
+                        _rest_asset_type = pos.get('assetType', 'unknown')
+                        is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos or _rest_asset_type in ('option', 'OPTION', 'OPT'))
                         if not is_option:
                             _upper_sym = (symbol or '').upper()
                             if _upper_sym in self._INDEX_TO_CANONICAL:
@@ -4125,6 +4120,14 @@ class RiskManager:
                 print(f"[RISK] 🛡️ ENTRY GUARD: {pos_key} has zero/negative avg_cost (${position.avg_cost}) — "
                       f"skipping risk evaluation until entry price is resolved")
             return
+
+        if position.asset == 'stock' and position.avg_cost > 0 and position.avg_cost < 50 and position.current_price > 100:
+            _price_ratio = position.current_price / position.avg_cost
+            if _price_ratio > 10:
+                print(f"[RISK] 🛡️ OPTION-AS-STOCK GUARD: {pos_key} entry=${position.avg_cost:.2f} vs "
+                      f"price=${position.current_price:.2f} ({_price_ratio:.0f}x) — likely stock price "
+                      f"for option position. Blocking evaluation.")
+                return
 
         _ABSURD_PNL_THRESHOLD = 500.0
         if abs(pct_change) > _ABSURD_PNL_THRESHOLD:
@@ -5466,10 +5469,11 @@ class RiskManager:
 
                         _alpaca_tif = TimeInForce.DAY if is_option else TimeInForce.GTC
                         _alpaca_intent = PositionIntent.SELL_TO_CLOSE if is_option else None
+                        _alpaca_order_sym = (getattr(position, 'raw_symbol', None) or symbol) if is_option else symbol
                         if sl_price and sl_price > 0:
                             _alpaca_sl = round(sl_price, 2)
                             _sl_kwargs = dict(
-                                symbol=symbol,
+                                symbol=_alpaca_order_sym,
                                 qty=qty,
                                 side=OrderSide.SELL,
                                 stop_price=_alpaca_sl,
@@ -5486,7 +5490,7 @@ class RiskManager:
                         if pt1_price and pt1_price > 0 and pt1_qty > 0:
                             _alpaca_pt = round(pt1_price, 2)
                             _pt_kwargs = dict(
-                                symbol=symbol,
+                                symbol=_alpaca_order_sym,
                                 qty=pt1_qty,
                                 side=OrderSide.SELL,
                                 limit_price=_alpaca_pt,
@@ -5782,7 +5786,11 @@ class RiskManager:
 
                     _wb_tId = await asyncio.to_thread(self._resolve_webull_ticker_id, _wb_client, symbol)
                     if not _wb_tId:
-                        print(f"[RISK] ⚠️ Webull ticker ID not found for {symbol}, skip initial bracket")
+                        if is_option:
+                            print(f"[RISK] ⚠️ Webull ticker ID not found for option {symbol} — broker brackets skipped, risk engine manages exits")
+                            cache.broker_orders_placed = True
+                        else:
+                            print(f"[RISK] ⚠️ Webull ticker ID not found for {symbol}, skip initial bracket")
                         return
 
                     if sl_price and sl_price > 0 and not is_option:
@@ -8808,9 +8816,18 @@ class RiskManager:
                         self._last_rest_source = 'Webull'
                         return price
 
-        if not is_option:
-            price = await self._try_broker_get_quote(pos)
-            if price and price > 0:
+        price = await self._try_broker_get_quote(pos)
+        if price and price > 0:
+            if is_option and pos.avg_cost > 0:
+                _quote_ratio = price / pos.avg_cost
+                if _quote_ratio > 50:
+                    pass
+                else:
+                    _last_valid_rest = price
+                    if abs(price - current) > 0.0001:
+                        self._last_rest_source = pos.broker
+                        return price
+            elif not is_option:
                 _last_valid_rest = price
                 if abs(price - current) > 0.0001:
                     self._last_rest_source = pos.broker
@@ -8986,9 +9003,10 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
-                        if pos.asset == 'option' and pos.avg_cost > 0:
+                        if pos.avg_cost > 0:
                             _hub_ratio = price / pos.avg_cost
-                            if _hub_ratio > 50:
+                            _is_likely_option_as_stock = (pos.asset == 'stock' and pos.avg_cost < 50 and price > 100 and _hub_ratio > 10)
+                            if pos.asset == 'option' and _hub_ratio > 50 or _is_likely_option_as_stock:
                                 _sym = pos.symbol or pos.raw_symbol or '?'
                                 if not hasattr(self, '_hub_idx_guard_ts'):
                                     self._hub_idx_guard_ts = {}
@@ -8996,7 +9014,8 @@ class RiskManager:
                                 _hig_now = _hig.time()
                                 if _sym not in self._hub_idx_guard_ts or (_hig_now - self._hub_idx_guard_ts.get(_sym, 0)) > 30:
                                     self._hub_idx_guard_ts[_sym] = _hig_now
-                                    print(f"[RISK] ⚠️ HUB INDEX GUARD: {_sym} hub price ${price:.2f} is {_hub_ratio:.0f}x entry ${pos.avg_cost:.2f} "
+                                    _guard_type = "INDEX GUARD" if pos.asset == 'option' else "STOCK-AS-OPTION GUARD"
+                                    print(f"[RISK] ⚠️ HUB {_guard_type}: {_sym} hub price ${price:.2f} is {_hub_ratio:.0f}x entry ${pos.avg_cost:.2f} "
                                           f"— likely underlying index price leaked into option quote. Rejecting hub price.")
                                 continue
                         _hub_ts = self._get_hub_quote_ts(hub, pos.symbol)
