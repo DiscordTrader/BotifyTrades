@@ -14374,6 +14374,7 @@ def register_routes(app):
     # ============ TRADE MONITOR API ============
     
     @app.route('/api/settings/trade_monitor', methods=['GET'])
+    @admin_feature_required
     def api_get_trade_monitor_settings():
         """Get trade monitor settings"""
         try:
@@ -14395,6 +14396,7 @@ def register_routes(app):
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/settings/trade_monitor', methods=['POST'])
+    @admin_feature_required
     def api_save_trade_monitor_settings():
         """Save trade monitor settings"""
         try:
@@ -14477,6 +14479,7 @@ def register_routes(app):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/trade_monitor/synced_orders', methods=['GET'])
+    @admin_feature_required
     def api_get_synced_orders():
         """Get recently synced orders"""
         try:
@@ -14627,7 +14630,7 @@ def register_routes(app):
             from . import webhook_service
             data = request.json or {}
             webhook_url = data.get('webhook_url', '')
-            bot_name = data.get('bot_name', 'Trade Echo Bot')
+            bot_name = data.get('bot_name', '')
             
             success, message = webhook_service.test_webhook(webhook_url, bot_name)
             return jsonify({'success': success, 'message': message})
@@ -14657,7 +14660,7 @@ def register_routes(app):
             qty = int(data.get('qty', 1))
             price = float(data.get('price', 0))
             trade_type = data.get('trade_type', 'Swing')
-            bot_name = data.get('bot_name', 'Trade Echo Bot')
+            bot_name = data.get('bot_name', '')
             
             if not symbol or not strike or not price:
                 return jsonify({'success': False, 'error': 'Missing required fields: symbol, strike, price'}), 400
@@ -14700,7 +14703,7 @@ def register_routes(app):
             call_put = data.get('call_put', 'C')
             qty = int(data.get('qty', 1))
             close_price = float(data.get('close_price', 0))
-            bot_name = data.get('bot_name', 'Trade Echo Bot')
+            bot_name = data.get('bot_name', '')
             
             if not symbol or not close_price:
                 return jsonify({'success': False, 'error': 'Missing required fields: symbol, close_price'}), 400
@@ -14779,7 +14782,7 @@ def register_routes(app):
             
             name = data.get('name', '').strip()
             webhook_url = data.get('webhook_url', '').strip()
-            bot_name = data.get('bot_name', 'Trade Echo Bot')
+            bot_name = data.get('bot_name', '')
             color = data.get('color', '#FF6B35')
             
             print(f"[API] Adding webhook channel: name={name}, bot_name={bot_name}")
