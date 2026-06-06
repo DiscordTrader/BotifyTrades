@@ -1470,24 +1470,40 @@ def get_response(query: str) -> Dict:
     ai_available = is_ai_available()
 
     if ai_available:
-        # Build rich context from all data sources — let AI decide what's relevant
         context_parts = []
-
-        # Bot status (channels, brokers, risk settings)
-        bot_status = _get_bot_status_context()
-        if bot_status:
-            context_parts.append(f"CURRENT BOT STATUS:\n{bot_status}")
-
-        # Trade data if a symbol is mentioned
         sym = _extract_symbol(query)
+        q_lower = query.lower()
+
+        is_trade_question = sym and any(kw in q_lower for kw in [
+            'trade', 'what happened', 'position', 'pnl', 'p&l', 'profit', 'loss',
+            'buy', 'sell', 'entry', 'exit', 'fill', 'order', 'execute', 'status',
+            'close', 'open', 'held', 'stop', 'target', 'sl', 'why', 'fail',
+        ])
+        is_config_question = any(kw in q_lower for kw in [
+            'channel', 'setting', 'config', 'broker', 'risk', 'sizing', 'setup',
+            'how many', 'which', 'enable', 'disable', 'connect',
+        ])
+        is_issue_question = any(kw in q_lower for kw in [
+            'log', 'error', 'fail', 'issue', 'problem', 'not working', 'crash', 'bug',
+        ])
+
+        analysis_type = "general"
+        if is_trade_question:
+            analysis_type = "trade_analysis"
+        elif is_issue_question:
+            analysis_type = "log_analysis"
+
         if sym:
             trade_ctx = _get_trade_context_for_symbol(sym)
             if trade_ctx:
                 context_parts.append(trade_ctx)
 
-        # Log context if user seems to be asking about issues
-        q_lower = query.lower()
-        if any(kw in q_lower for kw in ['log', 'error', 'fail', 'why', 'issue', 'problem', 'not working', 'what happened']):
+        if is_config_question or not sym:
+            bot_status = _get_bot_status_context()
+            if bot_status:
+                context_parts.append(f"CURRENT BOT STATUS:\n{bot_status}")
+
+        if is_issue_question:
             try:
                 log_lines = _get_log_context(count=100)
                 if sym and log_lines:
@@ -1500,7 +1516,7 @@ def get_response(query: str) -> Dict:
                 pass
 
         full_context = "\n\n".join(context_parts) if context_parts else ""
-        ai_response = _call_ai(query, full_context, "general")
+        ai_response = _call_ai(query, full_context, analysis_type)
         if ai_response:
             return {
                 "success": True,
@@ -3947,36 +3963,62 @@ def analyze_uploaded_log(log_content: str, query: str = "") -> Dict:
 
 
 def _get_trade_context_for_symbol(symbol: str) -> str:
-    """Build trade history context for a symbol to pass to AI."""
+    """Build trade history + order events context for a symbol to pass to AI."""
+    parts = []
     try:
         from . import database as db
         trades = db.get_trades(limit=200)
-        if not trades:
-            return ""
-        symbol_trades = [t for t in trades if symbol.upper() in (t.get('symbol', '') or '').upper()]
-        if not symbol_trades:
-            return ""
-        symbol_trades.sort(key=lambda t: t.get('executed_at') or t.get('filled_at') or t.get('created_at') or '0')
-        recent = symbol_trades[-15:]
-        lines = [f"TRADE HISTORY FOR {symbol} ({len(symbol_trades)} total, showing last {len(recent)}):"]
-        for t in recent:
-            action = t.get('action', t.get('side', '?'))
-            qty = t.get('quantity', t.get('qty', 0))
-            price = t.get('price', t.get('fill_price', 0))
-            status = t.get('status', '')
-            broker = t.get('broker', '')
-            ts = t.get('executed_at') or t.get('filled_at') or t.get('created_at') or ''
-            channel = t.get('channel_name', '')
-            pnl = t.get('pnl', '')
-            line = f"  {ts} | {action} x{qty} @ ${price} | {status} | {broker}"
-            if channel:
-                line += f" | ch:{channel}"
-            if pnl:
-                line += f" | pnl:{pnl}"
-            lines.append(line)
-        return "\n".join(lines)
+        if trades:
+            symbol_trades = [t for t in trades if symbol.upper() in (t.get('symbol', '') or '').upper()]
+            if symbol_trades:
+                symbol_trades.sort(key=lambda t: t.get('executed_at') or t.get('filled_at') or t.get('created_at') or '0')
+                recent = symbol_trades[-10:]
+                lines = [f"TRADE HISTORY FOR {symbol} ({len(symbol_trades)} total, showing last {len(recent)}):"]
+                for t in recent:
+                    action = t.get('action', t.get('side', '?'))
+                    qty = t.get('quantity', t.get('qty', 0))
+                    price = t.get('price', t.get('fill_price', 0))
+                    status = t.get('status', '')
+                    broker = t.get('broker', '')
+                    ts = t.get('executed_at') or t.get('filled_at') or t.get('created_at') or ''
+                    channel = t.get('channel_name', '')
+                    pnl = t.get('pnl', '')
+                    pnl_pct = t.get('pnl_percent', t.get('pnl_pct', ''))
+                    line = f"  {ts} | {action} x{qty} @ ${price} | {status} | {broker}"
+                    if channel:
+                        line += f" | ch:{channel}"
+                    if pnl:
+                        line += f" | pnl:${pnl}"
+                    if pnl_pct:
+                        line += f" ({pnl_pct}%)"
+                    lines.append(line)
+                parts.append("\n".join(lines))
     except Exception:
-        return ""
+        pass
+
+    try:
+        from . import database as db
+        import sqlite3
+        conn = sqlite3.connect(db.DATABASE_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT timestamp, event_type, symbol, broker, direction, price, quantity, reason, status FROM order_events WHERE UPPER(symbol)=? ORDER BY id DESC LIMIT 10", (symbol.upper(),))
+        events = cur.fetchall()
+        conn.close()
+        if events:
+            lines = [f"ORDER EVENTS FOR {symbol} (last {len(events)}):"]
+            for e in reversed(list(events)):
+                d = dict(e)
+                reason = (d.get('reason') or '')[:150]
+                line = f"  {d.get('timestamp','')} | {d.get('event_type','')} | {d.get('direction','')} x{d.get('quantity','')} @ ${d.get('price','')} | {d.get('broker','')}"
+                if reason:
+                    line += f" | {reason}"
+                lines.append(line)
+            parts.append("\n".join(lines))
+    except Exception:
+        pass
+
+    return "\n\n".join(parts)
 
 
 def _get_bot_status_context() -> str:
@@ -4073,8 +4115,14 @@ def _get_bot_knowledge() -> str:
     return _BOT_KNOWLEDGE
 
 _CHAT_SYSTEM_PROMPTS = {
-    "trade_analysis": """Answer ONLY what the user asked about their trades. Use ONLY the real data provided below.
-Do NOT add system warnings, broker errors, or troubleshooting tips unless the user asked.
+    "trade_analysis": """Answer ONLY about the specific symbol the user asked about. IGNORE all other symbols in the data.
+Use ONLY the real trade records and order events provided — never fabricate data.
+When explaining what happened with a trade:
+- Show the timeline: when it was placed, filled, closed, and why
+- Include entry price, exit price, P&L, broker, and any failure reasons from order events
+- If the trade failed, explain WHY from the order event reason field
+- If it was a conditional order, explain the trigger logic
+Do NOT show other symbols' data. Do NOT add warnings or troubleshooting unless asked.
 If no data exists for the symbol, say "No trade history found for [SYMBOL]" and stop.""",
 
     "log_analysis": """You are a technical assistant for BotifyTrades, a Discord trading bot.
@@ -4123,13 +4171,15 @@ COMPLETE BOT DOCUMENTATION:
 
 STRICT RULES:
 - ONLY answer what the user asked — nothing more
+- When asked about a specific symbol/ticker, ONLY show data for THAT symbol — ignore everything else
 - Do NOT add warnings, disclaimers, system errors, or unrelated information
 - Do NOT mention broker connection issues, encryption errors, or system status unless the user specifically asked
 - Do NOT hallucinate or guess — if data is not in the context provided, say "No data found" and stop
 - When showing trade data, use ONLY the real records provided — never fabricate trades
-- Keep responses SHORT and DIRECT — answer the question, then stop
+- Keep responses SHORT and DIRECT — 2-5 sentences for simple questions, bullet points for complex ones
 - Use markdown formatting for readability
 - Do NOT suggest fixes or troubleshooting unless the user asked for help
+- Do NOT dump all data — be selective and relevant to the question
 - Do NOT make up features that don't exist in the documentation above"""
 
 
