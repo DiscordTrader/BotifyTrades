@@ -12325,8 +12325,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'stock':
                         if not _phoenix_registry_result.get('_conditional_order') and not _phoenix_registry_result.get('_protrader_cancel'):
                             is_phoenix_registry = True
-                    if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'option' and _phoenix_registry_result.get('_format_name', '').startswith('abtrades_'):
-                        is_phoenix_registry = True
+                    if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'option':
+                        if not _phoenix_registry_result.get('_conditional_order') and not _phoenix_registry_result.get('_protrader_cancel'):
+                            is_phoenix_registry = True
                     if _phoenix_registry_result and (_phoenix_registry_result.get('_conditional_order') or _phoenix_registry_result.get('_protrader_cancel') or _phoenix_registry_result.get('_protrader_exit') or _phoenix_registry_result.get('action') in ('SL_UPDATE', 'TARGET_UPDATE', 'CANCEL')):
                         is_protrader_conditional = True
                 except Exception:
@@ -13742,13 +13743,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 print(f"[AI_FALLBACK] ⚠️ Conditional order router not enabled")
                                         except Exception as _ai_cond_err:
                                             print(f"[AI_FALLBACK] ⚠️ Conditional order error: {_ai_cond_err}")
-                                    elif _ai_action == 'BTO' and _ai_result.get('asset', 'stock') == 'stock':
+                                    elif _ai_action == 'BTO':
+                                        _ai_asset = _ai_result.get('asset', 'stock')
                                         for _aib_idx, _ai_broker in enumerate(cond_brokers):
-                                            print(f"[AI_FALLBACK] Executing {_ai_action} {_ai_sym} @ ${_ai_price or 'market'} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
+                                            _ai_strike_str = f" {_ai_result.get('strike')}{_ai_result.get('option_type')}" if _ai_asset == 'option' else ""
+                                            print(f"[AI_FALLBACK] Executing {_ai_action} {_ai_sym}{_ai_strike_str} @ ${_ai_price or 'market'} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
                                             try:
-                                                stock_signal = {
+                                                bto_signal = {
                                                     'action': 'BTO',
-                                                    'asset': 'stock',
+                                                    'asset': _ai_asset,
+                                                    'asset_type': _ai_asset,
                                                     'symbol': _ai_sym,
                                                     'qty': _ai_signal['qty'],
                                                     'price': _ai_price or 0,
@@ -13763,7 +13767,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     'detected_at': datetime.now().isoformat(),
                                                     'parsed_at': datetime.now().isoformat(),
                                                 }
-                                                await self.order_queue.put(stock_signal)
+                                                if _ai_asset == 'option':
+                                                    bto_signal['strike'] = _ai_result.get('strike')
+                                                    bto_signal['opt_type'] = _ai_result.get('option_type')
+                                                    bto_signal['expiry'] = _ai_result.get('expiry')
+                                                    if _ai_targets:
+                                                        bto_signal['target_prices'] = _ai_targets
+                                                    if _ai_sl:
+                                                        bto_signal['stop_loss'] = _ai_sl
+                                                await self.order_queue.put(bto_signal)
                                             except Exception as _ai_exec_err:
                                                 print(f"[AI_FALLBACK] ⚠️ Execution error on {_ai_broker}: {_ai_exec_err}")
                                     elif _ai_action == 'STC':
