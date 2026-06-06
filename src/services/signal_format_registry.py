@@ -1643,11 +1643,11 @@ class SignalFormatRegistry:
 
         self.register(
             name="temple_rf_options",
-            description="Temple RF options: buy TICKER STRIKE+C at PRICE for EXPIRY",
+            description="Temple RF options: buy TICKER STRIKE[+]C at PRICE for EXPIRY",
             priority=78,
-            pattern=r'\bbuy\s+\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*\+\s*([CcPp])\s+at\s+\$?(\d+(?:\.\d+)?)\s+for\s+(\d{1,2}/\d{1,2}(?:/\d{2,4})?)',
+            pattern=r'\bbuy\s+\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*\+?\s*([CcPp])\s+at\s+\$?(\d+(?:\.\d+)?)\s+for\s+(\d{1,2}/\d{1,2}(?:/\d{2,4})?)',
             parser=parse_temple_rf_options,
-            examples=["buy QQQ 530+C at 2.50 for 5/16", "buy SPY 580+P at 1.20 for 5/9"],
+            examples=["buy QQQ 530+C at 2.50 for 5/16", "buy SPY 580+P at 1.20 for 5/9", "buy UNH 397.5C at 8.5 for 6/12"],
             flags=re.IGNORECASE
         )
 
