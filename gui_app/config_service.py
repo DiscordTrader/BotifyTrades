@@ -211,24 +211,18 @@ def get_discord_notifications() -> dict:
 
 
 # AI Provider settings
-AI_PROVIDERS = ['replit_ai', 'openai', 'claude', 'disabled']
+AI_PROVIDERS = ['claude', 'openai', 'gemini', 'disabled']
 
 def save_ai_provider(provider: str):
-    """Save AI provider preference.
-    
-    Options: 'replit_ai', 'openai', 'disabled'
-    """
     if provider not in AI_PROVIDERS:
-        provider = 'replit_ai'  # Default to Replit AI
+        provider = 'claude'
     save_config('ai_provider', provider)
 
 
 def get_ai_provider() -> str:
-    """Get current AI provider preference.
-    
-    Returns: 'replit_ai', 'openai', or 'disabled'
-    """
     provider = load_config('ai_provider')
+    if provider == 'replit_ai':
+        return 'disabled'
     if provider not in AI_PROVIDERS:
-        return 'replit_ai'  # Default to Replit AI
+        return 'claude'
     return provider

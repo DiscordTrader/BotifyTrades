@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BotifyTrades AI Agent Architecture — Penny Stock Intelligence Platform</title>
+<style>
+:root {
+    --bg: #0a0e1a;
+    --card: #111827;
+    --card-alt: #1a2332;
+    --border: rgba(99,102,241,0.15);
+    --accent: #818CF8;
+    --accent2: #06B6D4;
+    --accent3: #F59E0B;
+    --accent4: #10B981;
+    --accent5: #EF4444;
+    --accent6: #EC4899;
+    --text: #E2E8F0;
+    --text-dim: #94A3B8;
+    --text-bright: #F8FAFC;
+    --glow: rgba(99,102,241,0.3);
+    --glow-cyan: rgba(6,182,212,0.3);
+    --glow-amber: rgba(245,158,11,0.3);
+    --glow-green: rgba(16,185,129,0.3);
+    --glow-red: rgba(239,68,68,0.2);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+/* Hero */
+.hero {
+    padding: 80px 40px 60px;
+    text-align: center;
+    background: linear-gradient(180deg, rgba(99,102,241,0.08) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+}
+.hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 50% 50%, rgba(99,102,241,0.04) 0%, transparent 50%);
+    animation: pulse-bg 8s ease-in-out infinite;
+}
+@keyframes pulse-bg { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+.hero h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 50%, var(--accent3) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    position: relative;
+    letter-spacing: -0.5px;
+}
+.hero .subtitle {
+    font-size: 1.2rem;
+    color: var(--text-dim);
+    margin-top: 12px;
+    font-weight: 300;
+    position: relative;
+}
+.hero .badge-row {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+    position: relative;
+}
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.badge-ai { background: rgba(99,102,241,0.15); color: var(--accent); border: 1px solid rgba(99,102,241,0.3); }
+.badge-mcp { background: rgba(6,182,212,0.15); color: var(--accent2); border: 1px solid rgba(6,182,212,0.3); }
+.badge-penny { background: rgba(245,158,11,0.15); color: var(--accent3); border: 1px solid rgba(245,158,11,0.3); }
+.badge-live { background: rgba(16,185,129,0.15); color: var(--accent4); border: 1px solid rgba(16,185,129,0.3); }
+
+/* Container */
+.container { max-width: 1400px; margin: 0 auto; padding: 0 40px; }
+
+/* Section */
+.section {
+    padding: 60px 0;
+    border-bottom: 1px solid var(--border);
+}
+.section-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.section-title .icon { font-size: 1.6rem; }
+.section-subtitle {
+    color: var(--text-dim);
+    font-size: 1rem;
+    margin-bottom: 32px;
+}
+
+/* Architecture Flow */
+.arch-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+    margin: 40px 0;
+}
+.arch-stage {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    position: relative;
+}
+.arch-connector {
+    display: flex;
+    justify-content: center;
+    padding: 16px 0;
+}
+.arch-connector .arrow {
+    width: 3px;
+    height: 40px;
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent2) 100%);
+    position: relative;
+    border-radius: 2px;
+}
+.arch-connector .arrow::after {
+    content: '▼';
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--accent2);
+    font-size: 10px;
+}
+.arch-connector.wide .arrow { height: 50px; }
+.arch-connector .label {
+    position: absolute;
+    left: calc(50% + 20px);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    font-style: italic;
+}
+
+/* Agent Cards */
+.agent-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s;
+}
+.agent-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 30px var(--glow);
+    transform: translateY(-2px);
+}
+.agent-card.primary { border-left: 4px solid var(--accent); }
+.agent-card.secondary { border-left: 4px solid var(--accent2); }
+.agent-card.tertiary { border-left: 4px solid var(--accent3); }
+.agent-card.quaternary { border-left: 4px solid var(--accent4); }
+.agent-card.danger { border-left: 4px solid var(--accent5); }
+.agent-card.pink { border-left: 4px solid var(--accent6); }
+
+.agent-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.agent-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+.agent-icon.ai-blue { background: rgba(99,102,241,0.15); }
+.agent-icon.ai-cyan { background: rgba(6,182,212,0.15); }
+.agent-icon.ai-amber { background: rgba(245,158,11,0.15); }
+.agent-icon.ai-green { background: rgba(16,185,129,0.15); }
+.agent-icon.ai-red { background: rgba(239,68,68,0.15); }
+.agent-icon.ai-pink { background: rgba(236,72,153,0.15); }
+
+.agent-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-bright);
+}
+.agent-role {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.agent-desc {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+    line-height: 1.7;
+}
+
+/* Feature list */
+.feature-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.feature-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--text);
+}
+.feature-list li::before {
+    content: '▸';
+    color: var(--accent);
+    font-weight: bold;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+.feature-list.cyan li::before { color: var(--accent2); }
+.feature-list.amber li::before { color: var(--accent3); }
+.feature-list.green li::before { color: var(--accent4); }
+.feature-list.red li::before { color: var(--accent5); }
+.feature-list.pink li::before { color: var(--accent6); }
+
+/* Grid layouts */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; }
+.full-width { grid-column: 1 / -1; }
+
+/* Data flow diagram */
+.flow-diagram {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin: 32px 0;
+    overflow-x: auto;
+}
+.flow-diagram pre {
+    font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text);
+    white-space: pre;
+    margin: 0;
+}
+.flow-diagram .hl-agent { color: var(--accent); font-weight: bold; }
+.flow-diagram .hl-data { color: var(--accent2); }
+.flow-diagram .hl-action { color: var(--accent3); }
+.flow-diagram .hl-risk { color: var(--accent5); }
+.flow-diagram .hl-green { color: var(--accent4); }
+.flow-diagram .hl-dim { color: var(--text-dim); }
+.flow-diagram .hl-pink { color: var(--accent6); }
+
+/* Signal example */
+.signal-example {
+    background: #0d1117;
+    border: 1px solid rgba(99,102,241,0.2);
+    border-radius: 12px;
+    padding: 20px;
+    font-family: 'Cascadia Code', monospace;
+    font-size: 0.82rem;
+    margin: 16px 0;
+    line-height: 1.8;
+}
+.signal-example .raw { color: #6B7280; text-decoration: line-through; opacity: 0.6; }
+.signal-example .parsed { color: var(--accent4); }
+.signal-example .noise { color: var(--accent5); font-size: 0.75rem; }
+.signal-example .ticker { color: var(--accent3); font-weight: bold; }
+.signal-example .tag { color: var(--accent); }
+.signal-example .metric { color: var(--accent2); }
+.signal-example .whale { color: var(--accent6); }
+
+/* Stats row */
+.stats-row {
+    display: flex;
+    gap: 20px;
+    margin: 24px 0;
+    flex-wrap: wrap;
+}
+.stat-card {
+    background: var(--card-alt);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    flex: 1;
+    min-width: 160px;
+    text-align: center;
+}
+.stat-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.stat-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+}
+
+/* Pipeline table */
+.pipeline-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 20px 0;
+    font-size: 0.85rem;
+}
+.pipeline-table th {
+    background: rgba(99,102,241,0.1);
+    color: var(--accent);
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--border);
+}
+.pipeline-table th:first-child { border-radius: 8px 0 0 0; }
+.pipeline-table th:last-child { border-radius: 0 8px 0 0; }
+.pipeline-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+}
+.pipeline-table tr:hover td { background: rgba(99,102,241,0.03); }
+.pipeline-table code {
+    background: rgba(99,102,241,0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--accent);
+}
+
+/* Status indicators */
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; }
+.status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; }
+.status-live::before { background: var(--accent4); box-shadow: 0 0 8px var(--glow-green); }
+.status-new::before { background: var(--accent3); box-shadow: 0 0 8px var(--glow-amber); }
+.status-planned::before { background: var(--accent); box-shadow: 0 0 8px var(--glow); }
+
+/* Tech stack badges */
+.tech-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.tech-badge {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.tech-python { background: rgba(53,114,165,0.2); color: #3572A5; border: 1px solid rgba(53,114,165,0.3); }
+.tech-claude { background: rgba(204,120,50,0.15); color: #CC7832; border: 1px solid rgba(204,120,50,0.3); }
+.tech-mcp { background: rgba(6,182,212,0.15); color: var(--accent2); border: 1px solid rgba(6,182,212,0.3); }
+.tech-ws { background: rgba(16,185,129,0.15); color: var(--accent4); border: 1px solid rgba(16,185,129,0.3); }
+.tech-flask { background: rgba(236,72,153,0.15); color: var(--accent6); border: 1px solid rgba(236,72,153,0.3); }
+.tech-sqlite { background: rgba(99,102,241,0.15); color: var(--accent); border: 1px solid rgba(99,102,241,0.3); }
+
+/* Callout boxes */
+.callout {
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 20px 0;
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+.callout-info { background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.2); }
+.callout-warn { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); }
+.callout-danger { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); }
+.callout strong { color: var(--text-bright); }
+
+/* Responsive */
+@media (max-width: 900px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 2rem; }
+    .container { padding: 0 20px; }
+}
+
+/* Animated pulse for live indicators */
+@keyframes live-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+.live-dot {
+    width: 10px; height: 10px;
+    background: var(--accent4);
+    border-radius: 50%;
+    display: inline-block;
+    animation: live-pulse 2s infinite;
+    box-shadow: 0 0 8px var(--glow-green);
+}
+
+/* Integration map */
+.integration-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+.integration-card .int-icon { font-size: 2rem; margin-bottom: 8px; }
+.integration-card .int-name { font-weight: 700; color: var(--text-bright); font-size: 0.95rem; }
+.integration-card .int-desc { color: var(--text-dim); font-size: 0.8rem; margin-top: 4px; }
+.integration-card .int-status { margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<!-- ====== HERO ====== -->
+<div class="hero">
+    <h1>BotifyTrades AI Agent Platform</h1>
+    <p class="subtitle">Multi-Agent Penny Stock Intelligence — Signal Filtering → Technical Analysis → Autonomous Execution</p>
+    <div class="badge-row">
+        <span class="badge badge-ai">🧠 Claude AI Agents</span>
+        <span class="badge badge-mcp">🔌 Robinhood MCP</span>
+        <span class="badge badge-penny">📈 Penny Stock Expert</span>
+        <span class="badge badge-live"><span class="live-dot"></span>&nbsp; Real-Time</span>
+    </div>
+</div>
+
+<div class="container">
+
+<!-- ====== EXECUTIVE OVERVIEW ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">🎯</span> Executive Overview</div>
+    <p class="section-subtitle">Three-agent pipeline transforms raw Discord alerts into executed penny stock trades with full AI analysis</p>
+
+    <div class="stats-row">
+        <div class="stat-card"><div class="stat-value">3</div><div class="stat-label">AI Agents</div></div>
+        <div class="stat-card"><div class="stat-value">6</div><div class="stat-label">Analysis Layers</div></div>
+        <div class="stat-card"><div class="stat-value">&lt;2s</div><div class="stat-label">Signal → Decision</div></div>
+        <div class="stat-card"><div class="stat-value">24/7</div><div class="stat-label">Watchlist Monitor</div></div>
+        <div class="stat-card"><div class="stat-value">MCP</div><div class="stat-label">Official Robinhood</div></div>
+    </div>
+
+    <div class="tech-row">
+        <span class="tech-badge tech-python">Python 3.11</span>
+        <span class="tech-badge tech-claude">Claude AI</span>
+        <span class="tech-badge tech-mcp">MCP Protocol</span>
+        <span class="tech-badge tech-ws">WebSocket Streaming</span>
+        <span class="tech-badge tech-flask">Flask GUI</span>
+        <span class="tech-badge tech-sqlite">SQLite</span>
+    </div>
+</div>
+
+<!-- ====== MASTER FLOW DIAGRAM ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">🔄</span> Master Pipeline — End-to-End Flow</div>
+    <p class="section-subtitle">From raw Discord noise to executed Robinhood trades in three autonomous stages</p>
+
+    <div class="flow-diagram">
+<pre>
+<span class="hl-dim">╔══════════════════════════════════════════════════════════════════════════════════════════════════╗</span>
+<span class="hl-dim">║</span>  <span class="hl-agent">DISCORD CHANNEL</span>  ──→  <span class="hl-agent">AGENT 1: SENTINEL</span>  ──→  <span class="hl-agent">AGENT 2: ANALYST</span>  ──→  <span class="hl-agent">AGENT 3: EXECUTOR</span>  <span class="hl-dim">║</span>
+<span class="hl-dim">║</span>  <span class="hl-data">TrendVision Alerts</span>      <span class="hl-data">Signal Filter</span>            <span class="hl-data">Technical Analysis</span>       <span class="hl-data">Robinhood MCP</span>       <span class="hl-dim">║</span>
+<span class="hl-dim">╚══════════════════════════════════════════════════════════════════════════════════════════════════╝</span>
+
+  <span class="hl-dim">┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐     ┌────────────────────┐</span>
+  <span class="hl-dim">│</span> <span class="hl-action">GLXG · BREAKOUT ↑58%</span><span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-green">✓ PARSE</span>             <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-data">VWAP Analysis</span>      <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-green">BUY 500 GLXG</span>     <span class="hl-dim">│</span>
+  <span class="hl-dim">│</span> <span class="hl-action">DSS  · BORROW</span>       <span class="hl-dim">│</span> ──→ <span class="hl-dim">│</span> <span class="hl-risk">✗ NOISE (borrow)</span>   <span class="hl-dim">│</span> ──→ <span class="hl-dim">│</span> <span class="hl-data">Fibonacci Levels</span>   <span class="hl-dim">│</span> ──→ <span class="hl-dim">│</span> <span class="hl-action">@ $2.10 LIMIT</span>    <span class="hl-dim">│</span>
+  <span class="hl-dim">│</span> <span class="hl-action">GLXG · MOMENTUM ↑74%</span><span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-green">✓ WATCHLIST</span>         <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-data">Momentum Score</span>    <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-risk">SL: $1.85 (-12%)</span> <span class="hl-dim">│</span>
+  <span class="hl-dim">│</span> <span class="hl-pink">🐋 DSS · LARGE WHALE</span> <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-pink">⚡ WHALE ALERT</span>      <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-data">Volume Profile</span>    <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-green">PT: $2.80 (+33%)</span> <span class="hl-dim">│</span>
+  <span class="hl-dim">│</span> <span class="hl-action">MSW  · ↑20%</span>          <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-risk">✗ REJECT (MC>10M)</span>  <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-data">Risk/Reward Ratio</span> <span class="hl-dim">│</span>     <span class="hl-dim">│</span> <span class="hl-action">via Robinhood MCP</span><span class="hl-dim">│</span>
+  <span class="hl-dim">└─────────────────────┘     └─────────────────────┘     └─────────────────────┘     └────────────────────┘</span>
+
+                                       <span class="hl-dim">│                           │                           │</span>
+                                       <span class="hl-dim">▼                           ▼                           ▼</span>
+                               <span class="hl-dim">┌───────────────┐       ┌───────────────┐       ┌───────────────┐</span>
+                               <span class="hl-dim">│</span> <span class="hl-agent">Dynamic</span>       <span class="hl-dim">│</span>       <span class="hl-dim">│</span> <span class="hl-agent">Setup</span>         <span class="hl-dim">│</span>       <span class="hl-dim">│</span> <span class="hl-agent">Risk Engine</span>  <span class="hl-dim">│</span>
+                               <span class="hl-dim">│</span> <span class="hl-data">Watchlist DB</span>  <span class="hl-dim">│</span>       <span class="hl-dim">│</span> <span class="hl-data">Score Board</span>  <span class="hl-dim">│</span>       <span class="hl-dim">│</span> <span class="hl-risk">PT/SL/Trail</span>  <span class="hl-dim">│</span>
+                               <span class="hl-dim">└───────────────┘       └───────────────┘       └───────────────┘</span>
+
+  <span class="hl-dim">═══════════════════════════════════════════════════════════════════════════════════════════════════</span>
+  <span class="hl-pink">AI DASHBOARD</span>  <span class="hl-dim">│</span>  Live agent status  <span class="hl-dim">│</span>  Watchlist view  <span class="hl-dim">│</span>  Setup scores  <span class="hl-dim">│</span>  Trade log  <span class="hl-dim">│</span>  P&L tracking
+  <span class="hl-dim">═══════════════════════════════════════════════════════════════════════════════════════════════════</span>
+</pre>
+    </div>
+</div>
+
+<!-- ====== AGENT 1: SENTINEL ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">🛡️</span> Agent 1 — SENTINEL <span style="font-size:0.8rem;color:var(--accent);font-weight:400;margin-left:8px;">Signal Filter & Noise Removal</span></div>
+    <p class="section-subtitle">Monitors Discord channel 1507850557505671209, parses TrendVision alerts, rejects noise, builds dynamic watchlist</p>
+
+    <div class="grid-2">
+        <div class="agent-card primary">
+            <div class="agent-header">
+                <div class="agent-icon ai-blue">🔍</div>
+                <div>
+                    <div class="agent-name">Signal Parser</div>
+                    <div class="agent-role">Real-Time Alert Ingestion</div>
+                </div>
+            </div>
+            <div class="agent-desc">Regex engine extracts structured data from TrendVision's raw alert format. Every field is parsed and normalized for downstream analysis.</div>
+
+            <div class="signal-example">
+<span class="ticker">GLXG</span>  • <span class="tag">#3 · BREAKOUT</span> · <span class="metric">↑58%</span> · <span class="metric">$2.05</span> • <span class="metric">FT 1.7M</span> · <span class="metric">MC 2.0M</span> · <span class="metric">RV 65x</span> · <span class="metric">1V 179K</span>
+<br><br>
+<span style="color:#6B7280;">Parsed →</span> <span class="parsed">{ symbol: "GLXG", rank: 3, signal: "BREAKOUT", change: +58%, price: 2.05, float: 1.7M, mktcap: 2.0M, relVol: 65x, vol1m: 179K }</span>
+            </div>
+
+            <ul class="feature-list">
+                <li>Regex parser for TrendVision format: SYMBOL · #RANK · TYPE · ↑%CHG · $PRICE • FT · MC · RV · 1V</li>
+                <li>Whale alert parser: 🐋 SYMBOL - LARGE WHALE · Direction · Price · Shares · Value</li>
+                <li>Borrow/short data parser: SYMBOL · BORROW · CTB% | SI%</li>
+                <li>NEWS attachment detection and link extraction</li>
+                <li>Deduplication — same ticker within configurable cooldown window</li>
+            </ul>
+        </div>
+
+        <div class="agent-card danger">
+            <div class="agent-header">
+                <div class="agent-icon ai-red">🚫</div>
+                <div>
+                    <div class="agent-name">Noise Filter</div>
+                    <div class="agent-role">Penny Stock Quality Gate</div>
+                </div>
+            </div>
+            <div class="agent-desc">AI-powered filter rejects low-quality alerts based on penny stock expert rules. Only institutional-grade setups pass through.</div>
+
+            <table class="pipeline-table" style="margin-top:8px">
+                <tr><th>Filter</th><th>Rule</th><th>Action</th></tr>
+                <tr><td>Market Cap</td><td>MC &gt; $50M</td><td>Reject (not penny)</td></tr>
+                <tr><td>Float</td><td>FT &gt; 50M shares</td><td>Reject (too liquid)</td></tr>
+                <tr><td>Volume</td><td>RV &lt; 3x</td><td>Reject (no conviction)</td></tr>
+                <tr><td>Price</td><td>Price &gt; $20 or &lt; $0.10</td><td>Reject (range filter)</td></tr>
+                <tr><td>Signal Type</td><td>Borrow/CTB only</td><td>Tag as info, don't watchlist</td></tr>
+                <tr><td>Rank</td><td>#1 alert only vs #5+</td><td>Priority scoring</td></tr>
+                <tr><td>Change %</td><td>↑ &gt; 200%</td><td>Flag as overextended</td></tr>
+            </table>
+
+            <div class="callout callout-warn" style="margin-top:16px">
+                <strong>🧠 Claude AI Analysis:</strong> For alerts that pass rule-based filters, Claude evaluates as a penny stock momentum expert — scoring setup quality, assessing if the move is early or late, and estimating risk/reward before watchlisting.
+            </div>
+        </div>
+    </div>
+
+    <div class="agent-card primary" style="margin-top:24px">
+        <div class="agent-header">
+            <div class="agent-icon ai-blue">📋</div>
+            <div>
+                <div class="agent-name">Dynamic Watchlist</div>
+                <div class="agent-role">Auto-Build & Auto-Expire</div>
+            </div>
+        </div>
+        <div class="grid-2" style="margin-top:12px">
+            <div>
+                <div class="agent-desc">The watchlist is a living document — tickers are added when SENTINEL approves them and automatically removed when they stop meeting criteria.</div>
+                <ul class="feature-list">
+                    <li><strong>Auto-Add:</strong> BREAKOUT/MOMENTUM alerts passing all filters + Claude approval</li>
+                    <li><strong>Auto-Promote:</strong> Whale activity on watchlisted ticker → priority bump</li>
+                    <li><strong>Auto-Expire:</strong> Ticker removed after configurable time (default 30min) if no re-alert</li>
+                    <li><strong>Auto-Remove:</strong> Price drops below entry zone or volume dies (RV &lt; 2x)</li>
+                    <li><strong>Max Size:</strong> Watchlist capped at N tickers (default 10) — lowest-scored removed first</li>
+                </ul>
+            </div>
+            <div>
+                <table class="pipeline-table">
+                    <tr><th>Watchlist Field</th><th>Source</th></tr>
+                    <tr><td>Symbol</td><td>TrendVision alert</td></tr>
+                    <tr><td>Entry Zone</td><td>Agent 2 VWAP/Fib calc</td></tr>
+                    <tr><td>Alert Count</td><td># of times alerted today</td></tr>
+                    <tr><td>Momentum Score</td><td>Claude AI (1-10)</td></tr>
+                    <tr><td>Whale Activity</td><td>🐋 alerts aggregated</td></tr>
+                    <tr><td>Float / MC</td><td>Parsed from alert</td></tr>
+                    <tr><td>Added At</td><td>Timestamp</td></tr>
+                    <tr><td>Status</td><td>WATCHING / SETUP / TRIGGERED / EXPIRED</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== AGENT 2: ANALYST ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">📊</span> Agent 2 — ANALYST <span style="font-size:0.8rem;color:var(--accent2);font-weight:400;margin-left:8px;">Technical Analysis & Setup Detection</span></div>
+    <p class="section-subtitle">Continuously monitors the dynamic watchlist for high-probability trade setups using VWAP, Fibonacci, and momentum patterns</p>
+
+    <div class="grid-3">
+        <div class="agent-card secondary">
+            <div class="agent-header">
+                <div class="agent-icon ai-cyan">📐</div>
+                <div>
+                    <div class="agent-name">VWAP Engine</div>
+                    <div class="agent-role">Penny Stock VWAP Analysis</div>
+                </div>
+            </div>
+            <ul class="feature-list cyan">
+                <li><strong>VWAP Reclaim:</strong> Price crosses above VWAP after dip → bullish setup</li>
+                <li><strong>VWAP Hold:</strong> Price tests VWAP as support and bounces → entry signal</li>
+                <li><strong>VWAP Distance:</strong> Price &gt;20% above VWAP → overextended, wait for pullback</li>
+                <li><strong>Volume at VWAP:</strong> High volume at VWAP test = strong support confirmation</li>
+                <li>Real-time VWAP calculated via UPH streaming price data</li>
+            </ul>
+        </div>
+
+        <div class="agent-card secondary">
+            <div class="agent-header">
+                <div class="agent-icon ai-cyan">🔢</div>
+                <div>
+                    <div class="agent-name">Fibonacci Analyzer</div>
+                    <div class="agent-role">Pullback & Extension Levels</div>
+                </div>
+            </div>
+            <ul class="feature-list cyan">
+                <li><strong>Fib Retracement:</strong> 38.2%, 50%, 61.8% pullback from day's high → dip buy zones</li>
+                <li><strong>Fib Extension:</strong> 161.8%, 261.8% targets for profit-taking levels</li>
+                <li><strong>Confluence:</strong> Fib level + VWAP overlap = high-probability zone</li>
+                <li><strong>Dynamic Recalc:</strong> Auto-recalculates when new high/low is set</li>
+                <li>Intraday low-to-high range for penny stock scalping</li>
+            </ul>
+        </div>
+
+        <div class="agent-card secondary">
+            <div class="agent-header">
+                <div class="agent-icon ai-cyan">⚡</div>
+                <div>
+                    <div class="agent-name">Momentum Scanner</div>
+                    <div class="agent-role">Pattern & Volume Analysis</div>
+                </div>
+            </div>
+            <ul class="feature-list cyan">
+                <li><strong>Volume Surge:</strong> 1-min volume spike &gt; 3x average → breakout signal</li>
+                <li><strong>Consolidation Break:</strong> Tight range followed by expansion → entry</li>
+                <li><strong>Higher Lows:</strong> Each pullback holds above prior low → trend strength</li>
+                <li><strong>Relative Volume Decay:</strong> RV dropping alert-over-alert → momentum fade</li>
+                <li><strong>Whale Correlation:</strong> Large whale buy during consolidation → smart money signal</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="agent-card secondary" style="margin-top:24px;">
+        <div class="agent-header">
+            <div class="agent-icon ai-cyan">🎯</div>
+            <div>
+                <div class="agent-name">Setup Scoring Engine</div>
+                <div class="agent-role">Claude AI + Quantitative Scoring</div>
+            </div>
+        </div>
+        <div class="agent-desc">Every watchlisted ticker receives a continuously updated setup score (0-100). When the score crosses the execution threshold, the ticker is promoted to Agent 3.</div>
+
+        <div class="grid-2" style="margin-top: 12px;">
+            <div>
+                <table class="pipeline-table">
+                    <tr><th>Factor</th><th>Weight</th><th>Signal</th></tr>
+                    <tr><td>VWAP Position</td><td>20%</td><td>Above = bullish, reclaim = strongest</td></tr>
+                    <tr><td>Fib Zone</td><td>15%</td><td>At 50-61.8% retrace = high score</td></tr>
+                    <tr><td>Volume Profile</td><td>20%</td><td>RV &gt; 20x + rising = max points</td></tr>
+                    <tr><td>Momentum Trend</td><td>15%</td><td>Consecutive higher-rank alerts</td></tr>
+                    <tr><td>Float Scarcity</td><td>10%</td><td>FT &lt; 5M + MC &lt; 10M = squeeze potential</td></tr>
+                    <tr><td>Whale Activity</td><td>10%</td><td>🐋 buy-side whale = +20 points</td></tr>
+                    <tr><td>Claude AI Conviction</td><td>10%</td><td>AI expert assessment (1-10 scaled)</td></tr>
+                </table>
+            </div>
+            <div>
+                <div class="callout callout-info">
+                    <strong>Score Thresholds:</strong><br>
+                    <span style="color:var(--accent4)">■</span> <strong>80-100:</strong> AUTO-EXECUTE — Agent 3 triggers immediately<br>
+                    <span style="color:var(--accent3)">■</span> <strong>60-79:</strong> ALERT — Notify user via relay/Discord, await approval<br>
+                    <span style="color:var(--accent)">■</span> <strong>40-59:</strong> WATCH — Continue monitoring, re-score each cycle<br>
+                    <span style="color:var(--text-dim)">■</span> <strong>0-39:</strong> DROP — Remove from watchlist, log reason
+                </div>
+                <div class="callout callout-danger" style="margin-top:12px">
+                    <strong>⚠️ Overextension Guard:</strong> Any ticker with ↑ &gt; 100% from day's open AND RV declining is auto-capped at score 50 regardless of other factors — prevents chasing.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== AGENT 3: EXECUTOR ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">⚡</span> Agent 3 — EXECUTOR <span style="font-size:0.8rem;color:var(--accent3);font-weight:400;margin-left:8px;">Robinhood MCP Trade Execution</span></div>
+    <p class="section-subtitle">Executes trades on Robinhood via official MCP endpoint with risk management integration</p>
+
+    <div class="grid-2">
+        <div class="agent-card tertiary">
+            <div class="agent-header">
+                <div class="agent-icon ai-amber">🤖</div>
+                <div>
+                    <div class="agent-name">MCP Execution Engine</div>
+                    <div class="agent-role">Robinhood Official API</div>
+                </div>
+            </div>
+            <div class="agent-desc">Connects to <code>agent.robinhood.com/mcp/trading</code> via OAuth 2.1. All orders go through the official agentic trading channel — no unofficial API risk.</div>
+            <ul class="feature-list amber">
+                <li><strong>Order Types:</strong> Market, Limit, Extended Hours</li>
+                <li><strong>Position Sizing:</strong> % of agentic account buying power (configurable per score tier)</li>
+                <li><strong>Entry Strategy:</strong> Limit order at VWAP/Fib level from Agent 2 analysis</li>
+                <li><strong>Slippage Guard:</strong> Reject if current price &gt; X% above Agent 2's target entry</li>
+                <li><strong>Max Positions:</strong> Configurable concurrent position limit (default 3)</li>
+                <li><strong>Daily Trade Limit:</strong> Integrates with existing Daily P&L Limit service</li>
+            </ul>
+        </div>
+
+        <div class="agent-card quaternary">
+            <div class="agent-header">
+                <div class="agent-icon ai-green">🛡️</div>
+                <div>
+                    <div class="agent-name">Risk Integration</div>
+                    <div class="agent-role">Existing Risk Engine (position_monitor.py)</div>
+                </div>
+            </div>
+            <div class="agent-desc">After Agent 3 places a trade, the existing BotifyTrades risk engine takes over position management — no new code needed for exits.</div>
+            <ul class="feature-list green">
+                <li><strong>Stop Loss:</strong> Set at Fib/VWAP support level from Agent 2 (typically -8% to -15%)</li>
+                <li><strong>Profit Targets:</strong> Tiered exits at Fib extensions (30% / 50% / 100% trim schedule)</li>
+                <li><strong>Trailing Stop:</strong> Activates after PT1 hit — locks in gains on momentum runners</li>
+                <li><strong>Leave Runner:</strong> Keep 10-25% of position for multi-day holds on low-float runners</li>
+                <li><strong>Circuit Breaker:</strong> Existing daily loss limit stops all agents if hit</li>
+                <li><strong>Software SL:</strong> Risk engine evaluates every ~1s — critical for penny stock speed</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- ====== EXISTING BOT INTEGRATIONS ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">🔗</span> Existing Bot Feature Integration</div>
+    <p class="section-subtitle">AI agents leverage the full BotifyTrades infrastructure — no reinventing the wheel</p>
+
+    <div class="grid-4">
+        <div class="integration-card">
+            <div class="int-icon">📡</div>
+            <div class="int-name">Unified Price Hub</div>
+            <div class="int-desc">Real-time streaming quotes for VWAP/Fib calculations — Schwab, IBKR, Webull streams</div>
+            <div class="int-status"><span class="status status-live">LIVE</span></div>
+        </div>
+        <div class="integration-card">
+            <div class="int-icon">🛡️</div>
+            <div class="int-name">Risk Engine</div>
+            <div class="int-desc">Existing PT/SL/trailing/tiered exit system manages all positions after entry</div>
+            <div class="int-status"><span class="status status-live">LIVE</span></div>
+        </div>
+        <div class="integration-card">
+            <div class="int-icon">💰</div>
+            <div class="int-name">Daily P&L Limits</div>
+            <div class="int-desc">Max daily trades + loss limit blocks all agents when threshold hit</div>
+            <div class="int-status"><span class="status status-live">LIVE</span></div>
+        </div>
+        <div class="integration-card">
+            <div class="int-icon">⛔</div>
+            <div class="int-name">Circuit Breaker</div>
+            <div class="int-desc">Emergency kill switch stops all AI agents instantly</div>
+            <div class="int-status"><span class="status status-live">LIVE</span></div>
+        </div>
+        <div class="integration-card">
+            <div class="int-icon">🔄</div>
+            <div class="int-name">Broker Sync</div>
+            <div class="int-desc">Reconciles Robinhood positions with bot state every 30s</div>
+            <div class="int-status"><span class="status status-live">LIVE</span></div>
+        </div>
+        <div class="integration-card">
+            <div class="int-icon">📱</div>
+            <div class="int-name">Mobile Relay</div>
+            <div class="int-desc">Push alerts to mobile app when high-score setups detected</div>
+            <div class="int-status"><span class="status status-live">LIVE</span></div>
+        </div>
+        <div class="integration-card">
+            <div class="int-icon">💬</div>
+            <div class="int-name">Chat Assistant</div>
+            <div class="int-desc">Ask Claude about agent status, watchlist, why a trade was taken</div>
+            <div class="int-status"><span class="status status-live">LIVE</span></div>
+        </div>
+        <div class="integration-card">
+            <div class="int-icon">📊</div>
+            <div class="int-name">Trade History DB</div>
+            <div class="int-desc">Every agent decision logged — train scoring model from P&L outcomes</div>
+            <div class="int-status"><span class="status status-live">LIVE</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== AI DASHBOARD ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">🖥️</span> AI Agent Dashboard — Live Monitoring Page</div>
+    <p class="section-subtitle">New Admin → AI Agents page with real-time visibility into all three agents</p>
+
+    <div class="grid-2">
+        <div class="agent-card pink">
+            <div class="agent-header">
+                <div class="agent-icon ai-pink">📺</div>
+                <div>
+                    <div class="agent-name">Agent Status Panel</div>
+                    <div class="agent-role">Real-Time Health & Activity</div>
+                </div>
+            </div>
+            <ul class="feature-list pink">
+                <li><span class="live-dot" style="width:6px;height:6px;"></span> <strong>SENTINEL:</strong> Connected to #1507850557505671209 — 47 alerts processed, 12 watchlisted, 35 filtered</li>
+                <li><span class="live-dot" style="width:6px;height:6px;"></span> <strong>ANALYST:</strong> Monitoring 8 tickers — GLXG score: 82 (TRIGGERED), VVOS score: 61 (ALERT)</li>
+                <li><span class="live-dot" style="width:6px;height:6px;"></span> <strong>EXECUTOR:</strong> 2 positions open — GLXG +18% (trailing), DSS -3% (holding)</li>
+                <li>Agent uptime, last action timestamp, error count</li>
+                <li>Start / Stop / Pause individual agents</li>
+                <li>Execution mode toggle: AUTO / ALERT-ONLY / PAPER</li>
+            </ul>
+        </div>
+
+        <div class="agent-card pink">
+            <div class="agent-header">
+                <div class="agent-icon ai-pink">📋</div>
+                <div>
+                    <div class="agent-name">Live Watchlist View</div>
+                    <div class="agent-role">Dynamic Ticker Board</div>
+                </div>
+            </div>
+            <ul class="feature-list pink">
+                <li>Real-time table: Symbol, Price, Change%, Score, Status, VWAP Dist, Entry Zone</li>
+                <li>Color-coded rows: green (triggered), amber (alert), blue (watching), gray (expired)</li>
+                <li>Click ticker → expand: full Agent 2 analysis, Fib levels, volume chart, Claude assessment</li>
+                <li>Manual override: force-add/remove tickers, adjust score, trigger manual execution</li>
+                <li>Historical tab: all tickers ever watchlisted with outcome (profit/loss/expired)</li>
+            </ul>
+        </div>
+
+        <div class="agent-card pink">
+            <div class="agent-header">
+                <div class="agent-icon ai-pink">📈</div>
+                <div>
+                    <div class="agent-name">Trade Log & P&L</div>
+                    <div class="agent-role">AI Agent Performance Tracking</div>
+                </div>
+            </div>
+            <ul class="feature-list pink">
+                <li>Every AI-initiated trade: entry reason, score at trigger, Agent 2 analysis snapshot</li>
+                <li>Exit tracking: which PT/SL hit, final P&L, hold duration</li>
+                <li>Running daily/weekly/monthly P&L for AI agent trades (separate from manual signals)</li>
+                <li>Win rate, average gain, average loss, profit factor, max drawdown</li>
+                <li>Per-ticker performance: which symbols does the AI trade best/worst</li>
+            </ul>
+        </div>
+
+        <div class="agent-card pink">
+            <div class="agent-header">
+                <div class="agent-icon ai-pink">🧠</div>
+                <div>
+                    <div class="agent-name">AI Decision Log</div>
+                    <div class="agent-role">Explainable AI — Why Every Decision</div>
+                </div>
+            </div>
+            <ul class="feature-list pink">
+                <li>Every filter/reject/watchlist/trigger decision logged with full reasoning</li>
+                <li>Claude AI assessment text stored — "GLXG: Low float breakout with 65x RV, #3 rank rising to #6. Entry at VWAP $1.95 offers 2.8R setup."</li>
+                <li>Searchable decision history: "why did the bot buy GLXG?" → shows full decision chain</li>
+                <li>Chatbot integration: ask the chat assistant about any AI agent decision</li>
+                <li>Export decision log as CSV for backtesting and model improvement</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- ====== ENHANCED FEATURES ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">🚀</span> Enhanced Features — Beyond Basic Execution</div>
+    <p class="section-subtitle">Advanced capabilities that compound the AI agent platform's edge</p>
+
+    <div class="grid-3">
+        <div class="agent-card quaternary">
+            <div class="agent-header">
+                <div class="agent-icon ai-green">🔁</div>
+                <div>
+                    <div class="agent-name">Learning Loop</div>
+                    <div class="agent-role">Self-Improving Scoring</div>
+                </div>
+            </div>
+            <div class="agent-desc">After each trade closes, the outcome (win/loss/%) feeds back into the scoring model. Over time, the system learns which TrendVision patterns are profitable.</div>
+            <ul class="feature-list green">
+                <li>Track: which signal types (BREAKOUT vs MOMENTUM) produce best results</li>
+                <li>Track: which rank (#1 vs #5+) correlates with higher win rate</li>
+                <li>Track: which float/MC ranges are most profitable</li>
+                <li>Auto-adjust scoring weights monthly based on P&L data</li>
+                <li>Claude summarizes learning insights weekly</li>
+            </ul>
+        </div>
+
+        <div class="agent-card quaternary">
+            <div class="agent-header">
+                <div class="agent-icon ai-green">🐋</div>
+                <div>
+                    <div class="agent-name">Whale Flow Intelligence</div>
+                    <div class="agent-role">Smart Money Tracking</div>
+                </div>
+            </div>
+            <div class="agent-desc">Aggregate whale alerts per ticker over time. Correlate whale direction with price movement to detect institutional accumulation patterns.</div>
+            <ul class="feature-list green">
+                <li>Whale buy → immediate score boost (+20 points)</li>
+                <li>Multiple whales same direction → "smart money accumulation" signal</li>
+                <li>Whale sell while bot is long → early exit warning</li>
+                <li>Track whale accuracy: do whales predict 5-min price direction?</li>
+                <li>Historical whale flow dashboard per ticker</li>
+            </ul>
+        </div>
+
+        <div class="agent-card quaternary">
+            <div class="agent-header">
+                <div class="agent-icon ai-green">🌐</div>
+                <div>
+                    <div class="agent-name">Multi-Channel Fusion</div>
+                    <div class="agent-role">Cross-Channel Signal Correlation</div>
+                </div>
+            </div>
+            <div class="agent-desc">Same ticker mentioned across multiple Discord channels = conviction multiplier. Integrate existing BotifyTrades channel infrastructure.</div>
+            <ul class="feature-list green">
+                <li>TrendVision alerts + Steel's channel + other signal channels → ticker heat map</li>
+                <li>If GLXG appears in 3+ channels within 5 min → score boost</li>
+                <li>Cross-channel exit signals respected — if any channel says STC, flag for review</li>
+                <li>Leverages existing channel mapping and signal routing architecture</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:24px">
+        <div class="agent-card quaternary">
+            <div class="agent-header">
+                <div class="agent-icon ai-green">📱</div>
+                <div>
+                    <div class="agent-name">Mobile Agent Control</div>
+                    <div class="agent-role">Via Existing Relay Client</div>
+                </div>
+            </div>
+            <div class="agent-desc">Use the existing mobile relay client to receive push alerts and control agents remotely.</div>
+            <ul class="feature-list green">
+                <li>Push notification when Agent 2 detects a score &gt; 80 setup</li>
+                <li>Approve/reject trades from phone before Agent 3 executes</li>
+                <li>Emergency stop all agents via mobile kill switch</li>
+                <li>View live watchlist and P&L from mobile dashboard</li>
+            </ul>
+        </div>
+
+        <div class="agent-card quaternary">
+            <div class="agent-header">
+                <div class="agent-icon ai-green">🔀</div>
+                <div>
+                    <div class="agent-name">Multi-Broker Expansion</div>
+                    <div class="agent-role">Beyond Robinhood</div>
+                </div>
+            </div>
+            <div class="agent-desc">While Robinhood MCP is the primary executor, the agent system can route to any connected broker via existing multi-broker infrastructure.</div>
+            <ul class="feature-list green">
+                <li>Route penny stocks → Robinhood (commission-free)</li>
+                <li>Route options plays → Schwab/Tastytrade (options support)</li>
+                <li>Route after-hours → IBKR (extended hours liquidity)</li>
+                <li>Agent 3 selects best broker per trade based on asset + timing</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- ====== SAFETY & RISK ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">🔒</span> Safety Architecture</div>
+    <p class="section-subtitle">Multiple layers prevent runaway AI from destroying the account</p>
+
+    <div class="flow-diagram">
+<pre>
+  <span class="hl-dim">LAYER 1</span>  <span class="hl-agent">Agent Limits</span>         Max 3 concurrent positions | Max $500 per trade | Max 5 trades/day
+  <span class="hl-dim">───────────────────────────────────────────────────────────────────────────────────────</span>
+  <span class="hl-dim">LAYER 2</span>  <span class="hl-data">Score Gate</span>            Only score ≥ 80 auto-executes | 60-79 requires human approval
+  <span class="hl-dim">───────────────────────────────────────────────────────────────────────────────────────</span>
+  <span class="hl-dim">LAYER 3</span>  <span class="hl-action">Slippage Guard</span>        Reject if price moved > 5% since Agent 2 analysis
+  <span class="hl-dim">───────────────────────────────────────────────────────────────────────────────────────</span>
+  <span class="hl-dim">LAYER 4</span>  <span class="hl-green">Risk Engine</span>            Existing SL/PT/trailing — every position monitored every ~1s
+  <span class="hl-dim">───────────────────────────────────────────────────────────────────────────────────────</span>
+  <span class="hl-dim">LAYER 5</span>  <span class="hl-risk">Daily P&L Limit</span>        $X daily loss → ALL agents stopped | Existing infrastructure
+  <span class="hl-dim">───────────────────────────────────────────────────────────────────────────────────────</span>
+  <span class="hl-dim">LAYER 6</span>  <span class="hl-risk">Circuit Breaker</span>        Emergency kill switch — stops agents + closes all positions
+  <span class="hl-dim">───────────────────────────────────────────────────────────────────────────────────────</span>
+  <span class="hl-dim">LAYER 7</span>  <span class="hl-pink">Robinhood Account</span>      Dedicated agentic account with capped funds — main account untouched
+</pre>
+    </div>
+</div>
+
+<!-- ====== IMPLEMENTATION PHASES ====== -->
+<div class="section">
+    <div class="section-title"><span class="icon">📅</span> Implementation Phases</div>
+    <p class="section-subtitle">Progressive rollout with validation at each stage</p>
+
+    <div class="grid-2">
+        <div class="agent-card primary" style="border-left-color: var(--accent);">
+            <div class="agent-name" style="color:var(--accent)">Phase 1 — Foundation (Week 1-2)</div>
+            <ul class="feature-list" style="margin-top:12px">
+                <li>TrendVision alert parser (regex for all 3 format types)</li>
+                <li>Noise filter with rule-based gates</li>
+                <li>Dynamic watchlist database schema + API endpoints</li>
+                <li>AI Dashboard HTML page skeleton with mock data</li>
+                <li><strong>Validation:</strong> Parser correctly handles all alert formats from channel</li>
+            </ul>
+        </div>
+        <div class="agent-card secondary" style="border-left-color: var(--accent2);">
+            <div class="agent-name" style="color:var(--accent2)">Phase 2 — Intelligence (Week 3-4)</div>
+            <ul class="feature-list cyan" style="margin-top:12px">
+                <li>VWAP/Fibonacci calculation engine using UPH streaming data</li>
+                <li>Setup scoring system with configurable weights</li>
+                <li>Claude AI integration for expert penny stock analysis</li>
+                <li>Whale alert aggregation and correlation</li>
+                <li><strong>Validation:</strong> Score engine produces sensible scores on historical data</li>
+            </ul>
+        </div>
+        <div class="agent-card tertiary" style="border-left-color: var(--accent3);">
+            <div class="agent-name" style="color:var(--accent3)">Phase 3 — Execution (Week 5-6)</div>
+            <ul class="feature-list amber" style="margin-top:12px">
+                <li>Robinhood MCP client wrapper (OAuth flow + tool calls)</li>
+                <li>Position sizing + slippage guard integration</li>
+                <li>Risk engine handoff (SL/PT from Agent 2 → position_monitor.py)</li>
+                <li>Daily P&L limit + circuit breaker integration</li>
+                <li><strong>Validation:</strong> Paper-mode execution with logged but not submitted orders</li>
+            </ul>
+        </div>
+        <div class="agent-card quaternary" style="border-left-color: var(--accent4);">
+            <div class="agent-name" style="color:var(--accent4)">Phase 4 — Live & Learn (Week 7+)</div>
+            <ul class="feature-list green" style="margin-top:12px">
+                <li>Go live with small position sizes ($100-200 per trade)</li>
+                <li>Learning loop: P&L feedback → scoring weight adjustment</li>
+                <li>Multi-channel fusion integration</li>
+                <li>Mobile relay push notifications for high-score setups</li>
+                <li><strong>Validation:</strong> 2-week live trading with performance review before scaling</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- ====== FOOTER ====== -->
+<div style="padding: 40px 0; text-align: center; border-top: 1px solid var(--border);">
+    <p style="color: var(--text-dim); font-size: 0.85rem;">
+        BotifyTrades AI Agent Platform — v11.1.2 Architecture Document
+        <br>
+        <span style="color: var(--accent);">Three Agents. One Pipeline. Zero Noise.</span>
+    </p>
+    <p style="color: var(--text-dim); font-size: 0.75rem; margin-top: 8px;">
+        ⚠️ AI agents can make errors. All trades carry risk. Past performance does not guarantee future results.
+        <br>You are responsible for monitoring your account and the actions of your AI agents.
+    </p>
+</div>
+
+</div>
+</body>
+</html>

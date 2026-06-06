@@ -8710,7 +8710,7 @@ class SelfClient(discord.Client):
                     except Exception as _tm_err:
                         import traceback as _tb
                         _original_print(f"[TRADE MONITOR] ⚠️ Post-broker init failed: {_tm_err}")
-                    _tb.print_exc()
+                        _tb.print_exc()
 
                 # Initialize Unfilled Order Chaser for mid-price replacement of stale exit orders
                 try:
@@ -9713,23 +9713,18 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
             
             # Get AI analysis
             def get_analysis():
-                response = self.trade_analyzer.client.chat.completions.create(
-                    model=self.trade_analyzer.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": f"You are an expert stock analyst providing both technical ({timeframe} timeframe) and fundamental analysis. Give clear, actionable insights for day traders AND long-term investors. Focus on valuation, growth potential, and risk assessment. Format with bullet points."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    temperature=0.7,
-                    max_tokens=700
-                )
-                return response.choices[0].message.content
-            
+                ta = self.trade_analyzer
+                sys_msg = f"You are an expert stock analyst providing both technical ({timeframe} timeframe) and fundamental analysis. Give clear, actionable insights for day traders AND long-term investors. Focus on valuation, growth potential, and risk assessment. Format with bullet points."
+                if getattr(ta, '_provider', '') == 'gemini':
+                    resp = ta.client.models.generate_content(model=ta.model, contents=f"{sys_msg}\n\n{prompt}")
+                    return resp.text
+                elif getattr(ta, '_is_anthropic', False):
+                    resp = ta.client.messages.create(model=ta.model, max_tokens=700, temperature=0.7, system=sys_msg, messages=[{"role": "user", "content": prompt}])
+                    return resp.content[0].text
+                else:
+                    resp = ta.client.chat.completions.create(model=ta.model, messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt}], temperature=0.7, max_tokens=700)
+                    return resp.choices[0].message.content
+
             analysis = await asyncio.to_thread(get_analysis)
             
             # Delete thinking message
@@ -10282,23 +10277,18 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
             
             # Get AI response
             def get_answer():
-                response = self.trade_analyzer.client.chat.completions.create(
-                    model=self.trade_analyzer.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert trading assistant. Answer questions clearly and concisely. Provide actionable advice when relevant. Keep responses under 400 words."
-                        },
-                        {
-                            "role": "user",
-                            "content": question
-                        }
-                    ],
-                    temperature=0.7,
-                    max_tokens=600
-                )
-                return response.choices[0].message.content
-            
+                ta = self.trade_analyzer
+                sys_msg = "You are an expert trading assistant. Answer questions clearly and concisely. Provide actionable advice when relevant. Keep responses under 400 words."
+                if getattr(ta, '_provider', '') == 'gemini':
+                    resp = ta.client.models.generate_content(model=ta.model, contents=f"{sys_msg}\n\n{question}")
+                    return resp.text
+                elif getattr(ta, '_is_anthropic', False):
+                    resp = ta.client.messages.create(model=ta.model, max_tokens=600, temperature=0.7, system=sys_msg, messages=[{"role": "user", "content": question}])
+                    return resp.content[0].text
+                else:
+                    resp = ta.client.chat.completions.create(model=ta.model, messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": question}], temperature=0.7, max_tokens=600)
+                    return resp.choices[0].message.content
+
             answer = await asyncio.to_thread(get_answer)
             
             # Delete thinking message
@@ -10380,16 +10370,17 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
 
 Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment."""
                             
-                            ai_response = self.trade_analyzer.client.chat.completions.create(
-                                model=self.trade_analyzer.model,
-                                messages=[
-                                    {"role": "system", "content": "You are a concise options trading analyst. Keep responses under 80 words."},
-                                    {"role": "user", "content": prompt}
-                                ],
-                                temperature=0.7,
-                                max_tokens=150
-                            )
-                            return ai_response.choices[0].message.content
+                            ta = self.trade_analyzer
+                            sys_msg = "You are a concise options trading analyst. Keep responses under 80 words."
+                            if getattr(ta, '_provider', '') == 'gemini':
+                                resp = ta.client.models.generate_content(model=ta.model, contents=f"{sys_msg}\n\n{prompt}")
+                                return resp.text
+                            elif getattr(ta, '_is_anthropic', False):
+                                resp = ta.client.messages.create(model=ta.model, max_tokens=150, temperature=0.7, system=sys_msg, messages=[{"role": "user", "content": prompt}])
+                                return resp.content[0].text
+                            else:
+                                resp = ta.client.chat.completions.create(model=ta.model, messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt}], temperature=0.7, max_tokens=150)
+                                return resp.choices[0].message.content
                         
                         assessment = await asyncio.to_thread(get_ai_assessment)
                         response += f"**🤖 AI Assessment:** {assessment}\n\n"
@@ -12296,7 +12287,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # Check for spy-sniper embed format (Open Alert / Trim Alert / Close Alert)
                 is_spy_sniper_embed = False
-                if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+                if SPY_SNIPER_AVAILABLE and is_admin_build() and hasattr(message, 'embeds') and message.embeds:
                     for embed in message.embeds:
                         embed_title = embed.title if embed.title else ""
                         if is_spy_sniper_signal(embed_title, embed.description if embed.description else ""):
@@ -12351,7 +12342,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Check for spy-sniper embed format first
                         spy_sniper_parsed = None
-                        if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+                        if SPY_SNIPER_AVAILABLE and is_admin_build() and hasattr(message, 'embeds') and message.embeds:
                             from src.signals.spy_sniper_parser import parse_spy_sniper_signal, SpySniperSignalType
                             for embed in message.embeds:
                                 embed_title = embed.title if embed.title else ""
@@ -14363,8 +14354,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         bullwinkle_opt = None
         spy_sniper_opt = None
         
-        # Check for Spy-Sniper embed format (direct execution path - separate from signal routing)
-        if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+        # Check for Spy-Sniper embed format (direct execution path - ADMIN ONLY)
+        if SPY_SNIPER_AVAILABLE and is_admin_build() and hasattr(message, 'embeds') and message.embeds:
             from src.signals.spy_sniper_parser import parse_spy_sniper_signal, SpySniperSignalType
             for embed in message.embeds:
                 embed_title = embed.title if embed.title else ""

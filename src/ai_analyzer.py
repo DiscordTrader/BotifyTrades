@@ -38,7 +38,24 @@ def _get_ai_client_and_model():
             raise ValueError("Anthropic API key not configured")
         return Anthropic(api_key=api_key), "claude-haiku-4-5-20251001", "claude", True
 
-    # OpenAI or Replit AI
+    if provider == 'gemini':
+        try:
+            from google import genai as _genai
+        except ImportError:
+            raise ValueError("Google GenAI SDK not installed (pip install google-genai)")
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            try:
+                from gui_app.broker_credentials_service import get_api_keys_extended
+                keys = get_api_keys_extended()
+                api_key = keys.get('gemini', '')
+            except Exception:
+                pass
+        if not api_key:
+            raise ValueError("Gemini API key not configured")
+        return _genai.Client(api_key=api_key), "gemini-3.5-flash", "gemini", False
+
+    # OpenAI
     try:
         from openai import OpenAI
     except ImportError:
@@ -108,7 +125,13 @@ class TradeAnalyzer:
 
             print(f"[AI] Analyzing trade: {trade_desc}")
 
-            if self._is_anthropic:
+            if self._provider == 'gemini':
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=f"{system_msg}\n\n{prompt}"
+                )
+                analysis_text = response.text
+            elif self._is_anthropic:
                 response = self.client.messages.create(
                     model=self.model,
                     max_tokens=800,
@@ -241,7 +264,13 @@ Keep it concise and actionable."""
 
             print("[AI] Analyzing market sentiment...")
 
-            if self._is_anthropic:
+            if self._provider == 'gemini':
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=f"{system_msg}\n\n{prompt}"
+                )
+                analysis = response.text
+            elif self._is_anthropic:
                 response = self.client.messages.create(
                     model=self.model,
                     max_tokens=600,

@@ -339,23 +339,35 @@ Keep it concise and actionable."""
     def _get_ai_analysis(self, prompt: str):
         """Get AI analysis (runs in thread)"""
         try:
-            response = self.trade_analyzer.client.chat.completions.create(
-                model=self.trade_analyzer.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert trading analyst providing post-trade analysis. Focus on whether the trade direction was correct and what the trader should do next."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=0.7,
-                max_tokens=600
-            )
-            
-            analysis = response.choices[0].message.content
+            system_msg = "You are an expert trading analyst providing post-trade analysis. Focus on whether the trade direction was correct and what the trader should do next."
+            ta = self.trade_analyzer
+
+            if getattr(ta, '_provider', '') == 'gemini':
+                response = ta.client.models.generate_content(
+                    model=ta.model,
+                    contents=f"{system_msg}\n\n{prompt}"
+                )
+                analysis = response.text
+            elif getattr(ta, '_is_anthropic', False):
+                response = ta.client.messages.create(
+                    model=ta.model,
+                    max_tokens=600,
+                    temperature=0.7,
+                    system=system_msg,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                analysis = response.content[0].text
+            else:
+                response = ta.client.chat.completions.create(
+                    model=ta.model,
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=600
+                )
+                analysis = response.choices[0].message.content
             print(f"\n{analysis}\n")
             
         except Exception as e:
