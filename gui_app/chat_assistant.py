@@ -3946,6 +3946,39 @@ def analyze_uploaded_log(log_content: str, query: str = "") -> Dict:
         }
 
 
+def _get_trade_context_for_symbol(symbol: str) -> str:
+    """Build trade history context for a symbol to pass to AI."""
+    try:
+        from . import database as db
+        trades = db.get_trades(limit=200)
+        if not trades:
+            return ""
+        symbol_trades = [t for t in trades if symbol.upper() in (t.get('symbol', '') or '').upper()]
+        if not symbol_trades:
+            return ""
+        symbol_trades.sort(key=lambda t: t.get('executed_at') or t.get('filled_at') or t.get('created_at') or '0')
+        recent = symbol_trades[-15:]
+        lines = [f"TRADE HISTORY FOR {symbol} ({len(symbol_trades)} total, showing last {len(recent)}):"]
+        for t in recent:
+            action = t.get('action', t.get('side', '?'))
+            qty = t.get('quantity', t.get('qty', 0))
+            price = t.get('price', t.get('fill_price', 0))
+            status = t.get('status', '')
+            broker = t.get('broker', '')
+            ts = t.get('executed_at') or t.get('filled_at') or t.get('created_at') or ''
+            channel = t.get('channel_name', '')
+            pnl = t.get('pnl', '')
+            line = f"  {ts} | {action} x{qty} @ ${price} | {status} | {broker}"
+            if channel:
+                line += f" | ch:{channel}"
+            if pnl:
+                line += f" | pnl:{pnl}"
+            lines.append(line)
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def _get_bot_status_context() -> str:
     """Get real-time bot status — channels, brokers, settings — for AI context."""
     try:
