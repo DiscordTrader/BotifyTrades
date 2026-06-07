@@ -1467,6 +1467,11 @@ def get_response(query: str) -> Dict:
     if format_response:
         return format_response
 
+    # Event commands (show events, show failures, etc.) — always use dedicated handlers
+    event_response = handle_event_commands(query)
+    if event_response:
+        return event_response
+
     ai_available = is_ai_available()
 
     if ai_available:
@@ -1487,10 +1492,13 @@ def get_response(query: str) -> Dict:
             'log', 'error', 'fail', 'issue', 'problem', 'not working', 'crash', 'bug',
         ])
 
-        analysis_type = "general"
         if is_trade_question:
-            analysis_type = "trade_analysis"
-        elif is_issue_question:
+            result = analyze_trades(query)
+            if result.get('ai_powered') or result.get('topic') == 'trade_summary':
+                return result
+
+        analysis_type = "general"
+        if is_issue_question:
             analysis_type = "log_analysis"
 
         if sym:
@@ -1528,9 +1536,6 @@ def get_response(query: str) -> Dict:
 
     # AI unavailable — fall back to keyword handlers and knowledge base
     query_lower_check = query.lower().strip()
-    event_response = handle_event_commands(query)
-    if event_response:
-        return event_response
 
     if is_trade_query(query_lower_check):
         return analyze_trades(query)
@@ -3423,37 +3428,21 @@ def analyze_trades(query: str) -> Dict:
                 lines.append(f"  {received} | {d} {qty} {symbol}{opt_info} ({asset}) @ ${price:.2f} | from: {author} | executed={executed} status={exec_status}{reason_str}")
             signals_text = "\n".join(lines)
 
-        context = f"""{'='*50}
-COMPLETE TRADE DATA FOR: {symbol or 'ALL'}
-{'='*50}
-
-1. SIGNALS RECEIVED (raw Discord signals — what was detected):
-{signals_text}
-
-2. ORDER EVENTS (full lifecycle — parsed, validated, submitted, filled, rejected, failed):
-{events_text}
-
-3. TRADE RECORDS (BTO/STC entries with P&L):
-{symbol_trades_text}
-
-4. EXECUTION ENTRIES (actual broker fills with slippage):
-{lots_text}
-
-5. EXECUTION EXITS (realized P&L with exit trigger reason):
-{closure_text}
-
-6. CONDITIONAL ORDERS (trigger-based entries — watching/triggered/filled):
-{cond_text}
-
-7. RECENT TRADES (all symbols, last 15):
-{_format_trades(recent_trades)}
-
-8. OPEN POSITIONS:
-{_format_positions(open_positions)}
-
-9. CONSOLE LOGS:
-{log_context}
-"""
+        context_sections = [
+            f"COMPLETE TRADE DATA FOR: {symbol or 'ALL'}",
+            f"1. SIGNALS RECEIVED:\n{signals_text}",
+            f"2. ORDER EVENTS:\n{events_text}",
+            f"3. TRADE RECORDS:\n{symbol_trades_text}",
+            f"4. EXECUTION ENTRIES:\n{lots_text}",
+            f"5. EXECUTION EXITS:\n{closure_text}",
+            f"6. CONDITIONAL ORDERS:\n{cond_text}",
+        ]
+        if not symbol:
+            context_sections.append(f"7. RECENT TRADES (all symbols, last 15):\n{_format_trades(recent_trades)}")
+        context_sections.append(f"OPEN POSITIONS:\n{_format_positions(open_positions)}")
+        if log_context:
+            context_sections.append(f"CONSOLE LOGS:\n{log_context}")
+        context = "\n\n".join(context_sections)
 
         ai_response = _call_ai(query, context, "trade_analysis")
 
