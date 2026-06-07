@@ -1472,6 +1472,12 @@ def get_response(query: str) -> Dict:
     if event_response:
         return event_response
 
+    q_lower_pre = query.lower().strip()
+    _wants_channel_list = ('channel' in q_lower_pre and any(kw in q_lower_pre for kw in ['list', 'show', 'configured', 'how many', 'what are', 'which']))
+    if _wants_channel_list:
+        if not any(kw in q_lower_pre for kw in ['how do i', 'how to', 'what is a', 'explain', 'add channel']):
+            return _list_channels_from_db()
+
     ai_available = is_ai_available()
 
     if ai_available:
@@ -2778,6 +2784,45 @@ def _handle_reject_candidate(candidate_id_str: str, reason: str = '') -> Dict:
         return {"success": True, "response": f"**Error**: {str(e)}", "topic": "format_learning"}
 
 
+def _list_channels_from_db() -> Dict:
+    """List configured channels with real data from the database."""
+    try:
+        from . import database as db
+        channels = db.get_channels()
+        if not channels:
+            return {"success": True, "response": "**No Channels Configured**\n\nGo to **Trading → Channels** to add your first channel.", "topic": "channels"}
+
+        lines = [f"**Configured Channels ({len(channels)} total)**\n"]
+        for i, ch in enumerate(channels, 1):
+            name = ch.get('name', '?')
+            disc_id = ch.get('discord_channel_id', '')
+            exe = 'Execute' if ch.get('execute_enabled') else ''
+            trk = 'Track' if ch.get('track_enabled') else ''
+            mode = '+'.join(filter(None, [exe, trk])) or 'Disabled'
+            broker = ch.get('enabled_brokers', '') or ch.get('broker_override', '') or 'Not assigned'
+            risk = 'Risk ON' if ch.get('risk_management_enabled') else ''
+            pos_size = ch.get('position_size_pct', 0) or 0
+            default_qty = ch.get('default_quantity', '') or ''
+
+            line = f"{i}. **{name}** (ID: {disc_id}) [{mode}]"
+            if broker and broker != 'Not assigned':
+                line += f" — Broker: {broker}"
+            details = []
+            if pos_size:
+                details.append(f"Size: {pos_size}%")
+            if default_qty:
+                details.append(f"Qty: {default_qty}")
+            if risk:
+                details.append(risk)
+            if details:
+                line += f" | {', '.join(details)}"
+            lines.append(line)
+
+        return {"success": True, "response": "\n".join(lines), "topic": "channels_list"}
+    except Exception as e:
+        return {"success": True, "response": f"Error listing channels: {e}", "topic": "error"}
+
+
 def get_suggestions(partial_query: str) -> List[str]:
     """Get topic suggestions based on partial query"""
     if not partial_query or len(partial_query) < 2:
@@ -3585,8 +3630,8 @@ def analyze_trades(query: str) -> Dict:
                 qty = t.get('quantity', 0)
                 ep = t.get('executed_price', 0)
                 ip = t.get('intended_price', 0)
-                pnl = t.get('pnl', 0)
-                pnl_pct = t.get('pnl_percent', 0)
+                pnl = t.get('pnl') or 0
+                pnl_pct = t.get('pnl_percent') or 0
                 brk = t.get('broker', '?')
                 st = t.get('status', '?')
                 at = (t.get('executed_at') or '')[:19]
@@ -3597,7 +3642,7 @@ def analyze_trades(query: str) -> Dict:
                 expiry = t.get('expiry', '')
                 cp = t.get('call_put', '')
                 opt_info = f" {strike}{cp} {expiry}" if asset == 'option' and strike else ""
-                lines.append(f"  {at} | {d} {qty} {symbol}{opt_info} @ ${ep or ip} | broker={brk} status={st} P&L=${pnl:+.2f} ({pnl_pct:+.1f}%) SL={sl} PT={pt}")
+                lines.append(f"  {at} | {d} {qty} {symbol}{opt_info} @ ${ep or ip} | broker={brk} status={st} P&L=${float(pnl):+.2f} ({float(pnl_pct):+.1f}%) SL={sl} PT={pt}")
             symbol_trades_text = "\n".join(lines)
 
         lots_text = "None"
@@ -3621,7 +3666,7 @@ def analyze_trades(query: str) -> Dict:
                 if asset == 'option':
                     opt_info = f" ${c.get('strike','')}{c.get('call_put','')} {c.get('expiry','')}"
                 hold = f" held={c.get('holding_days',0):.1f}d" if c.get('holding_days') else ""
-                lines.append(f"  {(c.get('filled_at') or '')[:19]} | EXIT {c.get('closed_qty',0)} {c.get('symbol','?')}{opt_info} ({asset}) entry=${c.get('entry_price',0):.2f} exit=${c.get('exit_price',0):.2f} | P&L=${c.get('pnl',0):+.2f} ({c.get('pnl_percent',0):+.1f}%) via {c.get('exit_source','?')} on {c.get('broker','?')}{hold}")
+                lines.append(f"  {(c.get('filled_at') or '')[:19]} | EXIT {c.get('closed_qty',0)} {c.get('symbol','?')}{opt_info} ({asset}) entry=${float(c.get('entry_price') or 0):.2f} exit=${float(c.get('exit_price') or 0):.2f} | P&L=${float(c.get('pnl') or 0):+.2f} ({float(c.get('pnl_percent') or 0):+.1f}%) via {c.get('exit_source','?')} on {c.get('broker','?')}{hold}")
             closure_text = "\n".join(lines)
 
         events_text = "None"
@@ -3850,7 +3895,7 @@ def _format_trades(trades: List[Dict]) -> str:
             if strike:
                 opt_info = f" ${strike}{cp} {expiry}"
         price_str = f"${price:.2f}" if price else f"${intended:.2f}(intended)"
-        lines.append(f"  {time_str} | {action} {qty} {symbol}{opt_info} ({asset}) @ {price_str} | {broker} {status} P&L=${pnl:+.2f} ({pnl_pct:+.1f}%)")
+        lines.append(f"  {time_str} | {action} {qty} {symbol}{opt_info} ({asset}) @ {price_str} | {broker} {status} P&L=${float(pnl):+.2f} ({float(pnl_pct):+.1f}%)")
 
     return "\n".join(lines) if lines else "No trades to display."
 
@@ -3871,7 +3916,7 @@ def _format_positions(positions: List[Dict]) -> str:
         opt_info = ""
         if asset == 'option':
             opt_info = f" ${p.get('strike','')}{p.get('call_put','')} {p.get('expiry','')}"
-        lines.append(f"  {symbol}{opt_info} ({asset}): {qty} @ ${avg_cost:.2f} | P&L: ${pnl:+.2f} | {broker}")
+        lines.append(f"  {symbol}{opt_info} ({asset}): {qty} @ ${float(avg_cost):.2f} | P&L: ${float(pnl):+.2f} | {broker}")
 
     return "\n".join(lines) if lines else "No positions."
 
