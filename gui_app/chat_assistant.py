@@ -2568,20 +2568,58 @@ def scan_channel_for_formats(channel_id: str) -> Dict:
         }
 
 
+def _extract_channel_history(channel_id: str, limit: int = 1000) -> Dict:
+    """Extract channel history into DB via the running bot instance."""
+    try:
+        from .routes import _bot_instance
+        if not _bot_instance or not hasattr(_bot_instance, 'loop') or not _bot_instance.loop:
+            return {'success': False, 'error': 'Bot is not running. Start the bot first.'}
+
+        import asyncio
+        from src.services.format_learning_pipeline import async_extract_history_to_db
+
+        loop = _bot_instance.loop
+        if loop.is_closed():
+            return {'success': False, 'error': 'Bot event loop is closed.'}
+
+        future = asyncio.run_coroutine_threadsafe(
+            async_extract_history_to_db(_bot_instance, int(channel_id), limit),
+            loop
+        )
+        result = future.result(timeout=120)
+        return result
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
 def _handle_analyze_channel(channel_id: str) -> Dict:
-    """Trigger format analysis on a channel's buffered messages."""
+    """Trigger format analysis on a channel's buffered messages.
+    Auto-extracts history if not enough messages are buffered."""
     try:
         from . import database as db
         msg_count = db.get_channel_message_count(channel_id)
+
+        if msg_count < 50:
+            extract_result = _extract_channel_history(channel_id, 1000)
+            if extract_result.get('success'):
+                msg_count = db.get_channel_message_count(channel_id)
+                print(f"[FORMAT_LEARN] Auto-extracted {extract_result.get('messages_saved', 0)} messages from {extract_result.get('channel_name', channel_id)}, total buffered: {msg_count}")
+            else:
+                if msg_count == 0:
+                    return {
+                        "success": True,
+                        "response": f"**Could Not Extract History**\n\n{extract_result.get('error', 'Unknown error')}\n\n"
+                                   f"Make sure:\n"
+                                   f"1. The channel `{channel_id}` is added in **Trading → Channels**\n"
+                                   f"2. The bot is running and connected to Discord\n"
+                                   f"3. The bot has access to read that channel",
+                        "topic": "format_learning"
+                    }
+
         if msg_count == 0:
             return {
                 "success": True,
-                "response": f"**No Messages Buffered**\n\nChannel `{channel_id}` has no messages in the buffer.\n\n"
-                           f"To start learning:\n"
-                           f"1. Make sure the channel is added in **Trading → Channels**\n"
-                           f"2. The bot will automatically buffer live messages\n"
-                           f"3. Or extract history: type `!extractraw {channel_id} 1000` in any Discord channel\n"
-                           f"4. Then come back and run `analyze channel {channel_id}`",
+                "response": f"**No Messages Found**\n\nChannel `{channel_id}` has no messages. Make sure the channel is configured and the bot has access.",
                 "topic": "format_learning"
             }
 
@@ -2594,15 +2632,13 @@ def _handle_analyze_channel(channel_id: str) -> Dict:
         from src.services.format_learning_pipeline import format_candidates_for_display
         candidates_text = format_candidates_for_display(channel_id)
 
-        response = (
-            f"**Format Analysis Complete**\n\n"
-            f"Channel: **{result.get('channel_name', channel_id)}**\n"
-            f"Messages analyzed: {result.get('messages_analyzed', 0)}\n"
-            f"Heuristic patterns: {result.get('heuristic_patterns', 0)}\n"
-            f"AI patterns: {result.get('ai_patterns', 0)}\n"
-            f"Candidates saved: {result.get('candidates_saved', 0)}\n\n"
-            f"{candidates_text}"
-        )
+        response = f"**Format Analysis Complete**\n\n"
+        response += f"Channel: **{result.get('channel_name', channel_id)}**\n"
+        response += f"Messages analyzed: {result.get('messages_analyzed', 0)}\n"
+        response += f"Heuristic patterns: {result.get('heuristic_patterns', 0)}\n"
+        response += f"AI patterns: {result.get('ai_patterns', 0)}\n"
+        response += f"Candidates saved: {result.get('candidates_saved', 0)}\n\n"
+        response += candidates_text
 
         return {"success": True, "response": response, "topic": "format_learning", "ai_powered": True}
 
