@@ -2022,10 +2022,56 @@ class SignalFormatRegistry:
             ],
         )
 
+        # =====================================================================
+        # VIKING PLAYS FORMAT (penny stock entries/exits, all conditional)
+        # =====================================================================
+        from src.signals.viking_parser import (
+            parse_viking_entry, parse_viking_entry_role_first, parse_viking_exit,
+            VIKING_ENTRY_MAIN_RE, VIKING_ENTRY_ROLE_FIRST_RE, VIKING_EXIT_ALL_OUT_RE,
+        )
+
+        self.register(
+            name="viking_entry_role_first",
+            description="Viking entry with role first: @role $SYMBOL PRICE",
+            priority=85,
+            pattern=VIKING_ENTRY_ROLE_FIRST_RE.pattern,
+            parser=parse_viking_entry_role_first,
+            examples=["<@&1330929339134640179> $Anpa 6.5$", "<@&1330929339134640179> $Dxf .4450", "<@&1330915546513805463> $Anpa 6.50 short term swing"],
+            flags=re.IGNORECASE,
+        )
+
+        self.register(
+            name="viking_entry",
+            description="Viking stock entry: $SYMBOL [loto/starter/took] PRICE [@role]",
+            priority=86,
+            pattern=VIKING_ENTRY_MAIN_RE.pattern,
+            parser=parse_viking_entry,
+            examples=[
+                "$MWC 6.68 <@&1330929339134640179>",
+                "$Elpw loto .80 <@&1330929339134640179>",
+                "$UK starter 2.90$ <@&1330929339134640179>",
+                "$FCHL took some 2.60 <@&1330929339134640179>",
+                "$Mask took a starter 1.32$",
+                "$GLE .46$ entry",
+                "$Hkit adding again .66",
+            ],
+            flags=re.IGNORECASE,
+        )
+
+        self.register(
+            name="viking_exit",
+            description="Viking exit: SYMBOL all out / all out SYMBOL",
+            priority=87,
+            pattern=VIKING_EXIT_ALL_OUT_RE.pattern,
+            parser=parse_viking_exit,
+            examples=["Elpw all out banger", "$UK all out", "Mask all out", "all out $ELPW"],
+            flags=re.IGNORECASE,
+        )
+
     # =========================================================================
     # PARSER IMPLEMENTATIONS
     # =========================================================================
-    
+
     def _parse_jake_plusminus_simple(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Jake's +/- simple format: +5 IWM @ lim0.08"""
         sign, qty, symbol, price = match.groups()
