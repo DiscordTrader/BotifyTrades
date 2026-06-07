@@ -80,7 +80,10 @@ def extract_history_to_db(bot_client, channel_id: int, limit: int = 1000) -> Dic
             'messages_saved': saved,
         }
 
-    return asyncio.get_event_loop().run_until_complete(_extract())
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        raise RuntimeError("Use async_extract_history_to_db() in async context instead")
+    return loop.run_until_complete(_extract())
 
 
 async def async_extract_history_to_db(bot_client, channel_id: int, limit: int = 1000) -> Dict:
@@ -173,10 +176,15 @@ def analyze_channel_formats(channel_id: str) -> Dict:
                 for i in range(0, min(len(messages), 500), ai_batch_size):
                     batch = messages[i:i + ai_batch_size]
                     result = trainer.discover_formats_from_messages(batch, channel_name)
-                    if result.get('success') and result.get('formats_saved'):
-                        ai_results.extend(result['formats_saved'])
-                    elif result.get('success') and result.get('formats_discovered'):
-                        pass
+                    if result.get('success'):
+                        for fs in result.get('formats_saved', []):
+                            ai_results.append({
+                                'format_name': fs.get('name', f'ai_format_{len(ai_results)}'),
+                                'confidence': fs.get('confidence', 0.7),
+                                'example_message': fs.get('example', ''),
+                                'action': 'BTO',
+                                'method': 'ai',
+                            })
                 print(f"[FORMAT_LEARN] AI: {len(ai_results)} patterns found (provider={ai_provider})")
         except Exception as e:
             print(f"[FORMAT_LEARN] AI analysis error: {e}")
@@ -244,8 +252,8 @@ def _run_heuristic_scan(messages: List[str]) -> List[Dict]:
         r'\$?([A-Z]{1,5})',
         re.IGNORECASE
     )
-    emoji_entry_re = re.compile(r'[✅▶🟢]\s*\$?([A-Z]{1,5})\s', re.IGNORECASE)
-    emoji_exit_re = re.compile(r'[❌⛔🔴]\s*\$?([A-Z]{1,5})\s', re.IGNORECASE)
+    emoji_entry_re = re.compile(r'[✅▶🟢]\s*\$?([A-Z]{1,5})(?:\s|$)', re.IGNORECASE)
+    emoji_exit_re = re.compile(r'[❌⛔🔴]\s*\$?([A-Z]{1,5})(?:\s|$)', re.IGNORECASE)
     dollar_ticker_re = re.compile(r'\$([A-Za-z]{1,5})\s+', re.IGNORECASE)
     option_re = re.compile(
         r'\$?([A-Z]{1,5})\s+\$?(\d+(?:\.\d+)?)\s*([CcPp])\s',
@@ -254,7 +262,9 @@ def _run_heuristic_scan(messages: List[str]) -> List[Dict]:
 
     non_tickers = {'THE', 'FOR', 'AND', 'ALL', 'OUT', 'BTO', 'STC', 'BUY', 'SELL',
                    'SL', 'PT', 'TP', 'NOT', 'HAS', 'WAS', 'ARE', 'CAN', 'MAY',
-                   'CEO', 'IPO', 'ATH', 'FDA', 'NEW', 'OIL', 'DAY', 'AH'}
+                   'CEO', 'IPO', 'ATH', 'FDA', 'NEW', 'OIL', 'DAY', 'AH',
+                   'USD', 'GET', 'SET', 'NOW', 'RUN', 'TOP', 'RED', 'HOT', 'BIG', 'LOW',
+                   'LET', 'PUT', 'GOT', 'DID', 'SAY', 'USE', 'TRY', 'ANY', 'FEW'}
 
     for msg in messages:
         if not msg or len(msg) < 3:
@@ -271,7 +281,8 @@ def _run_heuristic_scan(messages: List[str]) -> List[Dict]:
         if emoji_exit_re.search(msg):
             _add_pattern(patterns, 'heuristic_emoji_exit', 'STC', msg, 'stock')
         if option_re.search(msg):
-            _add_pattern(patterns, 'heuristic_option_signal', 'BTO', msg, 'option')
+            opt_action = 'STC' if exit_re.search(msg) else 'BTO'
+            _add_pattern(patterns, f'heuristic_option_{opt_action.lower()}', opt_action, msg, 'option')
         if dollar_ticker_re.search(msg) and re.search(r'\d+(?:\.\d+)?', msg):
             sym = dollar_ticker_re.search(msg).group(1).upper()
             if sym not in non_tickers and len(sym) >= 2:
@@ -327,8 +338,8 @@ def _merge_and_score(heuristic: List[Dict], ai: List[Dict],
         else:
             candidates[name] = {
                 'format_name': name,
-                'action': a.get('format_type', a.get('action', 'BTO')).upper(),
-                'asset_type': a.get('format_type', 'stock'),
+                'action': a.get('action', a.get('parsed_example', {}).get('action', 'BTO')).upper(),
+                'asset_type': a.get('asset_type', a.get('format_type', 'stock')),
                 'examples': [a.get('example_message', '')] if a.get('example_message') else [],
                 'match_count': a.get('message_count', 1),
                 'confidence': a.get('confidence', 0.70),
@@ -360,8 +371,12 @@ def _deduplicate_against_registry(candidates: List[Dict], messages: List[str]) -
 
         filtered = []
         for c in candidates:
-            if c.get('match_count', 0) >= 3:
-                filtered.append(c)
+            if c.get('match_count', 0) < 3:
+                continue
+            if c.get('format_name', '') in builtin_matched:
+                print(f"[FORMAT_LEARN] Skipping '{c['format_name']}' — builtin already covers this")
+                continue
+            filtered.append(c)
         return filtered
     except Exception as e:
         print(f"[FORMAT_LEARN] Dedup error: {e}")
@@ -380,7 +395,11 @@ def format_candidates_for_display(channel_id: str) -> str:
     for c in candidates:
         conf_pct = c['confidence'] * 100
         conf_color = "🟢" if conf_pct >= 80 else "🟡" if conf_pct >= 60 else "🔴"
-        examples = json.loads(c['example_messages']) if isinstance(c['example_messages'], str) else c['example_messages']
+        try:
+            raw = c.get('example_messages') or '[]'
+            examples = json.loads(raw) if isinstance(raw, str) else (raw or [])
+        except (json.JSONDecodeError, TypeError):
+            examples = []
 
         lines.append(f"**#{c['id']}** — {c['format_name']} {conf_color} {conf_pct:.0f}%")
         lines.append(f"  Action: {c['action']} | Asset: {c['asset_type']} | Method: {c['discovery_method']}")

@@ -2018,8 +2018,8 @@ def handle_format_commands(query: str) -> Optional[Dict]:
         return _handle_show_candidates(channel_id)
 
     # Approve format candidate
-    if query_lower.startswith('approve format #') or query_lower.startswith('approve format #'):
-        cid = query_lower.replace('approve format #', '').replace('approve format #', '').strip()
+    if query_lower.startswith('approve format #') or query_lower.startswith('approve format ') and query_lower.replace('approve format ', '').strip()[:1].isdigit():
+        cid = query_lower.replace('approve format #', '').replace('approve format ', '').strip()
         return _handle_approve_candidate(cid)
 
     if query_lower == 'approve all formats':
@@ -2630,8 +2630,14 @@ def _handle_show_candidates(channel_id: str = None) -> Dict:
             }
 
         from src.services.format_learning_pipeline import format_candidates_for_display
-        ch_id = channel_id or (candidates[0]['channel_id'] if candidates else None)
-        text = format_candidates_for_display(ch_id) if ch_id else "No candidates found."
+        if channel_id:
+            text = format_candidates_for_display(channel_id)
+        else:
+            unique_channels = list(set(c['channel_id'] for c in candidates))
+            parts = []
+            for ch_id in unique_channels:
+                parts.append(format_candidates_for_display(ch_id))
+            text = "\n---\n".join(parts)
 
         return {"success": True, "response": text, "topic": "format_learning"}
 
@@ -2681,9 +2687,10 @@ def _handle_approve_candidate(candidate_id_str: str) -> Dict:
                 fmt_list = _json.loads(allowed) if allowed and isinstance(allowed, str) else (allowed or [])
                 if candidate['format_name'] not in fmt_list:
                     fmt_list.append(candidate['format_name'])
-                    db.update_channel_setting(channel_info['id'], 'allowed_signal_formats', _json.dumps(fmt_list))
-        except Exception:
-            pass
+                    db.update_channel(channel_info['id'], allowed_signal_formats=_json.dumps(fmt_list))
+                    print(f"[CHAT] Updated allowed_signal_formats for channel {channel_id}: {fmt_list}")
+        except Exception as e:
+            print(f"[CHAT] Warning: approved format but failed to update channel allowed_signal_formats: {e}")
 
         return {
             "success": True,

@@ -11934,6 +11934,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         await message.channel.send(f"❌ {result.get('error', 'Failed to extract')}")
                 except ValueError:
                     await message.channel.send("❌ Invalid channel ID")
+                except Exception as e:
+                    await message.channel.send(f"❌ Error during extraction: {str(e)[:200]}")
                 return
             elif content.startswith('!extracthistory'):
                 args = message.content.strip()[15:].strip().split()

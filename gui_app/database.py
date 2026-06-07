@@ -2921,7 +2921,7 @@ def update_channel(channel_id: int, **kwargs):
                    'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
                    'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled', 'entry_chase_enabled',
-                   'ticker_filter_mode', 'ticker_filter_list', 'sizing_mode', 'broker_bracket_mode']:
+                   'ticker_filter_mode', 'ticker_filter_list', 'sizing_mode', 'broker_bracket_mode', 'allowed_signal_formats']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
@@ -11305,22 +11305,26 @@ def get_learning_state(channel_id: str) -> Optional[Dict]:
         return None
 
 
+_VALID_LEARNING_COLUMNS = {'state', 'history_extracted', 'messages_buffered', 'last_analysis_at',
+                           'analysis_count', 'unmatched_count', 'total_messages_since_active', 'drift_threshold'}
+
 def set_learning_state(channel_id: str, state: str, **kwargs):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        safe_kwargs = {k: v for k, v in kwargs.items() if k in _VALID_LEARNING_COLUMNS}
         existing = get_learning_state(channel_id)
         if existing:
             updates = ['state = ?', 'updated_at = ?']
             params = [state, datetime.now().isoformat()]
-            for k, v in kwargs.items():
+            for k, v in safe_kwargs.items():
                 updates.append(f'{k} = ?')
                 params.append(v)
             params.append(str(channel_id))
             cursor.execute(f'UPDATE channel_learning_state SET {", ".join(updates)} WHERE channel_id = ?', params)
         else:
-            cols = ['channel_id', 'state', 'created_at', 'updated_at'] + list(kwargs.keys())
-            vals = [str(channel_id), state, datetime.now().isoformat(), datetime.now().isoformat()] + list(kwargs.values())
+            cols = ['channel_id', 'state', 'created_at', 'updated_at'] + list(safe_kwargs.keys())
+            vals = [str(channel_id), state, datetime.now().isoformat(), datetime.now().isoformat()] + list(safe_kwargs.values())
             placeholders = ', '.join(['?'] * len(cols))
             cursor.execute(f'INSERT INTO channel_learning_state ({", ".join(cols)}) VALUES ({placeholders})', vals)
         conn.commit()
@@ -11364,11 +11368,23 @@ def save_format_candidate(channel_id: str, format_name: str, action: str,
     cursor = conn.cursor()
     try:
         cursor.execute('''
-            INSERT OR REPLACE INTO format_candidates
+            INSERT INTO format_candidates
             (channel_id, format_name, action, asset_type, regex_pattern,
              example_messages, parsed_example, confidence, match_count, total_scanned,
              discovery_method, ai_provider, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+            ON CONFLICT(channel_id, format_name) DO UPDATE SET
+                action = excluded.action,
+                asset_type = excluded.asset_type,
+                regex_pattern = excluded.regex_pattern,
+                example_messages = excluded.example_messages,
+                parsed_example = excluded.parsed_example,
+                confidence = excluded.confidence,
+                match_count = excluded.match_count,
+                total_scanned = excluded.total_scanned,
+                discovery_method = excluded.discovery_method,
+                ai_provider = excluded.ai_provider
+            WHERE status != 'approved'
         ''', (str(channel_id), format_name, action, asset_type, regex_pattern,
               example_messages, parsed_example, confidence, match_count, total_scanned,
               discovery_method, ai_provider, datetime.now().isoformat()))
