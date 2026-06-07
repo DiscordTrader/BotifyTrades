@@ -11910,6 +11910,31 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except ValueError:
                     await message.channel.send("❌ Invalid channel ID. Use numeric ID like `1234567890123456789`")
                 return
+            elif content.startswith('!learnchannel'):
+                cmd_text = message.content.strip()
+                args = cmd_text[13:].strip().split()
+                if not args:
+                    await message.channel.send("❌ Usage: `!learnchannel [CHANNEL_ID] [LIMIT]`\nExtracts history into DB for AI format learning.\nExample: `!learnchannel 1234567890123456789 1000`")
+                    return
+                try:
+                    learn_channel_id = int(args[0])
+                    learn_limit = int(args[1]) if len(args) > 1 else 1000
+                    await message.channel.send(f"📥 Extracting last {learn_limit} messages from channel {learn_channel_id} into learning buffer...")
+                    from src.services.format_learning_pipeline import async_extract_history_to_db
+                    result = await async_extract_history_to_db(self, learn_channel_id, learn_limit)
+                    if result.get('success'):
+                        await message.channel.send(
+                            f"✅ **Extracted {result['messages_saved']} messages** from **{result.get('channel_name', learn_channel_id)}**\n"
+                            f"📊 Total fetched: {result['total_fetched']}\n\n"
+                            f"Next step: Open the chatbot and type:\n"
+                            f"`analyze channel {learn_channel_id}`\n"
+                            f"AI will discover signal formats and present them for your approval."
+                        )
+                    else:
+                        await message.channel.send(f"❌ {result.get('error', 'Failed to extract')}")
+                except ValueError:
+                    await message.channel.send("❌ Invalid channel ID")
+                return
             elif content.startswith('!extracthistory'):
                 args = message.content.strip()[15:].strip().split()
                 channel_id = int(args[0]) if args else 1239624229583061052

@@ -11165,7 +11165,49 @@ def init_channel_messages_table():
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_channel_messages_channel ON channel_messages(channel_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_channel_messages_created ON channel_messages(created_at)')
-        
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS channel_learning_state (
+                channel_id TEXT PRIMARY KEY,
+                state TEXT DEFAULT 'idle',
+                history_extracted INTEGER DEFAULT 0,
+                messages_buffered INTEGER DEFAULT 0,
+                last_analysis_at TIMESTAMP,
+                analysis_count INTEGER DEFAULT 0,
+                unmatched_count INTEGER DEFAULT 0,
+                total_messages_since_active INTEGER DEFAULT 0,
+                drift_threshold REAL DEFAULT 0.30,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS format_candidates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT NOT NULL,
+                format_name TEXT NOT NULL,
+                action TEXT NOT NULL,
+                asset_type TEXT DEFAULT 'stock',
+                regex_pattern TEXT,
+                example_messages TEXT NOT NULL,
+                parsed_example TEXT NOT NULL,
+                confidence REAL DEFAULT 0.0,
+                match_count INTEGER DEFAULT 0,
+                total_scanned INTEGER DEFAULT 0,
+                discovery_method TEXT DEFAULT 'ai',
+                ai_provider TEXT,
+                status TEXT DEFAULT 'pending',
+                approved_by TEXT,
+                approved_at TIMESTAMP,
+                rejected_reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(channel_id, format_name)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_format_candidates_channel ON format_candidates(channel_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_format_candidates_status ON format_candidates(status)')
+
         conn.commit()
     except Exception as e:
         print(f"[DATABASE] Error creating channel_messages table: {e}")
@@ -11248,6 +11290,143 @@ def cleanup_old_channel_messages(days: int = 30) -> int:
     except Exception as e:
         print(f"[DATABASE] Error cleaning channel messages: {e}")
         return 0
+
+
+# ==================== FORMAT LEARNING PIPELINE ====================
+
+def get_learning_state(channel_id: str) -> Optional[Dict]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('SELECT * FROM channel_learning_state WHERE channel_id = ?', (str(channel_id),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def set_learning_state(channel_id: str, state: str, **kwargs):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        existing = get_learning_state(channel_id)
+        if existing:
+            updates = ['state = ?', 'updated_at = ?']
+            params = [state, datetime.now().isoformat()]
+            for k, v in kwargs.items():
+                updates.append(f'{k} = ?')
+                params.append(v)
+            params.append(str(channel_id))
+            cursor.execute(f'UPDATE channel_learning_state SET {", ".join(updates)} WHERE channel_id = ?', params)
+        else:
+            cols = ['channel_id', 'state', 'created_at', 'updated_at'] + list(kwargs.keys())
+            vals = [str(channel_id), state, datetime.now().isoformat(), datetime.now().isoformat()] + list(kwargs.values())
+            placeholders = ', '.join(['?'] * len(cols))
+            cursor.execute(f'INSERT INTO channel_learning_state ({", ".join(cols)}) VALUES ({placeholders})', vals)
+        conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error setting learning state: {e}")
+
+
+def increment_learning_buffer(channel_id: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            UPDATE channel_learning_state
+            SET messages_buffered = messages_buffered + 1, updated_at = ?
+            WHERE channel_id = ?
+        ''', (datetime.now().isoformat(), str(channel_id)))
+        if cursor.rowcount == 0:
+            set_learning_state(channel_id, 'buffering', messages_buffered=1)
+        conn.commit()
+    except Exception:
+        pass
+
+
+def get_channel_message_count(channel_id: str) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('SELECT COUNT(*) as cnt FROM channel_messages WHERE channel_id = ?', (str(channel_id),))
+        row = cursor.fetchone()
+        return row['cnt'] if row else 0
+    except Exception:
+        return 0
+
+
+def save_format_candidate(channel_id: str, format_name: str, action: str,
+                          asset_type: str, regex_pattern: str,
+                          example_messages: str, parsed_example: str,
+                          confidence: float, match_count: int, total_scanned: int,
+                          discovery_method: str = 'ai', ai_provider: str = None) -> Optional[int]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            INSERT OR REPLACE INTO format_candidates
+            (channel_id, format_name, action, asset_type, regex_pattern,
+             example_messages, parsed_example, confidence, match_count, total_scanned,
+             discovery_method, ai_provider, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        ''', (str(channel_id), format_name, action, asset_type, regex_pattern,
+              example_messages, parsed_example, confidence, match_count, total_scanned,
+              discovery_method, ai_provider, datetime.now().isoformat()))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"[DATABASE] Error saving format candidate: {e}")
+        return None
+
+
+def get_format_candidates(channel_id: str = None, status: str = None) -> List[Dict]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        where = []
+        params = []
+        if channel_id:
+            where.append('channel_id = ?')
+            params.append(str(channel_id))
+        if status:
+            where.append('status = ?')
+            params.append(status)
+        where_clause = f'WHERE {" AND ".join(where)}' if where else ''
+        cursor.execute(f'SELECT * FROM format_candidates {where_clause} ORDER BY confidence DESC', params)
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting format candidates: {e}")
+        return []
+
+
+def approve_format_candidate(candidate_id: int, approved_by: str = 'admin') -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            UPDATE format_candidates SET status = 'approved', approved_by = ?, approved_at = ?
+            WHERE id = ?
+        ''', (approved_by, datetime.now().isoformat(), candidate_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error approving format candidate: {e}")
+        return False
+
+
+def reject_format_candidate(candidate_id: int, reason: str = '') -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            UPDATE format_candidates SET status = 'rejected', rejected_reason = ?
+            WHERE id = ?
+        ''', (reason, candidate_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error rejecting format candidate: {e}")
+        return False
 
 
 # ==================== DEBUG REPORTS ====================

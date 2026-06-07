@@ -2006,15 +2006,41 @@ def handle_format_commands(query: str) -> Optional[Dict]:
     """
     query_lower = query.lower().strip()
     
-    # Scan channel command - auto-discover formats
+    # Analyze channel formats (new pipeline)
+    if query_lower.startswith('analyze channel ') or query_lower.startswith('analyze formats '):
+        channel_id = query.split()[-1].strip()
+        return _handle_analyze_channel(channel_id)
+
+    # Show format candidates
+    if query_lower.startswith('show candidates') or query_lower.startswith('format candidates'):
+        parts = query.split()
+        channel_id = parts[-1] if len(parts) > 2 and parts[-1].isdigit() else None
+        return _handle_show_candidates(channel_id)
+
+    # Approve format candidate
+    if query_lower.startswith('approve format #') or query_lower.startswith('approve format #'):
+        cid = query_lower.replace('approve format #', '').replace('approve format #', '').strip()
+        return _handle_approve_candidate(cid)
+
+    if query_lower == 'approve all formats':
+        return _handle_approve_all_candidates()
+
+    # Reject format candidate
+    if query_lower.startswith('reject format #'):
+        parts = query_lower.replace('reject format #', '').strip().split(' ', 1)
+        cid = parts[0]
+        reason = parts[1] if len(parts) > 1 else ''
+        return _handle_reject_candidate(cid, reason)
+
+    # Scan channel command - legacy (still works)
     if query_lower.startswith('scan channel '):
         channel_id = query[13:].strip()
         return scan_channel_for_formats(channel_id)
-    
+
     # List scannable channels
     if query_lower in ['scan channels', 'list channels', 'show channels for scanning', 'which channels can i scan']:
         return list_scannable_channels()
-    
+
     # Teach format command
     if query_lower.startswith('teach this format:') or query_lower.startswith('teach format:'):
         signal_part = query.split(':', 1)[1].strip() if ':' in query else ''
@@ -2540,6 +2566,173 @@ def scan_channel_for_formats(channel_id: str) -> Dict:
             "response": f"**Error**\n\nCouldn't scan channel: {str(e)}",
             "topic": "format_discovery"
         }
+
+
+def _handle_analyze_channel(channel_id: str) -> Dict:
+    """Trigger format analysis on a channel's buffered messages."""
+    try:
+        from . import database as db
+        msg_count = db.get_channel_message_count(channel_id)
+        if msg_count == 0:
+            return {
+                "success": True,
+                "response": f"**No Messages Buffered**\n\nChannel `{channel_id}` has no messages in the buffer.\n\n"
+                           f"To start learning:\n"
+                           f"1. Make sure the channel is added in **Trading → Channels**\n"
+                           f"2. The bot will automatically buffer live messages\n"
+                           f"3. Or extract history: type `!extractraw {channel_id} 1000` in any Discord channel\n"
+                           f"4. Then come back and run `analyze channel {channel_id}`",
+                "topic": "format_learning"
+            }
+
+        from src.services.format_learning_pipeline import analyze_channel_formats
+        result = analyze_channel_formats(channel_id)
+
+        if not result.get('success'):
+            return {"success": True, "response": f"**Analysis Failed**\n\n{result.get('error', 'Unknown error')}", "topic": "format_learning"}
+
+        from src.services.format_learning_pipeline import format_candidates_for_display
+        candidates_text = format_candidates_for_display(channel_id)
+
+        response = (
+            f"**Format Analysis Complete**\n\n"
+            f"Channel: **{result.get('channel_name', channel_id)}**\n"
+            f"Messages analyzed: {result.get('messages_analyzed', 0)}\n"
+            f"Heuristic patterns: {result.get('heuristic_patterns', 0)}\n"
+            f"AI patterns: {result.get('ai_patterns', 0)}\n"
+            f"Candidates saved: {result.get('candidates_saved', 0)}\n\n"
+            f"{candidates_text}"
+        )
+
+        return {"success": True, "response": response, "topic": "format_learning", "ai_powered": True}
+
+    except Exception as e:
+        print(f"[CHAT] Analyze channel error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": True, "response": f"**Error**\n\n{str(e)}", "topic": "format_learning"}
+
+
+def _handle_show_candidates(channel_id: str = None) -> Dict:
+    """Show pending format candidates."""
+    try:
+        from . import database as db
+        if channel_id:
+            candidates = db.get_format_candidates(channel_id, status='pending')
+        else:
+            candidates = db.get_format_candidates(status='pending')
+
+        if not candidates:
+            return {
+                "success": True,
+                "response": "**No Pending Candidates**\n\nNo format candidates are awaiting approval.\n\nTo discover formats:\n1. `analyze channel <channel_id>` — Run AI analysis on buffered messages",
+                "topic": "format_learning"
+            }
+
+        from src.services.format_learning_pipeline import format_candidates_for_display
+        ch_id = channel_id or (candidates[0]['channel_id'] if candidates else None)
+        text = format_candidates_for_display(ch_id) if ch_id else "No candidates found."
+
+        return {"success": True, "response": text, "topic": "format_learning"}
+
+    except Exception as e:
+        return {"success": True, "response": f"**Error**: {str(e)}", "topic": "format_learning"}
+
+
+def _handle_approve_candidate(candidate_id_str: str) -> Dict:
+    """Approve a specific format candidate."""
+    try:
+        from . import database as db
+        cid = int(candidate_id_str)
+        candidates = db.get_format_candidates()
+        candidate = next((c for c in candidates if c['id'] == cid), None)
+
+        if not candidate:
+            return {"success": True, "response": f"**Not Found**\n\nFormat candidate #{cid} not found.", "topic": "format_learning"}
+
+        if candidate['status'] != 'pending':
+            return {"success": True, "response": f"**Already {candidate['status'].title()}**\n\nCandidate #{cid} is already {candidate['status']}.", "topic": "format_learning"}
+
+        ok = db.approve_format_candidate(cid, approved_by='chatbot')
+        if not ok:
+            return {"success": True, "response": f"**Failed** to approve candidate #{cid}.", "topic": "format_learning"}
+
+        if candidate.get('regex_pattern'):
+            try:
+                pattern_id = db.add_learned_pattern(
+                    name=candidate['format_name'],
+                    pattern=candidate['regex_pattern'],
+                    example_text=candidate.get('example_messages', ''),
+                    action=candidate['action'],
+                    asset_type=candidate['asset_type'],
+                    description=f"Auto-discovered for channel {candidate['channel_id']}"
+                )
+                if pattern_id:
+                    db.approve_learned_pattern(pattern_id, 'format_learning')
+            except Exception as e:
+                print(f"[CHAT] Error registering learned pattern: {e}")
+
+        channel_id = candidate['channel_id']
+        try:
+            channel_info = db.get_channel_by_discord_id(channel_id)
+            if channel_info:
+                import json as _json
+                allowed = channel_info.get('allowed_signal_formats')
+                fmt_list = _json.loads(allowed) if allowed and isinstance(allowed, str) else (allowed or [])
+                if candidate['format_name'] not in fmt_list:
+                    fmt_list.append(candidate['format_name'])
+                    db.update_channel_setting(channel_info['id'], 'allowed_signal_formats', _json.dumps(fmt_list))
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "response": f"**Approved** ✓\n\nFormat **{candidate['format_name']}** (#{cid}) is now active for channel `{candidate['channel_id']}`.\n\nThe bot will now recognize this signal format and route matches through conditional orders.",
+            "topic": "format_learning"
+        }
+
+    except ValueError:
+        return {"success": True, "response": "**Invalid ID**. Use `approve format #123`.", "topic": "format_learning"}
+    except Exception as e:
+        return {"success": True, "response": f"**Error**: {str(e)}", "topic": "format_learning"}
+
+
+def _handle_approve_all_candidates() -> Dict:
+    """Approve all pending format candidates."""
+    try:
+        from . import database as db
+        candidates = db.get_format_candidates(status='pending')
+        if not candidates:
+            return {"success": True, "response": "**No Pending Candidates** to approve.", "topic": "format_learning"}
+
+        approved = 0
+        for c in candidates:
+            result = _handle_approve_candidate(str(c['id']))
+            if 'Approved' in result.get('response', ''):
+                approved += 1
+
+        return {
+            "success": True,
+            "response": f"**Approved {approved}/{len(candidates)} Formats** ✓\n\nAll approved formats are now active.",
+            "topic": "format_learning"
+        }
+    except Exception as e:
+        return {"success": True, "response": f"**Error**: {str(e)}", "topic": "format_learning"}
+
+
+def _handle_reject_candidate(candidate_id_str: str, reason: str = '') -> Dict:
+    """Reject a format candidate."""
+    try:
+        from . import database as db
+        cid = int(candidate_id_str)
+        ok = db.reject_format_candidate(cid, reason)
+        if ok:
+            return {"success": True, "response": f"**Rejected** ✗\n\nFormat candidate #{cid} has been rejected.{f' Reason: {reason}' if reason else ''}", "topic": "format_learning"}
+        return {"success": True, "response": f"**Not Found** — Candidate #{cid} not found.", "topic": "format_learning"}
+    except ValueError:
+        return {"success": True, "response": "**Invalid ID**. Use `reject format #123`.", "topic": "format_learning"}
+    except Exception as e:
+        return {"success": True, "response": f"**Error**: {str(e)}", "topic": "format_learning"}
 
 
 def get_suggestions(partial_query: str) -> List[str]:
