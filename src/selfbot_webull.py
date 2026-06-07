@@ -3300,6 +3300,14 @@ class WebullBroker:
         iso_exp = iso_from_mmdd(expiry_mmdd, year=expiry_year)
         target_strike = float(strike)
 
+        from datetime import date as _date_cls
+        try:
+            exp_date = _date_cls.fromisoformat(iso_exp)
+            if exp_date < _date_cls.today():
+                raise RuntimeError(f"Expired option: {symbol} {strike}{opt_type} exp {iso_exp} is in the past (today={_date_cls.today().isoformat()})")
+        except ValueError:
+            pass
+
         # Check if this is an index option (SPX, NDX, VIX, etc.)
         index_symbols = ['SPX', 'SPXW', 'NDX', 'NDXP', 'VIX', 'VIXW', 'XSP', 'DJX', 'RUT']
         is_index_option = symbol.upper() in index_symbols
@@ -15511,7 +15519,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     import traceback
                     traceback.print_exc()
             print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
-            
+
+            # EXPIRY VALIDATION: Reject expired options early with clear message
+            if opt['action'] == 'BTO' and opt.get('expiry'):
+                try:
+                    from datetime import date as _date_cls
+                    _exp_raw = opt['expiry'].strip()
+                    _exp_parts = _exp_raw.replace('-', '/').split('/')
+                    if len(_exp_parts) >= 2:
+                        _mm = int(_exp_parts[0])
+                        _dd = int(_exp_parts[1])
+                        _yy = int(_exp_parts[2]) if len(_exp_parts) == 3 else _date_cls.today().year
+                        if _yy < 100:
+                            _yy += 2000
+                        _exp_date = _date_cls(_yy, _mm, _dd)
+                        if _exp_date < _date_cls.today():
+                            print(f"[EXPIRY CHECK] ❌ REJECTED: {opt['symbol']} {opt['strike']}{opt['opt_type']} exp {opt['expiry']} ({_exp_date.isoformat()}) is EXPIRED (today={_date_cls.today().isoformat()})")
+                            print(f"[EXPIRY CHECK] Signal dropped — cannot buy expired options")
+                            return
+                except (ValueError, IndexError):
+                    pass
+
             # STRICT ROUTING CHECK: Validate broker assignment BEFORE creating lot
             # This prevents orphaned PNL lots when signals would be rejected at execution
             if execute_enabled and channel_info:
