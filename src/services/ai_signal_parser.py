@@ -415,6 +415,16 @@ CRITICAL RULES:
 - Confidence 0.9+ for clear signals matching known patterns, 0.8 for reasonable inference
 - Never hallucinate symbols not present in the input
 
+TRADE UPDATE DETECTION (NEVER treat these as signals — return action null):
+- "SYMBOL LOW-HIGH" with pink_flame emoji (e.g. "STI 31-47.69 <pink_flame>") = profit update showing entry-to-high range
+- "SYMBOL LOW-HIGH so far" = progress update on existing trade
+- "SYMBOL LOW-HIGH" as a reply to a previous message = trade performance update
+- Any message with pink_flame/fire emoji after a price range = celebrating profit, NOT a new entry
+- "SYMBOL +N%" = percentage gain update, NOT a signal
+- "SYMBOL paid us", "top nailed", "all fibs hit" = past tense celebration
+- "stopped out" = already stopped, NOT a new exit signal
+- The format "SYMBOL ENTRY_PRICE-CURRENT_PRICE" is ALWAYS a trade update showing how a trade performed, NEVER a new entry
+
 KNOWN CHANNEL FORMATS (trained examples):
 
 """ + examples_str

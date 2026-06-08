@@ -5994,6 +5994,34 @@ _UNICODE_PERIOD_MAP = str.maketrans({
     '＄': '$', '​': '', '‌': '', '‍': '', '﻿': '',
 })
 
+_TRADE_UPDATE_RE = re.compile(
+    r'(?:pink_flame|4743_pink_flame)',
+    re.IGNORECASE
+)
+_TRADE_UPDATE_TEXT_RE = re.compile(
+    r'\+\d+%|so far|all PTs|PTs? hit|paid us|paid u|nailed|halted|new highs|running$|top nailed|stopped out',
+    re.IGNORECASE
+)
+_TRADE_UPDATE_RANGE_RE = re.compile(
+    r'^[\$]?[A-Z]{2,5}\s+[\d.]+\s*[-–]\s*[\d.]+',
+    re.IGNORECASE
+)
+
+def _is_trade_update(text: str, message=None) -> bool:
+    if _TRADE_UPDATE_RE.search(text):
+        print(f"[AI_FILTER] ⏭️ Skipped — pink flame trade update: '{text[:60]}'")
+        return True
+    if _TRADE_UPDATE_TEXT_RE.search(text):
+        print(f"[AI_FILTER] ⏭️ Skipped — update keywords: '{text[:60]}'")
+        return True
+    is_reply = False
+    if message and hasattr(message, 'reference') and message.reference:
+        is_reply = True
+    if is_reply and _TRADE_UPDATE_RANGE_RE.match(text):
+        print(f"[AI_FILTER] ⏭️ Skipped — range reply (trade update): '{text[:60]}'")
+        return True
+    return False
+
 def _sanitize_discord_text(text: str) -> str:
     text = _DISCORD_MD_RE.sub('', text)
     text = text.translate(_UNICODE_PERIOD_MAP)
@@ -13683,7 +13711,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
                     # AI FALLBACK: Try AI parsing for unrecognized signals
                     print(f"[AI_FALLBACK] Checking: execute_enabled={execute_enabled}, channel_info={bool(channel_info)}, msg='{combined_content[:80]}'")
-                    if execute_enabled and channel_info:
+                    if execute_enabled and channel_info and not _is_trade_update(combined_content, message):
                         try:
                             from gui_app.config_service import get_ai_provider
                             _ai_provider = get_ai_provider()
@@ -17206,7 +17234,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 traceback.print_exc()
             
             # AI FALLBACK: Try AI parsing for unrecognized signals on regular channels
-            if execute_enabled and channel_info:
+            if execute_enabled and channel_info and not _is_trade_update(combined_content, message):
                 try:
                     from gui_app.config_service import get_ai_provider
                     _ai_provider = get_ai_provider()
