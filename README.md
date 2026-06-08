@@ -1,4 +1,4 @@
-# BotifyTrades v11.1.5
+# BotifyTrades v11.1.6
 
 **Next-Gen Signal Intelligence** | AI-Powered Multi-Broker Execution | Decode Any Signal. Arm Every Broker.
 
