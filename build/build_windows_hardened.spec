@@ -44,6 +44,8 @@ a = Analysis(
         'pandas',
         'numpy',
         'openai',
+        'anthropic',
+        'google.genai',
         'aiohttp',
         'requests',
         'pywin32',
