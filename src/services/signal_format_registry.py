@@ -1204,6 +1204,7 @@ class SignalFormatRegistry:
             parse_temple_zz_stock_exit, parse_temple_zz_trim,
             parse_temple_rf_options, parse_temple_options_standard,
             parse_temple_zz_options_a, parse_temple_zz_options_b,
+            parse_temple_zz_options_exp, parse_temple_tc_options_range,
             parse_temple_ts_options, parse_temple_options_exit,
             parse_temple_zz_breakout, parse_temple_zz_breakout_reverse,
             parse_temple_zz_ticker_price_now,
@@ -1658,6 +1659,26 @@ class SignalFormatRegistry:
             pattern=r'\$?([A-Z]{1,5})\s+([CcPp])\s+(\d+(?:\.\d+)?)\s+(daily|weekly|\d{1,2}/\d{1,2}(?:/\d{2,4})?)',
             parser=parse_temple_zz_options_a,
             examples=["SPY P 653 daily", "QQQ C 480 5/16"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_options_exp",
+            description="Temple zz options with DD.MM expiry: TICKER STRIKE C DD.MM exp PRICE",
+            priority=77,
+            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])\s+(\d{1,2})\.(\d{2})\s*exp\.?\s*(?:✅\s*)?(\.?\d+(?:\.\d+)?)',
+            parser=parse_temple_zz_options_exp,
+            examples=["NKE 52.5 C 18.09 exp 1.00-1.30", "CRM 240C 17.07 exp. 0.50-0.70 entry", "META 750c 17.07 exp. 1.00-1.50 entry"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_tc_options_range",
+            description="Toughcookie options: TICKER STRIKE C/P PRICE-PRICE C SL PRICE",
+            priority=77,
+            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s+([CcPp])\s+[-–]?\s*(\.?\d+(?:\.\d+)?)\s*[-–]\s*\.?\d+(?:\.\d+)?\s*C\b',
+            parser=parse_temple_tc_options_range,
+            examples=["NVDA 210 C 0.35-.40 C  -  SL 0.30", "QQQ 720 C 0.30-.35 C SL 0.25 C", "QQQ 723 P 1.05 - .95 C"],
             flags=re.IGNORECASE
         )
 
