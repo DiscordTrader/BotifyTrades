@@ -3300,6 +3300,14 @@ class WebullBroker:
         iso_exp = iso_from_mmdd(expiry_mmdd, year=expiry_year)
         target_strike = float(strike)
 
+        from datetime import date as _date_cls
+        try:
+            exp_date = _date_cls.fromisoformat(iso_exp)
+            if exp_date < _date_cls.today():
+                raise RuntimeError(f"Expired option: {symbol} {strike}{opt_type} exp {iso_exp} is in the past (today={_date_cls.today().isoformat()})")
+        except ValueError:
+            pass
+
         # Check if this is an index option (SPX, NDX, VIX, etc.)
         index_symbols = ['SPX', 'SPXW', 'NDX', 'NDXP', 'VIX', 'VIXW', 'XSP', 'DJX', 'RUT']
         is_index_option = symbol.upper() in index_symbols
@@ -5985,6 +5993,34 @@ _UNICODE_PERIOD_MAP = str.maketrans({
     ' ': ' ', ' ': ' ', ' ': ' ', ' ': ' ',
     '＄': '$', '​': '', '‌': '', '‍': '', '﻿': '',
 })
+
+_TRADE_UPDATE_RE = re.compile(
+    r'(?:pink_flame|4743_pink_flame)',
+    re.IGNORECASE
+)
+_TRADE_UPDATE_TEXT_RE = re.compile(
+    r'\+\d+%|so far|all PTs|PTs? hit|paid us|paid u|nailed|halted|new highs|running$|top nailed|stopped out',
+    re.IGNORECASE
+)
+_TRADE_UPDATE_RANGE_RE = re.compile(
+    r'^[\$]?[A-Z]{2,5}\s+[\d.]+\s*[-–]\s*[\d.]+',
+    re.IGNORECASE
+)
+
+def _is_trade_update(text: str, message=None) -> bool:
+    if _TRADE_UPDATE_RE.search(text):
+        print(f"[AI_FILTER] ⏭️ Skipped — pink flame trade update: '{text[:60]}'")
+        return True
+    if _TRADE_UPDATE_TEXT_RE.search(text):
+        print(f"[AI_FILTER] ⏭️ Skipped — update keywords: '{text[:60]}'")
+        return True
+    is_reply = False
+    if message and hasattr(message, 'reference') and message.reference:
+        is_reply = True
+    if is_reply and _TRADE_UPDATE_RANGE_RE.match(text):
+        print(f"[AI_FILTER] ⏭️ Skipped — range reply (trade update): '{text[:60]}'")
+        return True
+    return False
 
 def _sanitize_discord_text(text: str) -> str:
     text = _DISCORD_MD_RE.sub('', text)
@@ -8710,7 +8746,7 @@ class SelfClient(discord.Client):
                     except Exception as _tm_err:
                         import traceback as _tb
                         _original_print(f"[TRADE MONITOR] ⚠️ Post-broker init failed: {_tm_err}")
-                    _tb.print_exc()
+                        _tb.print_exc()
 
                 # Initialize Unfilled Order Chaser for mid-price replacement of stale exit orders
                 try:
@@ -9713,23 +9749,18 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
             
             # Get AI analysis
             def get_analysis():
-                response = self.trade_analyzer.client.chat.completions.create(
-                    model=self.trade_analyzer.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": f"You are an expert stock analyst providing both technical ({timeframe} timeframe) and fundamental analysis. Give clear, actionable insights for day traders AND long-term investors. Focus on valuation, growth potential, and risk assessment. Format with bullet points."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    temperature=0.7,
-                    max_tokens=700
-                )
-                return response.choices[0].message.content
-            
+                ta = self.trade_analyzer
+                sys_msg = f"You are an expert stock analyst providing both technical ({timeframe} timeframe) and fundamental analysis. Give clear, actionable insights for day traders AND long-term investors. Focus on valuation, growth potential, and risk assessment. Format with bullet points."
+                if getattr(ta, '_provider', '') == 'gemini':
+                    resp = ta.client.models.generate_content(model=ta.model, contents=f"{sys_msg}\n\n{prompt}")
+                    return resp.text
+                elif getattr(ta, '_is_anthropic', False):
+                    resp = ta.client.messages.create(model=ta.model, max_tokens=700, temperature=0.7, system=sys_msg, messages=[{"role": "user", "content": prompt}])
+                    return resp.content[0].text
+                else:
+                    resp = ta.client.chat.completions.create(model=ta.model, messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt}], temperature=0.7, max_tokens=700)
+                    return resp.choices[0].message.content
+
             analysis = await asyncio.to_thread(get_analysis)
             
             # Delete thinking message
@@ -10282,23 +10313,18 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
             
             # Get AI response
             def get_answer():
-                response = self.trade_analyzer.client.chat.completions.create(
-                    model=self.trade_analyzer.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert trading assistant. Answer questions clearly and concisely. Provide actionable advice when relevant. Keep responses under 400 words."
-                        },
-                        {
-                            "role": "user",
-                            "content": question
-                        }
-                    ],
-                    temperature=0.7,
-                    max_tokens=600
-                )
-                return response.choices[0].message.content
-            
+                ta = self.trade_analyzer
+                sys_msg = "You are an expert trading assistant. Answer questions clearly and concisely. Provide actionable advice when relevant. Keep responses under 400 words."
+                if getattr(ta, '_provider', '') == 'gemini':
+                    resp = ta.client.models.generate_content(model=ta.model, contents=f"{sys_msg}\n\n{question}")
+                    return resp.text
+                elif getattr(ta, '_is_anthropic', False):
+                    resp = ta.client.messages.create(model=ta.model, max_tokens=600, temperature=0.7, system=sys_msg, messages=[{"role": "user", "content": question}])
+                    return resp.content[0].text
+                else:
+                    resp = ta.client.chat.completions.create(model=ta.model, messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": question}], temperature=0.7, max_tokens=600)
+                    return resp.choices[0].message.content
+
             answer = await asyncio.to_thread(get_answer)
             
             # Delete thinking message
@@ -10380,16 +10406,17 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
 
 Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment."""
                             
-                            ai_response = self.trade_analyzer.client.chat.completions.create(
-                                model=self.trade_analyzer.model,
-                                messages=[
-                                    {"role": "system", "content": "You are a concise options trading analyst. Keep responses under 80 words."},
-                                    {"role": "user", "content": prompt}
-                                ],
-                                temperature=0.7,
-                                max_tokens=150
-                            )
-                            return ai_response.choices[0].message.content
+                            ta = self.trade_analyzer
+                            sys_msg = "You are a concise options trading analyst. Keep responses under 80 words."
+                            if getattr(ta, '_provider', '') == 'gemini':
+                                resp = ta.client.models.generate_content(model=ta.model, contents=f"{sys_msg}\n\n{prompt}")
+                                return resp.text
+                            elif getattr(ta, '_is_anthropic', False):
+                                resp = ta.client.messages.create(model=ta.model, max_tokens=150, temperature=0.7, system=sys_msg, messages=[{"role": "user", "content": prompt}])
+                                return resp.content[0].text
+                            else:
+                                resp = ta.client.chat.completions.create(model=ta.model, messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt}], temperature=0.7, max_tokens=150)
+                                return resp.choices[0].message.content
                         
                         assessment = await asyncio.to_thread(get_ai_assessment)
                         response += f"**🤖 AI Assessment:** {assessment}\n\n"
@@ -11919,6 +11946,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except ValueError:
                     await message.channel.send("❌ Invalid channel ID. Use numeric ID like `1234567890123456789`")
                 return
+            elif content.startswith('!learnchannel'):
+                cmd_text = message.content.strip()
+                args = cmd_text[13:].strip().split()
+                if not args:
+                    await message.channel.send("❌ Usage: `!learnchannel [CHANNEL_ID] [LIMIT]`\nExtracts history into DB for AI format learning.\nExample: `!learnchannel 1234567890123456789 1000`")
+                    return
+                try:
+                    learn_channel_id = int(args[0])
+                    learn_limit = int(args[1]) if len(args) > 1 else 1000
+                    await message.channel.send(f"📥 Extracting last {learn_limit} messages from channel {learn_channel_id} into learning buffer...")
+                    from src.services.format_learning_pipeline import async_extract_history_to_db
+                    result = await async_extract_history_to_db(self, learn_channel_id, learn_limit)
+                    if result.get('success'):
+                        await message.channel.send(
+                            f"✅ **Extracted {result['messages_saved']} messages** from **{result.get('channel_name', learn_channel_id)}**\n"
+                            f"📊 Total fetched: {result['total_fetched']}\n\n"
+                            f"Next step: Open the chatbot and type:\n"
+                            f"`analyze channel {learn_channel_id}`\n"
+                            f"AI will discover signal formats and present them for your approval."
+                        )
+                    else:
+                        await message.channel.send(f"❌ {result.get('error', 'Failed to extract')}")
+                except ValueError:
+                    await message.channel.send("❌ Invalid channel ID")
+                except Exception as e:
+                    await message.channel.send(f"❌ Error during extraction: {str(e)[:200]}")
+                return
             elif content.startswith('!extracthistory'):
                 args = message.content.strip()[15:].strip().split()
                 channel_id = int(args[0]) if args else 1239624229583061052
@@ -12296,7 +12350,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # Check for spy-sniper embed format (Open Alert / Trim Alert / Close Alert)
                 is_spy_sniper_embed = False
-                if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+                if SPY_SNIPER_AVAILABLE and is_admin_build() and hasattr(message, 'embeds') and message.embeds:
                     for embed in message.embeds:
                         embed_title = embed.title if embed.title else ""
                         if is_spy_sniper_signal(embed_title, embed.description if embed.description else ""):
@@ -12334,8 +12388,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'stock':
                         if not _phoenix_registry_result.get('_conditional_order') and not _phoenix_registry_result.get('_protrader_cancel'):
                             is_phoenix_registry = True
-                    if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'option' and _phoenix_registry_result.get('_format_name', '').startswith('abtrades_'):
-                        is_phoenix_registry = True
+                    if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'option':
+                        if not _phoenix_registry_result.get('_conditional_order') and not _phoenix_registry_result.get('_protrader_cancel'):
+                            is_phoenix_registry = True
                     if _phoenix_registry_result and (_phoenix_registry_result.get('_conditional_order') or _phoenix_registry_result.get('_protrader_cancel') or _phoenix_registry_result.get('_protrader_exit') or _phoenix_registry_result.get('action') in ('SL_UPDATE', 'TARGET_UPDATE', 'CANCEL')):
                         is_protrader_conditional = True
                 except Exception:
@@ -12351,7 +12406,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Check for spy-sniper embed format first
                         spy_sniper_parsed = None
-                        if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+                        if SPY_SNIPER_AVAILABLE and is_admin_build() and hasattr(message, 'embeds') and message.embeds:
                             from src.signals.spy_sniper_parser import parse_spy_sniper_signal, SpySniperSignalType
                             for embed in message.embeds:
                                 embed_title = embed.title if embed.title else ""
@@ -13655,7 +13710,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         traceback.print_exc()
 
                     # AI FALLBACK: Try AI parsing for unrecognized signals
-                    if execute_enabled and channel_info:
+                    print(f"[AI_FALLBACK] Checking: execute_enabled={execute_enabled}, channel_info={bool(channel_info)}, msg='{combined_content[:80]}'")
+                    if execute_enabled and channel_info and not _is_trade_update(combined_content, message):
                         try:
                             from gui_app.config_service import get_ai_provider
                             _ai_provider = get_ai_provider()
@@ -13751,13 +13807,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 print(f"[AI_FALLBACK] ⚠️ Conditional order router not enabled")
                                         except Exception as _ai_cond_err:
                                             print(f"[AI_FALLBACK] ⚠️ Conditional order error: {_ai_cond_err}")
-                                    elif _ai_action == 'BTO' and _ai_result.get('asset', 'stock') == 'stock':
+                                    elif _ai_action == 'BTO':
+                                        _ai_asset = _ai_result.get('asset', 'stock')
                                         for _aib_idx, _ai_broker in enumerate(cond_brokers):
-                                            print(f"[AI_FALLBACK] Executing {_ai_action} {_ai_sym} @ ${_ai_price or 'market'} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
+                                            _ai_strike_str = f" {_ai_result.get('strike')}{_ai_result.get('option_type')}" if _ai_asset == 'option' else ""
+                                            print(f"[AI_FALLBACK] Executing {_ai_action} {_ai_sym}{_ai_strike_str} @ ${_ai_price or 'market'} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
                                             try:
-                                                stock_signal = {
+                                                bto_signal = {
                                                     'action': 'BTO',
-                                                    'asset': 'stock',
+                                                    'asset': _ai_asset,
+                                                    'asset_type': _ai_asset,
                                                     'symbol': _ai_sym,
                                                     'qty': _ai_signal['qty'],
                                                     'price': _ai_price or 0,
@@ -13772,7 +13831,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     'detected_at': datetime.now().isoformat(),
                                                     'parsed_at': datetime.now().isoformat(),
                                                 }
-                                                await self.order_queue.put(stock_signal)
+                                                if _ai_asset == 'option':
+                                                    bto_signal['strike'] = _ai_result.get('strike')
+                                                    bto_signal['opt_type'] = _ai_result.get('option_type')
+                                                    bto_signal['expiry'] = _ai_result.get('expiry')
+                                                    if _ai_targets:
+                                                        bto_signal['target_prices'] = _ai_targets
+                                                    if _ai_sl:
+                                                        bto_signal['stop_loss'] = _ai_sl
+                                                await self.order_queue.put(bto_signal)
                                             except Exception as _ai_exec_err:
                                                 print(f"[AI_FALLBACK] ⚠️ Execution error on {_ai_broker}: {_ai_exec_err}")
                                     elif _ai_action == 'STC':
@@ -14363,8 +14430,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         bullwinkle_opt = None
         spy_sniper_opt = None
         
-        # Check for Spy-Sniper embed format (direct execution path - separate from signal routing)
-        if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+        # Check for Spy-Sniper embed format (direct execution path - ADMIN ONLY)
+        if SPY_SNIPER_AVAILABLE and is_admin_build() and hasattr(message, 'embeds') and message.embeds:
             from src.signals.spy_sniper_parser import parse_spy_sniper_signal, SpySniperSignalType
             for embed in message.embeds:
                 embed_title = embed.title if embed.title else ""
@@ -15480,7 +15547,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     import traceback
                     traceback.print_exc()
             print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
-            
+
+            # EXPIRY VALIDATION: Reject expired options early with clear message
+            if opt['action'] == 'BTO' and opt.get('expiry'):
+                try:
+                    from datetime import date as _date_cls
+                    _exp_raw = opt['expiry'].strip()
+                    _exp_parts = _exp_raw.replace('-', '/').split('/')
+                    if len(_exp_parts) >= 2:
+                        _mm = int(_exp_parts[0])
+                        _dd = int(_exp_parts[1])
+                        _yy = int(_exp_parts[2]) if len(_exp_parts) == 3 else _date_cls.today().year
+                        if _yy < 100:
+                            _yy += 2000
+                        _exp_date = _date_cls(_yy, _mm, _dd)
+                        if _exp_date < _date_cls.today():
+                            print(f"[EXPIRY CHECK] ❌ REJECTED: {opt['symbol']} {opt['strike']}{opt['opt_type']} exp {opt['expiry']} ({_exp_date.isoformat()}) is EXPIRED (today={_date_cls.today().isoformat()})")
+                            print(f"[EXPIRY CHECK] Signal dropped — cannot buy expired options")
+                            return
+                except (ValueError, IndexError):
+                    pass
+
             # STRICT ROUTING CHECK: Validate broker assignment BEFORE creating lot
             # This prevents orphaned PNL lots when signals would be rejected at execution
             if execute_enabled and channel_info:
@@ -17146,10 +17233,151 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[PARTIAL EXIT] ⚠️ Error checking partial exit: {e}")
                 traceback.print_exc()
             
+            # AI FALLBACK: Try AI parsing for unrecognized signals on regular channels
+            if execute_enabled and channel_info and not _is_trade_update(combined_content, message):
+                try:
+                    from gui_app.config_service import get_ai_provider
+                    _ai_provider = get_ai_provider()
+                    if _ai_provider != 'disabled':
+                        from src.services.ai_signal_parser import parse_signal_with_ai
+                        _ai_result = await parse_signal_with_ai(combined_content)
+                        if _ai_result and _ai_result.get('action') in ('BTO', 'STC') and _ai_result.get('symbol') and _ai_result.get('confidence', 0) >= 0.8:
+                            _ai_sym = _ai_result['symbol']
+                            _ai_action = _ai_result['action']
+                            _ai_price = _ai_result.get('price')
+                            _ai_conf = _ai_result['confidence']
+                            _ai_asset = _ai_result.get('asset', 'stock')
+                            _ai_targets = _ai_result.get('profit_targets', [])
+                            _ai_sl = _ai_result.get('stop_loss')
+                            print(f"[AI_FALLBACK] ✓ AI parsed: {_ai_action} {_ai_sym} @ ${_ai_price or 'market'} (confidence={_ai_conf:.2f}, asset={_ai_asset}, provider={_ai_provider})")
+                            print(f"[AI_FALLBACK] Rationale: {_ai_result.get('rationale', '')}")
+
+                            author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                            _ai_signal = {
+                                'action': _ai_action,
+                                'symbol': _ai_sym,
+                                'price': _ai_price or 0,
+                                'qty': _ai_result.get('qty', 1),
+                                'asset': _ai_asset,
+                                'asset_type': _ai_asset,
+                                'is_market_order': _ai_price is None,
+                                '_ai_fallback': True,
+                                '_ai_confidence': _ai_conf,
+                                '_ai_provider': _ai_provider,
+                            }
+                            if _ai_asset == 'option':
+                                _ai_signal['strike'] = _ai_result.get('strike')
+                                _ai_signal['opt_type'] = _ai_result.get('option_type')
+                                _ai_signal['expiry'] = _ai_result.get('expiry')
+                            if _ai_targets:
+                                _ai_signal['target_prices'] = _ai_targets
+                            if _ai_sl:
+                                _ai_signal['stop_loss'] = _ai_sl
+
+                            self._save_signal_to_db(_ai_signal, message.channel.id, message.id, author_name)
+
+                            import time as _ai_tmod
+                            cond_brokers = self._get_channel_brokers(channel_info)
+                            if not cond_brokers:
+                                print(f"[AI_FALLBACK] ❌ No broker configured for channel {message.channel.id}")
+                            elif _ai_result.get('is_conditional') and _ai_action == 'BTO' and (_ai_result.get('trigger_price') or _ai_price):
+                                try:
+                                    from src.services.conditional_orders.router import conditional_order_router
+                                    if conditional_order_router.is_enabled():
+                                        _ai_trigger = _ai_result.get('trigger_price') or _ai_price
+                                        _cond_signal = {
+                                            'symbol': _ai_sym,
+                                            'trigger_type': _ai_result.get('trigger_type', 'over'),
+                                            'trigger_price': _ai_trigger,
+                                            'asset_type': _ai_asset,
+                                            'qty': _ai_signal['qty'],
+                                            'message_id': str(message.id),
+                                            'author_id': str(message.author.id),
+                                            'author_name': author_name,
+                                            '_ai_fallback': True,
+                                        }
+                                        if _ai_targets:
+                                            _cond_signal['profit_targets'] = _ai_targets
+                                        if _ai_sl:
+                                            _cond_signal['stop_loss_fixed'] = _ai_sl
+                                            _cond_signal['stop_loss_type'] = 'fixed'
+                                            _cond_signal['stop_loss_value'] = _ai_sl
+                                        for _aib_idx, _ai_broker in enumerate(cond_brokers):
+                                            _ai_oid = conditional_order_router.create_order(str(message.channel.id), _cond_signal, _ai_broker)
+                                            if _ai_oid:
+                                                print(f"[AI_FALLBACK] ✓ Conditional #{_ai_oid}: {_ai_sym} {_cond_signal['trigger_type']} ${_ai_trigger} [{_ai_broker}] ({_aib_idx+1}/{len(cond_brokers)})")
+                                            else:
+                                                print(f"[AI_FALLBACK] ⚠️ Failed to create conditional for {_ai_sym} [{_ai_broker}]")
+                                except Exception as _ai_cond_err:
+                                    print(f"[AI_FALLBACK] ⚠️ Conditional order error: {_ai_cond_err}")
+                            elif _ai_action == 'BTO':
+                                for _aib_idx, _ai_broker in enumerate(cond_brokers):
+                                    print(f"[AI_FALLBACK] Executing {_ai_action} {_ai_sym} @ ${_ai_price or 'market'} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
+                                    try:
+                                        bto_signal = {
+                                            'action': 'BTO',
+                                            'asset': _ai_asset,
+                                            'asset_type': _ai_asset,
+                                            'symbol': _ai_sym,
+                                            'qty': _ai_signal['qty'],
+                                            'price': _ai_price or 0,
+                                            'limit_price': _ai_price,
+                                            'is_market_order': _ai_signal['is_market_order'],
+                                            'message_id': str(message.id),
+                                            'channel_id': str(message.channel.id),
+                                            '_broker_override': _ai_broker,
+                                            '_enabled_brokers': [_ai_broker],
+                                            '_ai_fallback': True,
+                                            '_queued_at': _ai_tmod.monotonic(),
+                                            'detected_at': datetime.now().isoformat(),
+                                            'parsed_at': datetime.now().isoformat(),
+                                        }
+                                        if _ai_asset == 'option':
+                                            bto_signal['strike'] = _ai_result.get('strike')
+                                            bto_signal['opt_type'] = _ai_result.get('option_type')
+                                            bto_signal['expiry'] = _ai_result.get('expiry')
+                                        await self.order_queue.put(bto_signal)
+                                    except Exception as _ai_exec_err:
+                                        print(f"[AI_FALLBACK] ⚠️ Execution error on {_ai_broker}: {_ai_exec_err}")
+                            elif _ai_action == 'STC':
+                                for _aib_idx, _ai_broker in enumerate(cond_brokers):
+                                    print(f"[AI_FALLBACK] Executing STC {_ai_sym} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
+                                    try:
+                                        stc_signal = {
+                                            'action': 'STC',
+                                            'asset': _ai_asset,
+                                            'symbol': _ai_sym,
+                                            'qty': _ai_signal['qty'],
+                                            'price': _ai_price or 0,
+                                            'is_market_order': _ai_signal['is_market_order'],
+                                            'is_full_exit': not _ai_result.get('is_trim', False),
+                                            'message_id': str(message.id),
+                                            'channel_id': str(message.channel.id),
+                                            '_broker_override': _ai_broker,
+                                            '_ai_fallback': True,
+                                            '_queued_at': _ai_tmod.monotonic(),
+                                            'detected_at': datetime.now().isoformat(),
+                                            'parsed_at': datetime.now().isoformat(),
+                                        }
+                                        if _ai_asset == 'option' and _ai_result.get('strike'):
+                                            stc_signal['strike'] = _ai_result['strike']
+                                            stc_signal['opt_type'] = _ai_result['option_type']
+                                            stc_signal['expiry'] = _ai_result['expiry']
+                                        await self.order_queue.put(stc_signal)
+                                    except Exception as _ai_exec_err:
+                                        print(f"[AI_FALLBACK] ⚠️ Exit error on {_ai_broker}: {_ai_exec_err}")
+                            return
+                        elif _ai_result and _ai_result.get('action'):
+                            print(f"[AI_FALLBACK] ⚠️ Low confidence ({_ai_result.get('confidence', 0):.2f}) — not executing: {_ai_result.get('action')} {_ai_result.get('symbol')}")
+                except ImportError:
+                    pass
+                except Exception as _ai_fb_err:
+                    print(f"[AI_FALLBACK] ⚠️ Error: {_ai_fb_err}")
+
             # ALL pattern matching failed - print debug info
             text_preview = message.content.strip()[:80]
             print(f"[Discord] ❌ No pattern matched: '{text_preview}'")
-            print(f"[Discord]    Supported: BTO/STC options, BTO/STC stock, TRADE IDEA (Ticker/Entry/SL/Levels)")
+            print(f"[Discord]    Supported: BTO/STC options, BTO/STC stock, TRADE IDEA, AI fallback")
     
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""

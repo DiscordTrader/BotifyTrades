@@ -661,7 +661,7 @@ def parse_temple_zz_sl_update_move(match: re.Match, text: str) -> Optional[Dict[
 
 
 def parse_temple_rf_options(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
-    """Parse RF's 'buy QQQ 530+C at 2.50 for 5/16'."""
+    """Parse RF's 'buy QQQ 530+C at 2.50 for 5/16' with optional Targets/SL lines."""
     groups = match.groups()
     symbol = groups[0].upper()
     strike = float(groups[1])
@@ -669,7 +669,7 @@ def parse_temple_rf_options(match: re.Match, text: str) -> Optional[Dict[str, An
     price = float(groups[3])
     expiry = groups[4]
 
-    return {
+    result = {
         "asset": "option",
         "action": "BTO",
         "qty": 1,
@@ -683,6 +683,19 @@ def parse_temple_rf_options(match: re.Match, text: str) -> Optional[Dict[str, An
         "confidence": 1.0,
         "_temple_rf_entry": True,
     }
+
+    targets_match = re.search(r'[Tt]argets?\s+([\d./]+)', text)
+    if targets_match:
+        raw = targets_match.group(1)
+        targets = [float(t) for t in re.findall(r'(\d+(?:\.\d+)?)', raw) if float(t) > 0]
+        if targets:
+            result["target_prices"] = targets
+
+    sl_match = re.search(r'\bSL\s+\$?(\d+(?:\.\d+)?)', text, re.IGNORECASE)
+    if sl_match:
+        result["stop_loss"] = float(sl_match.group(1))
+
+    return result
 
 
 def parse_temple_options_standard(match: re.Match, text: str) -> Optional[Dict[str, Any]]:

@@ -454,6 +454,10 @@ input:checked + .slider:before {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
 }
+@keyframes ai-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(16,185,129,0.6); }
+    50% { opacity: 0.5; box-shadow: 0 0 4px rgba(16,185,129,0.3); }
+}
 .btn-connect {
     background: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
     color: #0a0a0a;
@@ -1195,47 +1199,140 @@ input:checked + .slider:before {
     </div>
 
 
-    <!-- API Keys -->
-    <div class="settings-card">
-        <div style="display:flex;align-items:center;gap:8px;"><h3>🤖 AI & Market Data APIs</h3><button type="button" onclick="showAdminHelp('ai-apis')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
-        <p class="description">External API credentials for analysis & data</p>
-        
+    <!-- Unified AI & Market Data Card -->
+    <div class="settings-card" style="border:1px solid rgba(99,102,241,0.15); position:relative; overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <h3>🤖 AI Intelligence Hub</h3>
+                <button type="button" onclick="showAdminHelp('ai-apis')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
+            <!-- Live AI Status Badge -->
+            <div id="ai-status-badge" style="display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:20px;font-size:0.78rem;font-weight:600;letter-spacing:0.3px;background:rgba(107,114,128,0.15);border:1px solid rgba(107,114,128,0.3);color:#9CA3AF;cursor:pointer;transition:all 0.3s;" onclick="checkAiStatus()" title="Click to refresh status">
+                <span id="ai-status-dot" style="width:8px;height:8px;border-radius:50%;background:#6B7280;flex-shrink:0;"></span>
+                <span id="ai-status-text">Checking...</span>
+            </div>
+        </div>
+        <p class="description">AI provider, API keys, trade analysis, and signal fallback — all in one place</p>
+
+        <!-- AI Status Panel (real-time) -->
+        <div id="ai-status-panel" style="background:rgba(17,24,39,0.6);border:1px solid rgba(99,102,241,0.1);border-radius:10px;padding:14px 18px;margin:16px 0 20px;display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;" id="ai-status-grid">
+                <div style="text-align:center;">
+                    <div style="font-size:0.7rem;color:#94A3B8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Chatbot</div>
+                    <div id="ai-feat-chatbot" style="font-size:0.85rem;font-weight:600;color:#6B7280;">—</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:0.7rem;color:#94A3B8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Signal Fallback</div>
+                    <div id="ai-feat-fallback" style="font-size:0.85rem;font-weight:600;color:#6B7280;">—</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:0.7rem;color:#94A3B8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Trade Analysis</div>
+                    <div id="ai-feat-analysis" style="font-size:0.85rem;font-weight:600;color:#6B7280;">—</div>
+                </div>
+            </div>
+            <div id="ai-status-message" style="font-size:0.78rem;color:#94A3B8;margin-top:10px;text-align:center;display:none;"></div>
+        </div>
+
         <!-- AI Provider Selection -->
         <div class="form-group">
             <label>AI Provider</label>
             <select id="ai-provider" class="form-control" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff;">
-                <option value="replit_ai" style="background: #1a1a2e; color: #fff;">Replit AI (Uses Replit Credits - Recommended)</option>
-                <option value="openai" style="background: #1a1a2e; color: #fff;">OpenAI (Your Own API Key)</option>
-                <option value="claude" style="background: #1a1a2e; color: #fff;">Claude (Anthropic API Key)</option>
+                <option value="claude" style="background: #1a1a2e; color: #fff;">Claude (Anthropic) — Best Quality</option>
+                <option value="gemini" style="background: #1a1a2e; color: #fff;">Gemini Flash (Google) — Free Tier</option>
+                <option value="openai" style="background: #1a1a2e; color: #fff;">OpenAI (GPT-4o Mini)</option>
                 <option value="disabled" style="background: #1a1a2e; color: #fff;">Disabled (No AI Features)</option>
             </select>
-            <p class="help-text">Choose which AI service to use for chatbot and signal format learning</p>
+            <p class="help-text">Single provider for ALL AI features — chatbot, trade analysis, signal fallback, format learning</p>
         </div>
-        
+
+        <!-- Model info (auto-set based on provider) -->
+        <div id="ai-model-info" style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);border-radius:8px;padding:10px 14px;margin-bottom:16px;display:none;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:0.78rem;color:#94A3B8;">Model:</span>
+                <span id="ai-model-name" style="font-size:0.85rem;font-weight:600;color:#818CF8;">—</span>
+            </div>
+        </div>
+
         <!-- OpenAI Key (only shown when OpenAI is selected) -->
-        <div class="form-group" id="openai-key-group">
+        <div class="form-group" id="openai-key-group" style="display:none;">
             <label>OpenAI API Key</label>
             <input type="password" id="openai-key" placeholder="sk-...">
-            <p class="help-text">Required when using "OpenAI" provider above</p>
+            <p class="help-text">Required when using OpenAI provider</p>
         </div>
         <!-- Anthropic Key (only shown when Claude is selected) -->
         <div class="form-group" id="anthropic-key-group" style="display:none;">
             <label>Anthropic API Key</label>
             <input type="password" id="anthropic-key" placeholder="sk-ant-...">
-            <p class="help-text">Required when using "Claude" provider. Get your key at console.anthropic.com</p>
+            <p class="help-text">Required when using Claude provider. Get your key at console.anthropic.com</p>
         </div>
-        <div class="form-group">
-            <label>Alpha Vantage Key</label>
-            <input type="password" id="alphavantage-key" placeholder="API Key">
-            <p class="help-text">For option flow scanning</p>
+        <!-- Gemini Key (only shown when Gemini is selected) -->
+        <div class="form-group" id="gemini-key-group" style="display:none;">
+            <label>Google Gemini API Key</label>
+            <input type="password" id="gemini-key" placeholder="AIza...">
+            <p class="help-text">Free API key — get yours at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#818CF8;">aistudio.google.com/apikey</a> (1,500 free requests/day)</p>
         </div>
-        <div class="form-group">
-            <label>Finnhub API Key</label>
-            <input type="password" id="finnhub-key" placeholder="API Key">
-            <p class="help-text">For market news & data</p>
+
+        <!-- Separator -->
+        <div style="border-top:1px solid rgba(99,102,241,0.1);margin:20px 0 16px;"></div>
+
+        <!-- AI Features Section -->
+        <div style="font-weight:600;color:#E2E8F0;font-size:0.9rem;margin-bottom:14px;text-transform:uppercase;letter-spacing:0.5px;">AI Features</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" id="ai-settings-group">
+            <!-- Trade Analysis -->
+            <div style="background:rgba(17,24,39,0.4);border:1px solid rgba(99,102,241,0.08);border-radius:10px;padding:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-weight:600;color:#E2E8F0;font-size:0.88rem;">Trade Analysis</span>
+                    <label class="switch">
+                        <input type="checkbox" id="ai-enabled">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div style="font-size:0.75rem;color:#94A3B8;line-height:1.5;">AI analyzes every BTO/STC after execution with risk assessment and market context</div>
+            </div>
+
+            <!-- Sentiment Analysis -->
+            <div style="background:rgba(17,24,39,0.4);border:1px solid rgba(99,102,241,0.08);border-radius:10px;padding:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-weight:600;color:#E2E8F0;font-size:0.88rem;">Sentiment Analysis</span>
+                    <label class="switch">
+                        <input type="checkbox" id="sentiment-enabled">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div style="font-size:0.75rem;color:#94A3B8;line-height:1.5;">Reads channel messages to gauge market sentiment (increases API usage)</div>
+            </div>
         </div>
+
+        <!-- Hidden model field - auto-set by provider selection -->
+        <input type="hidden" id="ai-model" value="gpt-4o-mini">
+
+        <!-- Separator -->
+        <div style="border-top:1px solid rgba(99,102,241,0.1);margin:16px 0 12px;"></div>
+
+        <!-- Market Data Keys (collapsed by default) -->
+        <details id="market-data-details" style="margin-bottom:12px;">
+            <summary style="cursor:pointer;font-weight:600;color:#94A3B8;font-size:0.85rem;padding:6px 0;user-select:none;list-style:none;display:flex;align-items:center;gap:6px;">
+                <span id="market-data-arrow" style="transition:transform 0.2s;display:inline-block;">&#9654;</span> Market Data API Keys
+                <span style="font-weight:400;font-size:0.75rem;color:#6B7280;">(optional)</span>
+            </summary>
+            <div style="padding-top:12px;">
+                <div class="form-group">
+                    <label>Alpha Vantage Key</label>
+                    <input type="password" id="alphavantage-key" placeholder="API Key">
+                    <p class="help-text">For option flow scanning</p>
+                </div>
+                <div class="form-group">
+                    <label>Finnhub API Key</label>
+                    <input type="password" id="finnhub-key" placeholder="API Key">
+                    <p class="help-text">For market news & data</p>
+                </div>
+            </div>
+        </details>
+
         <div class="btn-group">
-            <button id="save-api-keys" class="btn btn-success">💾 Save API Keys</button>
+            <button id="save-api-keys" class="btn btn-success">💾 Save All AI Settings</button>
+            <span id="ai-save-status" style="margin-left:12px;font-size:13px;"></span>
         </div>
     </div>
 
@@ -1314,43 +1411,7 @@ input:checked + .slider:before {
         </div>
     </div>
 
-    <!-- AI Analysis Settings -->
-    <div class="settings-card">
-        <div style="display:flex;align-items:center;gap:8px;"><h3>🧠 AI Analysis</h3><button type="button" onclick="showAdminHelp('ai-analysis')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
-        <p class="description">Post-trade analysis & market sentiment</p>
-        <div class="form-group">
-            <label class="toggle-label">
-                <span>Enable AI Analysis</span>
-                <label class="switch">
-                    <input type="checkbox" id="ai-enabled">
-                    <span class="slider"></span>
-                </label>
-            </label>
-        </div>
-        <div id="ai-settings-group">
-            <div class="form-group">
-                <label>AI Model</label>
-                <select id="ai-model">
-                    <option value="gpt-4o-mini">GPT-4o Mini (Recommended - Fast & Cheap)</option>
-                    <option value="gpt-4o">GPT-4o (Slower - More Detailed)</option>
-                </select>
-                <p class="help-text">Model selection affects analysis depth & cost</p>
-            </div>
-            <div class="form-group">
-                <label class="toggle-label">
-                    <span>Sentiment Analysis</span>
-                    <label class="switch">
-                        <input type="checkbox" id="sentiment-enabled">
-                        <span class="slider"></span>
-                    </label>
-                </label>
-                <p class="help-text">Analyze market sentiment from channel messages (expensive)</p>
-            </div>
-        </div>
-        <div class="btn-group">
-            <button id="save-ai" class="btn btn-success">💾 Save Settings</button>
-        </div>
-    </div>
+    <!-- AI Analysis card merged into AI Intelligence Hub above -->
 
     <!-- Trading Settings -->
     <div class="settings-card">
@@ -3133,17 +3194,49 @@ document.getElementById('submit-schwab-code').addEventListener('click', async ()
     }
 });
 
-// ========== AI & MARKET DATA API KEYS ==========
+// ========== AI INTELLIGENCE HUB (Unified) ==========
+
+const AI_PROVIDER_MODELS = {
+    'claude': { model: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', cost: 'Paid — ~$0.25/1M tokens' },
+    'gemini': { model: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', cost: 'Free — 1,500 requests/day' },
+    'openai': { model: 'gpt-4o-mini', label: 'GPT-4o Mini', cost: 'Paid — ~$0.15/1M tokens' },
+    'disabled': { model: '', label: 'None', cost: '' }
+};
 
 function updateAiProviderUI() {
     const provider = document.getElementById('ai-provider').value;
     const openaiGroup = document.getElementById('openai-key-group');
     const anthropicGroup = document.getElementById('anthropic-key-group');
+    const geminiGroup = document.getElementById('gemini-key-group');
+    const modelInfo = document.getElementById('ai-model-info');
+    const modelName = document.getElementById('ai-model-name');
+    const modelInput = document.getElementById('ai-model');
+
     openaiGroup.style.display = provider === 'openai' ? 'block' : 'none';
     anthropicGroup.style.display = provider === 'claude' ? 'block' : 'none';
+    geminiGroup.style.display = provider === 'gemini' ? 'block' : 'none';
+
+    const pm = AI_PROVIDER_MODELS[provider] || AI_PROVIDER_MODELS['disabled'];
+    modelInput.value = pm.model;
+
+    if (provider !== 'disabled') {
+        modelInfo.style.display = 'block';
+        modelName.innerHTML = `${pm.label} <span style="color:#6B7280;font-weight:400;font-size:0.75rem;margin-left:8px;">${pm.cost}</span>`;
+    } else {
+        modelInfo.style.display = 'none';
+    }
 }
 
 document.getElementById('ai-provider').addEventListener('change', updateAiProviderUI);
+
+// Market data details arrow rotation
+const marketDetails = document.getElementById('market-data-details');
+if (marketDetails) {
+    marketDetails.addEventListener('toggle', () => {
+        const arrow = document.getElementById('market-data-arrow');
+        if (arrow) arrow.style.transform = marketDetails.open ? 'rotate(90deg)' : '';
+    });
+}
 
 async function loadApiKeys() {
     try {
@@ -3157,6 +3250,7 @@ async function loadApiKeys() {
             if (data.alphavantage_key) document.getElementById('alphavantage-key').value = data.alphavantage_key;
             if (data.finnhub_key) document.getElementById('finnhub-key').value = data.finnhub_key;
             if (data.anthropic_key) document.getElementById('anthropic-key').value = data.anthropic_key;
+            if (data.gemini_key) document.getElementById('gemini-key').value = data.gemini_key;
             updateAiProviderUI();
         }
     } catch (error) {
@@ -3164,37 +3258,135 @@ async function loadApiKeys() {
     }
 }
 
+// AI Status Checker — queries real backend connectivity
+async function checkAiStatus() {
+    const badge = document.getElementById('ai-status-badge');
+    const dot = document.getElementById('ai-status-dot');
+    const text = document.getElementById('ai-status-text');
+    const panel = document.getElementById('ai-status-panel');
+    const chatbot = document.getElementById('ai-feat-chatbot');
+    const fallback = document.getElementById('ai-feat-fallback');
+    const analysis = document.getElementById('ai-feat-analysis');
+    const msgEl = document.getElementById('ai-status-message');
+
+    text.textContent = 'Checking...';
+    dot.style.background = '#F59E0B';
+    dot.style.boxShadow = '0 0 6px rgba(245,158,11,0.5)';
+
+    try {
+        const response = await fetch('/api/ai/status');
+        const data = await response.json();
+        panel.style.display = 'block';
+
+        if (data.status === 'connected') {
+            dot.style.background = '#10B981';
+            dot.style.boxShadow = '0 0 8px rgba(16,185,129,0.6)';
+            dot.style.animation = 'ai-pulse 2s infinite';
+            text.textContent = data.provider_label + ' Connected';
+            badge.style.background = 'rgba(16,185,129,0.12)';
+            badge.style.borderColor = 'rgba(16,185,129,0.3)';
+            badge.style.color = '#34D399';
+        } else if (data.status === 'no_key') {
+            dot.style.background = '#F59E0B';
+            dot.style.boxShadow = '0 0 6px rgba(245,158,11,0.5)';
+            dot.style.animation = '';
+            text.textContent = 'No API Key';
+            badge.style.background = 'rgba(245,158,11,0.12)';
+            badge.style.borderColor = 'rgba(245,158,11,0.3)';
+            badge.style.color = '#FBBF24';
+        } else if (data.status === 'disabled') {
+            dot.style.background = '#6B7280';
+            dot.style.boxShadow = '';
+            dot.style.animation = '';
+            text.textContent = 'AI Disabled';
+            badge.style.background = 'rgba(107,114,128,0.15)';
+            badge.style.borderColor = 'rgba(107,114,128,0.3)';
+            badge.style.color = '#9CA3AF';
+        } else {
+            dot.style.background = '#EF4444';
+            dot.style.boxShadow = '0 0 6px rgba(239,68,68,0.5)';
+            dot.style.animation = '';
+            text.textContent = 'Connection Error';
+            badge.style.background = 'rgba(239,68,68,0.12)';
+            badge.style.borderColor = 'rgba(239,68,68,0.3)';
+            badge.style.color = '#F87171';
+        }
+
+        const mkReady = (el, ready, label) => {
+            el.textContent = ready ? 'Ready' : 'OFF';
+            el.style.color = ready ? '#34D399' : '#6B7280';
+            if (ready) el.innerHTML = '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10B981;margin-right:4px;box-shadow:0 0 6px rgba(16,185,129,0.6);"></span>Ready';
+        };
+        mkReady(chatbot, data.chatbot_ready);
+        mkReady(fallback, data.fallback_ready);
+        const analysisOn = data.ai_analysis_enabled && data.connected;
+        analysis.textContent = analysisOn ? 'Enabled' : (data.ai_analysis_enabled ? 'No Connection' : 'OFF');
+        analysis.style.color = analysisOn ? '#34D399' : '#6B7280';
+        if (analysisOn) analysis.innerHTML = '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10B981;margin-right:4px;box-shadow:0 0 6px rgba(16,185,129,0.6);"></span>Enabled';
+
+        if (data.message) {
+            msgEl.style.display = 'block';
+            msgEl.textContent = data.message;
+            msgEl.style.color = data.status === 'connected' ? '#34D399' : (data.status === 'error' ? '#F87171' : '#94A3B8');
+        } else {
+            msgEl.style.display = 'none';
+        }
+    } catch (error) {
+        dot.style.background = '#EF4444';
+        dot.style.boxShadow = '0 0 6px rgba(239,68,68,0.5)';
+        dot.style.animation = '';
+        text.textContent = 'Check Failed';
+        badge.style.background = 'rgba(239,68,68,0.12)';
+        badge.style.borderColor = 'rgba(239,68,68,0.3)';
+        badge.style.color = '#F87171';
+        console.error('AI status check failed:', error);
+    }
+}
+
+// Save ALL AI settings (provider + keys + analysis) in one click
 document.getElementById('save-api-keys').addEventListener('click', async () => {
-    const data = {
+    const inlineStatus = document.getElementById('ai-save-status');
+    inlineStatus.textContent = '⏳ Saving...';
+    inlineStatus.style.color = '#ffc107';
+
+    const apiData = {
         ai_provider: document.getElementById('ai-provider').value,
         openai_key: document.getElementById('openai-key').value.trim(),
         alphavantage_key: document.getElementById('alphavantage-key').value.trim(),
         finnhub_key: document.getElementById('finnhub-key').value.trim(),
-        anthropic_key: document.getElementById('anthropic-key').value.trim()
+        anthropic_key: document.getElementById('anthropic-key').value.trim(),
+        gemini_key: document.getElementById('gemini-key').value.trim()
     };
-    
+
+    const analysisData = {
+        enabled: document.getElementById('ai-enabled').checked,
+        model: document.getElementById('ai-model').value,
+        sentiment_enabled: document.getElementById('sentiment-enabled').checked
+    };
+
     try {
-        const response = await fetch('/api/settings/api_keys', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        
-        const result = await response.json();
-        const msg = document.getElementById('save-message');
-        if (result.success) {
-            msg.textContent = '✅ API keys and AI provider saved!';
-            msg.className = 'message success';
+        const [apiResp, analysisResp] = await Promise.all([
+            fetch('/api/settings/api_keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiData) }),
+            fetch('/api/settings/ai_analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(analysisData) })
+        ]);
+
+        const apiResult = await apiResp.json();
+        const analysisResult = await analysisResp.json();
+
+        if (apiResult.success && analysisResult.success) {
+            inlineStatus.textContent = '✅ All AI settings saved!';
+            inlineStatus.style.color = '#00ff88';
+            setTimeout(() => checkAiStatus(), 500);
         } else {
-            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
-            msg.className = 'message error';
+            const err = apiResult.error || analysisResult.error || 'Failed';
+            inlineStatus.textContent = '❌ ' + err;
+            inlineStatus.style.color = '#ff6b6b';
         }
-        setTimeout(() => msg.textContent = '', 3000);
+        setTimeout(() => { inlineStatus.textContent = ''; }, 3000);
     } catch (error) {
-        const msg = document.getElementById('save-message');
-        msg.textContent = '❌ Error: ' + error.message;
-        msg.className = 'message error';
-        setTimeout(() => msg.textContent = '', 3000);
+        inlineStatus.textContent = '❌ ' + error.message;
+        inlineStatus.style.color = '#ff6b6b';
+        setTimeout(() => { inlineStatus.textContent = ''; }, 3000);
     }
 });
 
@@ -3296,13 +3488,13 @@ document.getElementById('save-risk').addEventListener('click', async () => {
     }
 });
 
-// ========== AI ANALYSIS SETTINGS ==========
+// ========== AI ANALYSIS SETTINGS (merged into AI Hub — load only) ==========
 
 async function loadAISettings() {
     try {
         const response = await fetch('/api/settings/ai_analysis');
         const settings = await response.json();
-        
+
         document.getElementById('ai-enabled').checked = settings.enabled;
         document.getElementById('ai-model').value = settings.model;
         document.getElementById('sentiment-enabled').checked = settings.sentiment_enabled;
@@ -3310,38 +3502,6 @@ async function loadAISettings() {
         console.error('Error loading AI settings:', error);
     }
 }
-
-document.getElementById('save-ai').addEventListener('click', async () => {
-    const data = {
-        enabled: document.getElementById('ai-enabled').checked,
-        model: document.getElementById('ai-model').value,
-        sentiment_enabled: document.getElementById('sentiment-enabled').checked
-    };
-    
-    try {
-        const response = await fetch('/api/settings/ai_analysis', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        
-        const result = await response.json();
-        const msg = document.getElementById('save-message');
-        if (result.success) {
-            msg.textContent = '✅ AI settings saved!';
-            msg.className = 'message success';
-        } else {
-            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
-            msg.className = 'message error';
-        }
-        setTimeout(() => msg.textContent = '', 3000);
-    } catch (error) {
-        const msg = document.getElementById('save-message');
-        msg.textContent = '❌ Error: ' + error.message;
-        msg.className = 'message error';
-        setTimeout(() => msg.textContent = '', 3000);
-    }
-});
 
 // ========== DISCORD NOTIFICATIONS ==========
 
@@ -4846,6 +5006,7 @@ loadApiKeys();
 loadSlippageSettings();
 loadRiskSettings();
 loadAISettings();
+checkAiStatus();
 loadTradingSettings();
 loadNotificationSettings();
 loadDiscordNotifications();
@@ -5087,12 +5248,12 @@ const ADMIN_HELP_CONTENT = {
         ]
     },
     'ai-apis': {
-        title: '🤖 AI & Market Data APIs',
+        title: '🤖 AI Intelligence Hub',
         sections: [
-            { heading: 'What This Is', body: 'API credentials for AI-powered features (chatbot, signal format learning) and market data services (option flow scanning, market news).' },
-            { heading: 'AI Provider', body: '<strong>Replit AI:</strong> Uses Replit Credits — no external API key needed (recommended).<br><strong>OpenAI:</strong> Uses your own OpenAI API key (sk-...) for GPT models.<br><strong>Claude:</strong> Uses Anthropic Claude API (sk-ant-...) — superior instruction-following for signal pattern recognition.<br><strong>Disabled:</strong> Turns off all AI features.' },
-            { heading: 'Alpha Vantage', body: 'Provides option flow data and fundamental analysis. Free tier available with limited calls. Used for the option flow scanner feature.' },
-            { heading: 'Finnhub', body: 'Provides market news, real-time quotes, and company data. Used as a price data source for conditional orders and market sentiment features. Free tier available.' }
+            { heading: 'What This Is', body: 'Single AI provider that powers ALL bot intelligence — chatbot, trade analysis, signal format learning, unrecognized signal fallback, and sentiment analysis.' },
+            { heading: 'AI Provider', body: '<strong>Claude:</strong> Anthropic API (sk-ant-...) — best quality for signal parsing and trade analysis. Claude Haiku 4.5 model. Paid.<br><strong>Gemini Flash:</strong> Google API (AIza...) — <strong>free tier with 1,500 requests/day</strong>. Gemini 2.0 Flash model. Best for budget users.<br><strong>OpenAI:</strong> OpenAI API (sk-...) — GPT-4o Mini model. Paid.<br><strong>Disabled:</strong> Turns off all AI features.' },
+            { heading: 'What Gets Powered', body: '<strong>Chatbot:</strong> Ask questions about your trades, portfolio, and signals in the Chat page.<br><strong>Trade Analysis:</strong> AI evaluates every BTO/STC with risk assessment after execution.<br><strong>Signal Fallback:</strong> When the bot can\'t recognize a signal format, AI attempts to parse it.<br><strong>Format Learning:</strong> Teach the bot new signal formats via the Chat page.<br><strong>Sentiment:</strong> Analyze market sentiment from channel messages (optional, higher API usage).' },
+            { heading: 'Market Data Keys', body: '<strong>Alpha Vantage:</strong> Option flow scanning. <strong>Finnhub:</strong> Market news & data. Both are optional and independent of the AI provider.' }
         ]
     },
     'slippage': {
@@ -5115,12 +5276,11 @@ const ADMIN_HELP_CONTENT = {
         ]
     },
     'ai-analysis': {
-        title: '🧠 AI Analysis',
+        title: '🤖 AI Intelligence Hub',
         sections: [
-            { heading: 'What This Is', body: 'Uses AI (GPT) to analyze trades after execution and optionally assess market sentiment from channel messages. Provides insights on trade quality, market conditions, and potential risks.' },
-            { heading: 'AI Model Selection', body: '<strong>GPT-4o Mini:</strong> Faster and cheaper — good for most analysis needs.<br><strong>GPT-4o:</strong> Slower but more detailed analysis — useful for complex options strategies.' },
-            { heading: 'Sentiment Analysis', body: 'When enabled, the bot reads recent channel messages and uses AI to gauge market sentiment (bullish, bearish, neutral). <strong>Warning:</strong> This feature is expensive as it processes many messages through the AI API.' },
-            { heading: 'How It Works', body: 'After a trade is executed, the bot sends trade details to the AI model for analysis. The response includes risk assessment, market context, and trade quality scoring. Results are shown in the trade details and can be included in notification embeds.' }
+            { heading: 'What This Is', body: 'All AI features are powered by the single provider selected above. Select a provider, add your API key, and all AI features activate automatically.' },
+            { heading: 'Trade Analysis', body: 'When enabled, the bot sends trade details to your AI provider after execution. The response includes risk assessment, market context, and trade quality scoring.' },
+            { heading: 'Sentiment Analysis', body: 'When enabled, the bot reads recent channel messages and uses AI to gauge market sentiment (bullish, bearish, neutral). Increases API usage significantly.' }
         ]
     },
     'trading-limits': {

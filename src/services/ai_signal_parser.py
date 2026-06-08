@@ -125,10 +125,13 @@ class AISignalParser:
             self._initialized = False
             self._client = None
             self._anthropic_client = None
+            self._gemini_client = None
             self._provider = provider
 
         if self._initialized:
-            return self._client is not None or self._anthropic_client is not None
+            return (self._client is not None
+                    or self._anthropic_client is not None
+                    or (hasattr(self, '_gemini_client') and self._gemini_client is not None))
 
         self._initialized = True
 
@@ -137,6 +140,9 @@ class AISignalParser:
 
         if provider == 'claude':
             return self._init_anthropic_client()
+
+        if provider == 'gemini':
+            return self._init_gemini_client()
 
         return self._init_openai_client()
 
@@ -195,7 +201,36 @@ class AISignalParser:
         except Exception as e:
             print(f"[AI_PARSER] Failed to initialize Anthropic: {e}")
             return False
-    
+
+    def _init_gemini_client(self) -> bool:
+        try:
+            from google import genai as _genai
+        except ImportError:
+            print("[AI_PARSER] Google GenAI SDK not installed (pip install google-genai)")
+            return False
+
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            try:
+                from gui_app.broker_credentials_service import get_api_keys_extended
+                keys = get_api_keys_extended()
+                api_key = keys.get('gemini', '')
+            except Exception:
+                pass
+
+        if not api_key:
+            print("[AI_PARSER] No Gemini API key found")
+            return False
+
+        try:
+            self._gemini_client = _genai.Client(api_key=api_key)
+            self._gemini_model = "gemini-3.5-flash"
+            print(f"[AI_PARSER] ✓ Initialized Gemini with model: {self._gemini_model}")
+            return True
+        except Exception as e:
+            print(f"[AI_PARSER] Failed to initialize Gemini: {e}")
+            return False
+
     def _load_few_shot_examples(self) -> None:
         """Load few-shot examples from SignalFormatRegistry + manual non-signal examples."""
         self._few_shot_examples = []
@@ -310,7 +345,9 @@ class AISignalParser:
         
         # Rate limit with semaphore
         async with self._semaphore:
-            if self._anthropic_client and self._provider == 'claude':
+            if self._provider == 'gemini' and hasattr(self, '_gemini_client') and self._gemini_client:
+                result = await self._call_gemini(text)
+            elif self._anthropic_client and self._provider == 'claude':
                 result = await self._call_anthropic(text)
             else:
                 result = await self._call_openai(text)
@@ -380,6 +417,16 @@ CRITICAL RULES:
 - For option signals: extract strike, C/P, and expiry
 - Confidence 0.9+ for clear signals matching known patterns, 0.8 for reasonable inference
 - Never hallucinate symbols not present in the input
+
+TRADE UPDATE DETECTION (NEVER treat these as signals — return action null):
+- "SYMBOL LOW-HIGH" with pink_flame emoji (e.g. "STI 31-47.69 <pink_flame>") = profit update showing entry-to-high range
+- "SYMBOL LOW-HIGH so far" = progress update on existing trade
+- "SYMBOL LOW-HIGH" as a reply to a previous message = trade performance update
+- Any message with pink_flame/fire emoji after a price range = celebrating profit, NOT a new entry
+- "SYMBOL +N%" = percentage gain update, NOT a signal
+- "SYMBOL paid us", "top nailed", "all fibs hit" = past tense celebration
+- "stopped out" = already stopped, NOT a new exit signal
+- The format "SYMBOL ENTRY_PRICE-CURRENT_PRICE" is ALWAYS a trade update showing how a trade performed, NEVER a new entry
 
 KNOWN CHANNEL FORMATS (trained examples):
 
@@ -462,6 +509,40 @@ KNOWN CHANNEL FORMATS (trained examples):
             return AIParseResult(error=f"Invalid JSON from Claude: {e}")
         except Exception as e:
             print(f"[AI_PARSER] Claude API error: {e}")
+            return AIParseResult(error=str(e))
+
+    async def _call_gemini(self, text: str) -> AIParseResult:
+        """Make API call to Google Gemini."""
+        try:
+            import asyncio
+            system_prompt = self._build_system_prompt() + "\n\nReturn ONLY valid JSON, no markdown code blocks."
+            user_msg = f"Parse this trading message and return JSON only:\n\n{text}"
+            full_prompt = f"{system_prompt}\n\n{user_msg}"
+
+            response = await asyncio.to_thread(
+                self._gemini_client.models.generate_content,
+                model=self._gemini_model,
+                contents=full_prompt
+            )
+
+            content = response.text.strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:content.rfind("```")].strip()
+            if not content.startswith("{"):
+                start = content.find("{")
+                if start >= 0:
+                    content = content[start:]
+
+            data = json.loads(content)
+            return self._build_result(data)
+
+        except json.JSONDecodeError as e:
+            print(f"[AI_PARSER] Gemini JSON decode error: {e}")
+            return AIParseResult(error=f"Invalid JSON from Gemini: {e}")
+        except Exception as e:
+            print(f"[AI_PARSER] Gemini API error: {e}")
             return AIParseResult(error=str(e))
 
 

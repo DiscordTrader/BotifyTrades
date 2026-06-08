@@ -9692,10 +9692,9 @@ def register_routes(app):
             model = data.get('model', 'gpt-4o-mini')
             sentiment_enabled = data.get('sentiment_enabled', False)
             
-            # Validate model
-            valid_models = ['gpt-4o-mini', 'gpt-4o', 'gpt-5-mini', 'gpt-5']
-            if model not in valid_models:
-                return jsonify({'error': f'Invalid model. Must be one of: {", ".join(valid_models)}'}), 400
+            valid_models = ['gpt-4o-mini', 'gpt-4o', 'gpt-5-mini', 'gpt-5', 'claude-haiku-4-5-20251001', 'gemini-3.5-flash']
+            if model and model not in valid_models:
+                model = 'gpt-4o-mini'
             
             success = db.update_ai_settings(enabled, model, sentiment_enabled)
             
@@ -9718,8 +9717,109 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/ai/status', methods=['GET'])
+    def api_ai_health_check():
+        """Real-time AI health check — tests actual provider connectivity"""
+        try:
+            from .config_service import get_ai_provider
+            provider = get_ai_provider()
+
+            ai_settings = db.get_ai_settings()
+            ai_analysis_enabled = bool(ai_settings.get('enabled'))
+
+            if provider == 'disabled':
+                return jsonify({
+                    'success': True,
+                    'provider': 'disabled',
+                    'provider_label': 'Disabled',
+                    'connected': False,
+                    'ai_analysis_enabled': ai_analysis_enabled,
+                    'chatbot_ready': False,
+                    'fallback_ready': False,
+                    'status': 'disabled',
+                    'message': 'AI provider set to Disabled'
+                })
+
+            has_key = False
+            provider_label = provider
+
+            if provider == 'claude':
+                provider_label = 'Claude (Anthropic)'
+                try:
+                    from .broker_credentials_service import get_api_keys_extended
+                    keys = get_api_keys_extended()
+                    has_key = bool(keys.get('anthropic', ''))
+                except Exception:
+                    pass
+                if not has_key:
+                    import os
+                    has_key = bool(os.environ.get('ANTHROPIC_API_KEY'))
+            elif provider == 'gemini':
+                provider_label = 'Gemini Flash (Google)'
+                try:
+                    from .broker_credentials_service import get_api_keys_extended
+                    keys = get_api_keys_extended()
+                    has_key = bool(keys.get('gemini', ''))
+                except Exception:
+                    pass
+                if not has_key:
+                    import os
+                    has_key = bool(os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY'))
+            elif provider == 'openai':
+                provider_label = 'OpenAI'
+                try:
+                    from .broker_credentials_service import get_api_keys_extended
+                    keys = get_api_keys_extended()
+                    has_key = bool(keys.get('openai', ''))
+                except Exception:
+                    pass
+                if not has_key:
+                    import os
+                    has_key = bool(os.environ.get('OPENAI_API_KEY'))
+
+            connected = False
+            model = ''
+            error_msg = ''
+            if has_key:
+                try:
+                    from .chat_assistant import _get_ai_client
+                    client, is_anthropic, m = _get_ai_client()
+                    connected = client is not None
+                    model = m or ''
+                except Exception as e:
+                    error_msg = str(e)
+
+            chatbot_ready = connected
+            fallback_ready = connected
+
+            if connected:
+                status = 'connected'
+                message = f'{provider_label} connected — model: {model}'
+            elif has_key:
+                status = 'error'
+                message = f'API key saved but connection failed' + (f': {error_msg}' if error_msg else '')
+            else:
+                status = 'no_key'
+                message = f'{provider_label} selected but no API key configured'
+
+            return jsonify({
+                'success': True,
+                'provider': provider,
+                'provider_label': provider_label,
+                'model': model,
+                'connected': connected,
+                'has_key': has_key,
+                'ai_analysis_enabled': ai_analysis_enabled,
+                'chatbot_ready': chatbot_ready,
+                'fallback_ready': fallback_ready,
+                'status': status,
+                'message': message
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'status': 'error', 'message': str(e)}), 500
+
     # ============ TELEGRAM SETTINGS API ============
-    
+
     @app.route('/api/settings/telegram', methods=['GET'])
     @login_required
     def api_get_telegram_settings():
@@ -10221,7 +10321,8 @@ def register_routes(app):
                 'openai_key': mask_key(keys.get('openai', '')),
                 'alphavantage_key': mask_key(keys.get('alpha_vantage', '')),
                 'finnhub_key': mask_key(keys.get('finnhub', '')),
-                'anthropic_key': mask_key(keys.get('anthropic', ''))
+                'anthropic_key': mask_key(keys.get('anthropic', '')),
+                'gemini_key': mask_key(keys.get('gemini', ''))
             })
         except Exception as e:
             print(f"[API] Error getting API keys: {e}")
@@ -10247,6 +10348,7 @@ def register_routes(app):
             alpha_vantage = data.get('alphavantage_key', '')
             finnhub = data.get('finnhub_key', '')
             anthropic = data.get('anthropic_key', '')
+            gemini = data.get('gemini_key', '')
 
             # If value starts with masked chars, keep existing
             if openai.startswith('••••'):
@@ -10257,13 +10359,16 @@ def register_routes(app):
                 finnhub = existing.get('finnhub', '')
             if anthropic.startswith('••••'):
                 anthropic = existing.get('anthropic', '')
+            if gemini.startswith('••••'):
+                gemini = existing.get('gemini', '')
 
             save_api_keys_extended(
                 openai=openai or existing.get('openai', ''),
                 alpha_vantage=alpha_vantage or existing.get('alpha_vantage', ''),
                 finnhub=finnhub or existing.get('finnhub', ''),
                 license_key=existing.get('license_key', ''),
-                anthropic=anthropic or existing.get('anthropic', '')
+                anthropic=anthropic or existing.get('anthropic', ''),
+                gemini=gemini or existing.get('gemini', '')
             )
             
             return jsonify({
@@ -10477,38 +10582,37 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': 'Signal message is required'}), 400
             
             webhook_url = None
-            bot_name = 'BotifyTrades'
-            
+            bot_name = ''
+
             if channel_id:
                 try:
                     from . import webhook_service
                     channel = webhook_service.get_webhook_channel(int(channel_id))
                     if channel and channel.get('webhook_url'):
                         webhook_url = channel['webhook_url']
-                        bot_name = channel.get('bot_name', 'BotifyTrades')
+                        bot_name = channel.get('bot_name', '')
                         print(f"[DISCORD] Using webhook channel: {channel.get('name', 'Unknown')}")
                     else:
                         return jsonify({'success': False, 'error': f'Webhook channel {channel_id} not found or has no URL'}), 400
                 except Exception as e:
                     print(f"[DISCORD] Channel lookup failed: {e}")
-            
+
             if not webhook_url:
                 from .config_service import get_discord_notifications
                 settings = get_discord_notifications()
                 webhook_url = settings.get('webhook_url', '')
-                
+
                 if not webhook_url:
                     return jsonify({'success': False, 'error': 'No webhook URL available. Either select a webhook channel or configure a global webhook in Settings → Notifications.'}), 400
-                
+
                 if not settings.get('enabled', True):
                     return jsonify({'success': False, 'error': 'Discord notifications are disabled. Enable them in Settings → Notifications.'}), 400
-            
-            qt_username = bot_name
 
             payload = {
-                "content": signal,
-                "username": qt_username
+                "content": signal
             }
+            if bot_name:
+                payload["username"] = bot_name
             
             response = http_requests.post(webhook_url, json=payload, timeout=5)
             
@@ -10612,9 +10716,10 @@ def register_routes(app):
                         if not channel.get('enabled', 1):
                             results.append({'id': tid, 'ok': False, 'error': 'Channel disabled'})
                             continue
-                        bot_name = channel.get('bot_name', 'BotifyTrades')
-                        qt_username = bot_name
-                        payload = {"content": signal, "username": qt_username}
+                        bot_name = channel.get('bot_name', '')
+                        payload = {"content": signal}
+                        if bot_name:
+                            payload["username"] = bot_name
                         resp = http_requests.post(channel['webhook_url'], json=payload, timeout=5)
                         if resp.status_code in [200, 204]:
                             results.append({'id': tid, 'ok': True, 'name': channel.get('name')})
@@ -12864,8 +12969,10 @@ def register_routes(app):
                                         if len(parts) == 3:
                                             expiry_fmt = f"{parts[1]}/{parts[2]}"
                                     signal_msg = f"{action} {quantity} {symbol} {strike_d}{option_type[0].lower()} {expiry_fmt} @ {price:.2f}"
-                                    _qt_bot_name = wh_channel.get('bot_name', 'BotifyTrades')
-                                    wh_payload = {"content": signal_msg, "username": _qt_bot_name}
+                                    _qt_bot_name = wh_channel.get('bot_name', '')
+                                    wh_payload = {"content": signal_msg}
+                                    if _qt_bot_name:
+                                        wh_payload["username"] = _qt_bot_name
                                     wh_resp = http_requests.post(wh_channel['webhook_url'], json=wh_payload, timeout=5)
                                     if wh_resp.status_code in [200, 204]:
                                         webhook_sent = True

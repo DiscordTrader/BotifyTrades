@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEMP OF BOOM — Trade Analysis Report | 2026-05-20</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --card: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --green: #3fb950;
+            --green-bg: rgba(63, 185, 80, 0.1);
+            --red: #f85149;
+            --red-bg: rgba(248, 81, 73, 0.1);
+            --yellow: #d29922;
+            --yellow-bg: rgba(210, 153, 34, 0.1);
+            --blue: #58a6ff;
+            --blue-bg: rgba(88, 166, 255, 0.1);
+            --purple: #bc8cff;
+            --orange: #f0883e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--blue), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 30px; }
+        .subtitle span { color: var(--blue); }
+
+        /* Summary Cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-card .label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 32px; font-weight: 700; margin: 8px 0 4px; }
+        .stat-card .detail { font-size: 12px; color: var(--text-muted); }
+        .stat-card.green .value { color: var(--green); }
+        .stat-card.red .value { color: var(--red); }
+        .stat-card.yellow .value { color: var(--yellow); }
+        .stat-card.blue .value { color: var(--blue); }
+        .stat-card.purple .value { color: var(--purple); }
+
+        /* Section Panels */
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .panel-body { padding: 0; }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th {
+            background: rgba(110, 118, 129, 0.1);
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: rgba(110, 118, 129, 0.05); }
+        .text-green { color: var(--green); }
+        .text-red { color: var(--red); }
+        .text-yellow { color: var(--yellow); }
+        .text-blue { color: var(--blue); }
+        .text-muted { color: var(--text-muted); }
+        .text-orange { color: var(--orange); }
+        .text-purple { color: var(--purple); }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+        .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid rgba(63, 185, 80, 0.3); }
+        .badge-red { background: var(--red-bg); color: var(--red); border: 1px solid rgba(248, 81, 73, 0.3); }
+        .badge-yellow { background: var(--yellow-bg); color: var(--yellow); border: 1px solid rgba(210, 153, 34, 0.3); }
+        .badge-blue { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(88, 166, 255, 0.3); }
+        .badge-gray { background: rgba(110,118,129,0.1); color: var(--text-muted); border: 1px solid rgba(110,118,129,0.3); }
+
+        /* Signal raw text */
+        .signal-raw {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin: 4px 0;
+            word-break: break-all;
+        }
+
+        /* Progress Bar */
+        .capture-bar {
+            height: 8px;
+            background: rgba(110,118,129,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 4px 0;
+        }
+        .capture-bar .fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+
+        /* Issue Cards */
+        .issue-list { padding: 16px 20px; }
+        .issue-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .issue-item:last-child { border-bottom: none; }
+        .issue-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        .issue-icon.red-bg { background: var(--red-bg); }
+        .issue-icon.yellow-bg { background: var(--yellow-bg); }
+        .issue-icon.green-bg { background: var(--green-bg); }
+        .issue-title { font-weight: 600; font-size: 14px; }
+        .issue-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+        /* Comparison highlight rows */
+        .row-traded { background: rgba(63, 185, 80, 0.03); }
+        .row-missed { background: rgba(248, 81, 73, 0.03); }
+        .row-cancelled { background: rgba(210, 153, 34, 0.03); }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 12px;
+            border-top: 1px solid var(--border);
+            margin-top: 30px;
+        }
+
+        /* Timeline */
+        .timeline { padding: 16px 20px; }
+        .timeline-item {
+            display: flex;
+            gap: 12px;
+            padding: 8px 0;
+            position: relative;
+        }
+        .timeline-item:not(:last-child)::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 32px;
+            bottom: -8px;
+            width: 2px;
+            background: var(--border);
+        }
+        .timeline-dot {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+            z-index: 1;
+        }
+        .timeline-time { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+        .timeline-text { font-size: 13px; margin-top: 2px; }
+
+        @media (max-width: 768px) {
+            .summary-grid { grid-template-columns: repeat(2, 1fr); }
+            table { font-size: 11px; }
+            td, th { padding: 6px 8px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>TEMP OF BOOM &mdash; Trade Validation Report</h1>
+    <p class="subtitle">
+        Channel: <span>TEMP-BOOM</span> &bull; Analyst: <span>traderzz1m</span> &bull;
+        Date: <span>2026-05-20</span> &bull; Broker: <span>Schwab</span> &bull;
+        Generated by BotifyTrades v10.2.2
+    </p>
+
+    <!-- ====== EXECUTIVE SUMMARY ====== -->
+    <div class="summary-grid">
+        <div class="stat-card blue">
+            <div class="label">Analyst Calls</div>
+            <div class="value">26</div>
+            <div class="detail">Unique symbol entries reported</div>
+        </div>
+        <div class="stat-card purple">
+            <div class="label">Bot Signals Detected</div>
+            <div class="value">7</div>
+            <div class="detail">of 26 calls (26.9%)</div>
+        </div>
+        <div class="stat-card yellow">
+            <div class="label">Orders Filled</div>
+            <div class="value">2</div>
+            <div class="detail">PHGE &amp; MTVA only</div>
+        </div>
+        <div class="stat-card green">
+            <div class="label">Bot Realized P&amp;L</div>
+            <div class="value">$0.35</div>
+            <div class="detail">+23.6% PHGE, +8.1% MTVA</div>
+        </div>
+        <div class="stat-card red">
+            <div class="label">Schwab Rejections</div>
+            <div class="value">5</div>
+            <div class="detail">Orders cancelled post-submission</div>
+        </div>
+        <div class="stat-card yellow">
+            <div class="label">Capture Rate</div>
+            <div class="value">7.7%</div>
+            <div class="detail">2 of 26 analyst calls traded</div>
+        </div>
+    </div>
+
+    <!-- ====== FULL ANALYST CALLS vs BOT COMPARISON ====== -->
+    <div class="panel">
+        <div class="panel-header">
+            📊 Analyst Claimed P&amp;L vs Bot Actual &mdash; Full Comparison
+        </div>
+        <div class="panel-body">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Symbol</th>
+                        <th>Analyst %</th>
+                        <th>Signal Detected?</th>
+                        <th>Bot Entry</th>
+                        <th>Bot Exit</th>
+                        <th>Bot P&amp;L %</th>
+                        <th>Bot P&amp;L $</th>
+                        <th>Status</th>
+                        <th>Capture Gap</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- HCWB 303% -->
+                    <tr class="row-cancelled">
+                        <td class="text-muted">1</td>
+                        <td><strong>HCWB</strong></td>
+                        <td class="text-green mono">+303%</td>
+                        <td><span class="badge badge-green">YES</span></td>
+                        <td class="mono">$0.99</td>
+                        <td class="text-muted mono">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-red mono">-303%</td>
+                    </tr>
+                    <!-- MWC 271% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">2</td>
+                        <td><strong>MWC</strong></td>
+                        <td class="text-green mono">+271%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-271%</td>
+                    </tr>
+                    <!-- HCWB 122% -->
+                    <tr class="row-cancelled">
+                        <td class="text-muted">3</td>
+                        <td><strong>HCWB</strong></td>
+                        <td class="text-green mono">+122%</td>
+                        <td><span class="badge badge-green">YES</span></td>
+                        <td class="mono">$0.99</td>
+                        <td class="text-muted mono">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-red mono">-122%</td>
+                    </tr>
+                    <!-- MTVA 59% -->
+                    <tr class="row-traded">
+                        <td class="text-muted">4</td>
+                        <td><strong>MTVA</strong></td>
+                        <td class="text-green mono">+59%</td>
+                        <td><span class="badge badge-green">YES</span></td>
+                        <td class="mono">$2.70</td>
+                        <td class="mono">$2.92</td>
+                        <td class="text-green mono">+8.15%</td>
+                        <td class="text-green mono">$0.22</td>
+                        <td><span class="badge badge-green">CLOSED</span></td>
+                        <td class="text-red mono">-50.85%</td>
+                    </tr>
+                    <!-- SUGP 50% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">5</td>
+                        <td><strong>SUGP</strong></td>
+                        <td class="text-green mono">+50%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-50%</td>
+                    </tr>
+                    <!-- MTVA 50% -->
+                    <tr class="row-traded">
+                        <td class="text-muted">6</td>
+                        <td><strong>MTVA</strong></td>
+                        <td class="text-green mono">+50%</td>
+                        <td><span class="badge badge-green">YES</span></td>
+                        <td class="mono">$2.70</td>
+                        <td class="mono">$2.92</td>
+                        <td class="text-green mono">+8.15%</td>
+                        <td class="text-green mono">$0.22</td>
+                        <td><span class="badge badge-green">CLOSED</span></td>
+                        <td class="text-red mono">-41.85%</td>
+                    </tr>
+                    <!-- EXYN 48% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">7</td>
+                        <td><strong>EXYN</strong></td>
+                        <td class="text-green mono">+48%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-48%</td>
+                    </tr>
+                    <!-- SLXN 41% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">8</td>
+                        <td><strong>SLXN</strong></td>
+                        <td class="text-green mono">+41%</td>
+                        <td><span class="badge badge-yellow">SEEN</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-yellow">INFO ONLY</span></td>
+                        <td class="text-red mono">-41%</td>
+                    </tr>
+                    <!-- NXXT 41% -->
+                    <tr class="row-cancelled">
+                        <td class="text-muted">9</td>
+                        <td><strong>NXXT</strong></td>
+                        <td class="text-green mono">+41%</td>
+                        <td><span class="badge badge-green">YES</span></td>
+                        <td class="mono">$0.75</td>
+                        <td class="text-muted mono">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-red mono">-41%</td>
+                    </tr>
+                    <!-- CAPS 34% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">10</td>
+                        <td><strong>CAPS</strong></td>
+                        <td class="text-green mono">+34%</td>
+                        <td><span class="badge badge-yellow">SEEN</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-yellow">INFO ONLY</span></td>
+                        <td class="text-red mono">-34%</td>
+                    </tr>
+                    <!-- AIM 33% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">11</td>
+                        <td><strong>AIM</strong></td>
+                        <td class="text-green mono">+33%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-33%</td>
+                    </tr>
+                    <!-- TANH 33% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">12</td>
+                        <td><strong>TANH</strong></td>
+                        <td class="text-green mono">+33%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-33%</td>
+                    </tr>
+                    <!-- NXXT 30% -->
+                    <tr class="row-cancelled">
+                        <td class="text-muted">13</td>
+                        <td><strong>NXXT</strong></td>
+                        <td class="text-green mono">+30%</td>
+                        <td><span class="badge badge-green">YES</span></td>
+                        <td class="mono">$0.75</td>
+                        <td class="text-muted mono">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-red mono">-30%</td>
+                    </tr>
+                    <!-- CODX 29% -->
+                    <tr class="row-cancelled">
+                        <td class="text-muted">14</td>
+                        <td><strong>CODX</strong></td>
+                        <td class="text-green mono">+29%</td>
+                        <td><span class="badge badge-green">YES</span></td>
+                        <td class="mono">$2.05</td>
+                        <td class="text-muted mono">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-red mono">-29%</td>
+                    </tr>
+                    <!-- PHGE 29% -->
+                    <tr class="row-traded">
+                        <td class="text-muted">15</td>
+                        <td><strong>PHGE</strong></td>
+                        <td class="text-green mono">+29%</td>
+                        <td><span class="badge badge-green">YES</span></td>
+                        <td class="mono">$0.55</td>
+                        <td class="mono">$0.68</td>
+                        <td class="text-green mono">+23.64%</td>
+                        <td class="text-green mono">$0.13</td>
+                        <td><span class="badge badge-green">PT1 HIT</span></td>
+                        <td class="text-red mono">-5.36%</td>
+                    </tr>
+                    <!-- GCL 29% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">16</td>
+                        <td><strong>GCL</strong></td>
+                        <td class="text-green mono">+29%</td>
+                        <td><span class="badge badge-yellow">SEEN</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-yellow">INFO ONLY</span></td>
+                        <td class="text-red mono">-29%</td>
+                    </tr>
+                    <!-- VIDA 27% -->
+                    <tr class="row-cancelled">
+                        <td class="text-muted">17</td>
+                        <td><strong>VIDA</strong></td>
+                        <td class="text-green mono">+27%</td>
+                        <td><span class="badge badge-green">YES</span></td>
+                        <td class="mono">$2.86</td>
+                        <td class="text-muted mono">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-red mono">-27%</td>
+                    </tr>
+                    <!-- SLXN 26% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">18</td>
+                        <td><strong>SLXN</strong></td>
+                        <td class="text-green mono">+26%</td>
+                        <td><span class="badge badge-yellow">SEEN</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-yellow">INFO ONLY</span></td>
+                        <td class="text-red mono">-26%</td>
+                    </tr>
+                    <!-- FCHL 24% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">19</td>
+                        <td><strong>FCHL</strong></td>
+                        <td class="text-green mono">+24%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-24%</td>
+                    </tr>
+                    <!-- GCL 23% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">20</td>
+                        <td><strong>GCL</strong></td>
+                        <td class="text-green mono">+23%</td>
+                        <td><span class="badge badge-yellow">SEEN</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-yellow">INFO ONLY</span></td>
+                        <td class="text-red mono">-23%</td>
+                    </tr>
+                    <!-- ELPW 20% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">21</td>
+                        <td><strong>ELPW</strong></td>
+                        <td class="text-green mono">+20%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-20%</td>
+                    </tr>
+                    <!-- HYFT 18% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">22</td>
+                        <td><strong>HYFT</strong></td>
+                        <td class="text-green mono">+18%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-18%</td>
+                    </tr>
+                    <!-- GIPR 17% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">23</td>
+                        <td><strong>GIPR</strong></td>
+                        <td class="text-green mono">+17%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-17%</td>
+                    </tr>
+                    <!-- WOK 13% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">24</td>
+                        <td><strong>WOK</strong></td>
+                        <td class="text-green mono">+13%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-13%</td>
+                    </tr>
+                    <!-- HIVE 8% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">25</td>
+                        <td><strong>HIVE</strong></td>
+                        <td class="text-green mono">+8%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-8%</td>
+                    </tr>
+                    <!-- FCUV 4% -->
+                    <tr class="row-missed">
+                        <td class="text-muted">26</td>
+                        <td><strong>FCUV</strong></td>
+                        <td class="text-green mono">+4%</td>
+                        <td><span class="badge badge-gray">NO</span></td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td><span class="badge badge-gray">NOT DETECTED</span></td>
+                        <td class="text-red mono">-4%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ====== BOT TRADE DETAIL ====== -->
+    <div class="panel">
+        <div class="panel-header">
+            🤖 Bot Executed Trades &mdash; Detailed Breakdown
+        </div>
+        <div class="panel-body">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Trade ID</th>
+                        <th>Symbol</th>
+                        <th>Signal Time</th>
+                        <th>Entry Price</th>
+                        <th>Target</th>
+                        <th>Target %</th>
+                        <th>Fill Time</th>
+                        <th>Exit Price</th>
+                        <th>Exit Time</th>
+                        <th>Exit Reason</th>
+                        <th>P&amp;L $</th>
+                        <th>P&amp;L %</th>
+                        <th>Hold Time</th>
+                        <th>Latency</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="mono">101</td>
+                        <td><strong>NXXT</strong></td>
+                        <td class="mono text-muted">09:36:47</td>
+                        <td class="mono">$0.75</td>
+                        <td class="mono">$0.88</td>
+                        <td class="mono">+17.3%</td>
+                        <td class="mono">09:36:49</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="mono text-muted">09:49:01</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted">12m</td>
+                        <td class="mono">1,541ms</td>
+                    </tr>
+                    <tr>
+                        <td class="mono">102</td>
+                        <td><strong>HCWB</strong></td>
+                        <td class="mono text-muted">10:08:38</td>
+                        <td class="mono">$0.99</td>
+                        <td class="mono">$1.76</td>
+                        <td class="mono">+77.8%</td>
+                        <td class="mono">10:08:39</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="mono text-muted">13:44:35</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted">3h 36m</td>
+                        <td class="mono">1,131ms</td>
+                    </tr>
+                    <tr>
+                        <td class="mono">103</td>
+                        <td><strong>WNW</strong></td>
+                        <td class="mono text-muted">10:14:06</td>
+                        <td class="mono">$4.00</td>
+                        <td class="mono">$6.54</td>
+                        <td class="mono">+63.5%</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td><span class="badge badge-yellow">FAILED</span></td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="text-muted">&mdash;</td>
+                    </tr>
+                    <tr>
+                        <td class="mono">104</td>
+                        <td><strong>CODX</strong></td>
+                        <td class="mono text-muted">10:47:03</td>
+                        <td class="mono">$2.05</td>
+                        <td class="mono">$2.43</td>
+                        <td class="mono">+18.5%</td>
+                        <td class="mono">10:47:04</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="mono text-muted">16:50:30</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted">6h 3m</td>
+                        <td class="mono">1,157ms</td>
+                    </tr>
+                    <tr class="row-traded">
+                        <td class="mono">105</td>
+                        <td><strong class="text-green">PHGE</strong></td>
+                        <td class="mono text-muted">12:10:19</td>
+                        <td class="mono">$0.55</td>
+                        <td class="mono">$0.67</td>
+                        <td class="mono">+21.8%</td>
+                        <td class="mono">12:29:32</td>
+                        <td class="mono text-green">$0.68</td>
+                        <td class="mono">16:50:58</td>
+                        <td><span class="badge badge-green">PT1 HIT</span></td>
+                        <td class="text-green mono">$0.13</td>
+                        <td class="text-green mono">+23.64%</td>
+                        <td>4h 21m</td>
+                        <td class="mono">3,444ms</td>
+                    </tr>
+                    <tr class="row-traded">
+                        <td class="mono">106</td>
+                        <td><strong class="text-green">MTVA</strong></td>
+                        <td class="mono text-muted">13:12:17</td>
+                        <td class="mono">$2.70</td>
+                        <td class="mono">$2.96</td>
+                        <td class="mono">+9.6%</td>
+                        <td class="mono">13:12:19</td>
+                        <td class="mono text-green">$2.92</td>
+                        <td class="mono">13:52:35</td>
+                        <td><span class="badge badge-green">BROKER CLOSED</span></td>
+                        <td class="text-green mono">$0.22</td>
+                        <td class="text-green mono">+8.15%</td>
+                        <td>40m</td>
+                        <td class="mono">1,653ms</td>
+                    </tr>
+                    <tr>
+                        <td class="mono">107</td>
+                        <td><strong>VIDA</strong></td>
+                        <td class="mono text-muted">13:17:24</td>
+                        <td class="mono">$2.86</td>
+                        <td class="mono">$3.64</td>
+                        <td class="mono">+27.3%</td>
+                        <td class="mono">13:17:24</td>
+                        <td class="text-muted">&mdash;</td>
+                        <td class="mono text-muted">16:00:26</td>
+                        <td><span class="badge badge-red">CANCELLED</span></td>
+                        <td class="text-muted mono">$0.00</td>
+                        <td class="text-muted mono">0%</td>
+                        <td class="text-muted">2h 43m</td>
+                        <td class="mono">55ms</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ====== SIGNAL TIMELINE ====== -->
+    <div class="panel">
+        <div class="panel-header">
+            ⏱️ Signal Detection Timeline (Channel Messages)
+        </div>
+        <div class="timeline">
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--blue-bg); color:var(--blue)">📋</div>
+                <div>
+                    <div class="timeline-time">06:40 AM</div>
+                    <div class="timeline-text">
+                        <strong>SLXN</strong> 0.62&ndash;0.72 &mdash; <span class="text-yellow">Info only, bot did not parse as tradable signal</span>
+                    </div>
+                    <div class="signal-raw">SLXN 0.62-0.72. 0.72 must break for 0.78...0.88</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--blue-bg); color:var(--blue)">📋</div>
+                <div>
+                    <div class="timeline-time">07:01 AM</div>
+                    <div class="timeline-text">
+                        <strong>PHGE</strong> 0.55&ndash;0.64 &mdash; <span class="text-yellow">Commentary ("so far"), not a BTO signal</span>
+                    </div>
+                    <div class="signal-raw">PHGE 0.55-0.64 so far</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--blue-bg); color:var(--blue)">📋</div>
+                <div>
+                    <div class="timeline-time">07:25 AM</div>
+                    <div class="timeline-text">
+                        <strong>GCL</strong> 0.77&ndash;0.95 &mdash; <span class="text-yellow">Commentary ("so far"), not parsed as BTO</span>
+                    </div>
+                    <div class="signal-raw">GCL 0.77-0.95 so far.  1.09 above</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--blue-bg); color:var(--blue)">📋</div>
+                <div>
+                    <div class="timeline-time">08:08 AM</div>
+                    <div class="timeline-text">
+                        <strong>CAPS</strong> conditional &mdash; <span class="text-yellow">"will enter if it breaks 0.35" &mdash; conditional language, not BTO</span>
+                    </div>
+                    <div class="signal-raw">$CAPS will enter if it breaks 0.35 for 0.39 retest</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--yellow-bg); color:var(--yellow)">📋</div>
+                <div>
+                    <div class="timeline-time">08:18 AM</div>
+                    <div class="timeline-text">
+                        <strong>SUGP</strong> 4.50&ndash;6.31 &mdash; <span class="text-yellow">Seen but not parsed as tradable signal (price too high?)</span>
+                    </div>
+                    <div class="signal-raw">SUGP 4.50-6.31 🔥</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--yellow-bg); color:var(--yellow)">📋</div>
+                <div>
+                    <div class="timeline-time">08:21 AM</div>
+                    <div class="timeline-text">
+                        <strong>CAPS</strong> 0.35&ndash;0.43 &mdash; <span class="text-yellow">Seen but not parsed (preceded by conditional text earlier)</span>
+                    </div>
+                    <div class="signal-raw">CAPS 0.35-0.43 🔥</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--green-bg); color:var(--green)">🎯</div>
+                <div>
+                    <div class="timeline-time">09:36:47 AM</div>
+                    <div class="timeline-text">
+                        <strong>NXXT</strong> 0.75&ndash;0.88 &mdash; <span class="text-green">Parsed &rarr; BTO @ $0.75</span> &mdash; <span class="text-red">Schwab cancelled</span>
+                    </div>
+                    <div class="signal-raw">NXXT 0.75-0.88 🔥</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--green-bg); color:var(--green)">🎯</div>
+                <div>
+                    <div class="timeline-time">10:08:38 AM</div>
+                    <div class="timeline-text">
+                        <strong>HCWB</strong> 0.99&ndash;1.76 &mdash; <span class="text-green">Parsed &rarr; BTO @ $0.99</span> &mdash; <span class="text-red">Schwab cancelled</span>
+                    </div>
+                    <div class="signal-raw">HCWB 0.99-1.76.... all fibs hit</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--green-bg); color:var(--green)">🎯</div>
+                <div>
+                    <div class="timeline-time">10:14:06 AM</div>
+                    <div class="timeline-text">
+                        <strong>WNW</strong> 4.00&ndash;6.54 &mdash; <span class="text-green">Parsed &rarr; BTO @ $4.00</span> &mdash; <span class="text-red">Insufficient cash ($361 < $400)</span>
+                    </div>
+                    <div class="signal-raw">WNW 4.00-6.54. Over 7.25 we have 8.39 🔥</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--green-bg); color:var(--green)">🎯</div>
+                <div>
+                    <div class="timeline-time">10:47:03 AM</div>
+                    <div class="timeline-text">
+                        <strong>CODX</strong> 2.05&ndash;2.43 &mdash; <span class="text-green">Parsed &rarr; BTO @ $2.05</span> &mdash; <span class="text-red">Schwab cancelled</span>
+                    </div>
+                    <div class="signal-raw">CODX 2.05-2.43 🔥</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--green-bg); color:var(--green)">✅</div>
+                <div>
+                    <div class="timeline-time">12:10:19 PM</div>
+                    <div class="timeline-text">
+                        <strong class="text-green">PHGE</strong> 0.55&ndash;0.67 &mdash; <span class="text-green">Parsed &rarr; BTO @ $0.55 &rarr; FILLED &rarr; STC @ $0.68 (+23.64%)</span>
+                    </div>
+                    <div class="signal-raw">PHGE 0.55-0.67 🔥</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--green-bg); color:var(--green)">✅</div>
+                <div>
+                    <div class="timeline-time">01:12:17 PM</div>
+                    <div class="timeline-text">
+                        <strong class="text-green">MTVA</strong> 2.70&ndash;2.96 &mdash; <span class="text-green">Parsed &rarr; BTO @ $2.70 &rarr; FILLED &rarr; Broker closed @ $2.92 (+8.15%)</span>
+                    </div>
+                    <div class="signal-raw">MTVA 2.70-2.96 🔥</div>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-dot" style="background:var(--green-bg); color:var(--green)">🎯</div>
+                <div>
+                    <div class="timeline-time">01:17:24 PM</div>
+                    <div class="timeline-text">
+                        <strong>VIDA</strong> 2.86&ndash;3.64 &mdash; <span class="text-green">Parsed &rarr; BTO @ $2.86</span> &mdash; <span class="text-red">Schwab cancelled</span>
+                    </div>
+                    <div class="signal-raw">VIDA 2.86-3.64 🔥</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== P&L SUMMARY ====== -->
+    <div class="panel">
+        <div class="panel-header">
+            💰 Profit &amp; Loss Summary
+        </div>
+        <div class="panel-body">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Analyst (Claimed)</th>
+                        <th>Bot (Actual)</th>
+                        <th>Delta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Total Calls</td>
+                        <td class="mono">26 entries</td>
+                        <td class="mono">7 detected, 2 filled</td>
+                        <td class="text-red">19 not detected / 5 cancelled</td>
+                    </tr>
+                    <tr>
+                        <td>Avg Gain %</td>
+                        <td class="mono text-green">+55.1%</td>
+                        <td class="mono text-green">+15.9% <span class="text-muted">(on 2 fills)</span></td>
+                        <td class="text-red mono">-39.2%</td>
+                    </tr>
+                    <tr>
+                        <td>Best Trade</td>
+                        <td class="mono">HCWB +303%</td>
+                        <td class="mono">PHGE +23.64%</td>
+                        <td class="text-red">Biggest winner was cancelled by Schwab</td>
+                    </tr>
+                    <tr>
+                        <td>PHGE</td>
+                        <td class="mono text-green">+29%</td>
+                        <td class="mono text-green">+23.64%</td>
+                        <td class="text-yellow">-5.36% &mdash; PT1 exit at $0.68 vs analyst hold to ~$0.71</td>
+                    </tr>
+                    <tr>
+                        <td>MTVA</td>
+                        <td class="mono text-green">+59% / +50%</td>
+                        <td class="mono text-green">+8.15%</td>
+                        <td class="text-red">-41.85% to -50.85% &mdash; Bot used late entry ($2.70 vs $2.07 original), broker closed early</td>
+                    </tr>
+                    <tr>
+                        <td>Total $ P&amp;L (1 share each)</td>
+                        <td class="text-muted">N/A (varying qtys)</td>
+                        <td class="mono text-green">$0.35</td>
+                        <td class="text-muted">($0.13 PHGE + $0.22 MTVA)</td>
+                    </tr>
+                    <tr>
+                        <td>Win Rate</td>
+                        <td class="mono text-green">26/26 = 100%</td>
+                        <td class="mono text-green">2/2 = 100%</td>
+                        <td class="text-green">Both fills were profitable</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ====== FAILURE ANALYSIS ====== -->
+    <div class="panel">
+        <div class="panel-header">
+            ⚠️ Failure &amp; Gap Analysis
+        </div>
+        <div class="issue-list">
+            <div class="issue-item">
+                <div class="issue-icon red-bg">🔴</div>
+                <div>
+                    <div class="issue-title">Schwab Penny Stock Order Cancellations (5 trades)</div>
+                    <div class="issue-desc">
+                        NXXT, HCWB, CODX, VIDA, and initial MTVA &amp; PHGE orders were all accepted by Schwab API (HTTP 200)
+                        but silently cancelled within seconds. Schwab's internal risk engine rejects penny stock BUY orders
+                        even when the account has sufficient buying power. This is a known Schwab restriction on sub-$5 equities.
+                        <br><strong>Impact:</strong> Lost $0.99&rarr;$4.00 on HCWB (303% gain), $0.75&rarr;$1.06 on NXXT (41%), $2.05&rarr;$2.64 on CODX (29%).
+                        <br><strong>Fix:</strong> Route penny stock orders through Webull or Alpaca instead of Schwab.
+                    </div>
+                </div>
+            </div>
+            <div class="issue-item">
+                <div class="issue-icon red-bg">🔴</div>
+                <div>
+                    <div class="issue-title">Insufficient Buying Power (WNW)</div>
+                    <div class="issue-desc">
+                        WNW @ $4.00 required $400 but only $361.01 settled cash available.
+                        <br><strong>Impact:</strong> Missed 63.5% target move.
+                        <br><strong>Fix:</strong> Increase account balance or reduce position sizing threshold.
+                    </div>
+                </div>
+            </div>
+            <div class="issue-item">
+                <div class="issue-icon yellow-bg">🟡</div>
+                <div>
+                    <div class="issue-title">19 Analyst Calls Not Detected by Bot</div>
+                    <div class="issue-desc">
+                        Symbols MWC, EXYN, TANH, FCHL, ELPW, HYFT, GIPR, WOK, HIVE, FCUV were never seen in the TEMP-BOOM channel messages.
+                        These may be from a different channel, a different time period, or private alerts not posted to Discord.
+                        <br>Symbols SLXN, GCL, CAPS, SUGP were seen as channel messages but parsed as
+                        <strong>informational/commentary</strong> (e.g., "so far", "must break", conditional language) rather than
+                        actionable BTO signals.
+                    </div>
+                </div>
+            </div>
+            <div class="issue-item">
+                <div class="issue-icon yellow-bg">🟡</div>
+                <div>
+                    <div class="issue-title">MTVA Late Entry ($2.70 vs $2.07 original)</div>
+                    <div class="issue-desc">
+                        The analyst's first MTVA call was at $2.07 (10:46 AM, "all PTs hit 2.07-2.73" &mdash; informational).
+                        The bot didn't detect a BTO signal until the re-entry at $2.70 (1:12 PM).
+                        Entry was 30% higher than original, drastically reducing upside.
+                        <br><strong>Analyst at $2.07 &rarr; $3.29 = +59%</strong> vs <strong>Bot at $2.70 &rarr; $2.92 = +8.15%</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="issue-item">
+                <div class="issue-icon yellow-bg">🟡</div>
+                <div>
+                    <div class="issue-title">Bracket STC Rejections (PHGE, MTVA)</div>
+                    <div class="issue-desc">
+                        Even when BTO orders filled, Schwab rejected STC bracket orders (stop-loss &amp; profit-target) with
+                        "oversold/overbought position" error. Bracket placement failed 3x for both, leaving positions without
+                        automated exit protection. The risk engine eventually found exits (PT1 for PHGE, broker close for MTVA)
+                        but this is fragile.
+                    </div>
+                </div>
+            </div>
+            <div class="issue-item">
+                <div class="issue-icon green-bg">🟢</div>
+                <div>
+                    <div class="issue-title">Signal Detection Working Correctly</div>
+                    <div class="issue-desc">
+                        All 7 tradable signals (ENTRY-TARGET format with 🔥 emoji) were correctly parsed by the Temple parser.
+                        Latency averaged 1,497ms from signal to order submission. The parser correctly ignored
+                        commentary messages ("so far", "must break", "will enter if") &mdash; this is correct behavior.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== CAPTURE RATE BREAKDOWN ====== -->
+    <div class="panel">
+        <div class="panel-header">
+            📈 Capture Rate Breakdown
+        </div>
+        <div class="panel-body">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Count</th>
+                        <th>%</th>
+                        <th>Symbols</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="badge badge-green">FILLED &amp; PROFITABLE</span></td>
+                        <td class="text-center mono">2</td>
+                        <td class="text-center mono">7.7%</td>
+                        <td>PHGE, MTVA</td>
+                        <td class="text-green">Orders filled, exited with profit</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge badge-red">SCHWAB CANCELLED</span></td>
+                        <td class="text-center mono">5</td>
+                        <td class="text-center mono">19.2%</td>
+                        <td>NXXT, HCWB, CODX, VIDA, + initial PHGE/MTVA</td>
+                        <td class="text-red">Penny stock order rejection by Schwab</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge badge-yellow">INSUFFICIENT FUNDS</span></td>
+                        <td class="text-center mono">1</td>
+                        <td class="text-center mono">3.8%</td>
+                        <td>WNW</td>
+                        <td class="text-yellow">$400 needed, $361 available</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge badge-blue">INFO/COMMENTARY</span></td>
+                        <td class="text-center mono">5</td>
+                        <td class="text-center mono">19.2%</td>
+                        <td>SLXN, GCL, CAPS, SUGP, early PHGE</td>
+                        <td>Correctly ignored &mdash; not actionable signals</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge badge-gray">NOT IN CHANNEL</span></td>
+                        <td class="text-center mono">13</td>
+                        <td class="text-center mono">50.0%</td>
+                        <td>MWC, EXYN, AIM, TANH, FCHL, ELPW, HYFT, GIPR, WOK, HIVE, FCUV, + dupes</td>
+                        <td class="text-muted">Not posted in monitored TEMP-BOOM channel</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ====== POTENTIAL P&L IF ALL EXECUTED ====== -->
+    <div class="panel">
+        <div class="panel-header">
+            💡 What-If: Potential P&amp;L if All 7 Detected Signals Had Filled (1 share each)
+        </div>
+        <div class="panel-body">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Entry</th>
+                        <th>Target</th>
+                        <th>Target %</th>
+                        <th>Analyst Claimed</th>
+                        <th>Potential $ (at target)</th>
+                        <th>Actual $</th>
+                        <th>Missed $</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>NXXT</strong></td>
+                        <td class="mono">$0.75</td>
+                        <td class="mono">$0.88</td>
+                        <td class="mono">+17.3%</td>
+                        <td class="mono">+41%</td>
+                        <td class="mono text-green">$0.13</td>
+                        <td class="mono text-muted">$0.00</td>
+                        <td class="mono text-red">-$0.13</td>
+                    </tr>
+                    <tr>
+                        <td><strong>HCWB</strong></td>
+                        <td class="mono">$0.99</td>
+                        <td class="mono">$1.76</td>
+                        <td class="mono">+77.8%</td>
+                        <td class="mono">+303%</td>
+                        <td class="mono text-green">$0.77</td>
+                        <td class="mono text-muted">$0.00</td>
+                        <td class="mono text-red">-$0.77</td>
+                    </tr>
+                    <tr>
+                        <td><strong>WNW</strong></td>
+                        <td class="mono">$4.00</td>
+                        <td class="mono">$6.54</td>
+                        <td class="mono">+63.5%</td>
+                        <td class="text-muted">N/A</td>
+                        <td class="mono text-green">$2.54</td>
+                        <td class="mono text-muted">$0.00</td>
+                        <td class="mono text-red">-$2.54</td>
+                    </tr>
+                    <tr>
+                        <td><strong>CODX</strong></td>
+                        <td class="mono">$2.05</td>
+                        <td class="mono">$2.43</td>
+                        <td class="mono">+18.5%</td>
+                        <td class="mono">+29%</td>
+                        <td class="mono text-green">$0.38</td>
+                        <td class="mono text-muted">$0.00</td>
+                        <td class="mono text-red">-$0.38</td>
+                    </tr>
+                    <tr class="row-traded">
+                        <td><strong class="text-green">PHGE</strong></td>
+                        <td class="mono">$0.55</td>
+                        <td class="mono">$0.67</td>
+                        <td class="mono">+21.8%</td>
+                        <td class="mono">+29%</td>
+                        <td class="mono text-green">$0.12</td>
+                        <td class="mono text-green">$0.13</td>
+                        <td class="mono text-green">+$0.01</td>
+                    </tr>
+                    <tr class="row-traded">
+                        <td><strong class="text-green">MTVA</strong></td>
+                        <td class="mono">$2.70</td>
+                        <td class="mono">$2.96</td>
+                        <td class="mono">+9.6%</td>
+                        <td class="mono">+59%</td>
+                        <td class="mono text-green">$0.26</td>
+                        <td class="mono text-green">$0.22</td>
+                        <td class="mono text-red">-$0.04</td>
+                    </tr>
+                    <tr>
+                        <td><strong>VIDA</strong></td>
+                        <td class="mono">$2.86</td>
+                        <td class="mono">$3.64</td>
+                        <td class="mono">+27.3%</td>
+                        <td class="mono">+27%</td>
+                        <td class="mono text-green">$0.78</td>
+                        <td class="mono text-muted">$0.00</td>
+                        <td class="mono text-red">-$0.78</td>
+                    </tr>
+                    <tr style="background: rgba(110,118,129,0.08); font-weight: 600;">
+                        <td>TOTAL</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td class="mono text-green">$4.98</td>
+                        <td class="mono text-green">$0.35</td>
+                        <td class="mono text-red">-$4.63</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div style="padding: 12px 12px 16px; font-size: 12px; color: var(--text-muted);">
+                * "Potential" uses signal target price. Actual gains could be higher (HCWB went +303% past target) or lower.
+                PHGE bot actually beat the signal target ($0.68 exit &gt; $0.67 target).
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== RECOMMENDATIONS ====== -->
+    <div class="panel">
+        <div class="panel-header">
+            🔧 Recommendations
+        </div>
+        <div class="issue-list">
+            <div class="issue-item">
+                <div class="issue-icon" style="background: var(--red-bg); font-size: 18px;">1</div>
+                <div>
+                    <div class="issue-title text-red">Route Penny Stocks Away from Schwab (Critical)</div>
+                    <div class="issue-desc">
+                        5 of 7 orders were cancelled by Schwab's penny stock restrictions. Route stocks under $5 to
+                        Webull or Alpaca. Add broker routing rule: <code>if price &lt; $5.00 → skip Schwab</code>.
+                        This single change would have captured HCWB (+303%), NXXT (+41%), CODX (+29%), VIDA (+27%).
+                    </div>
+                </div>
+            </div>
+            <div class="issue-item">
+                <div class="issue-icon" style="background: var(--yellow-bg); font-size: 18px;">2</div>
+                <div>
+                    <div class="issue-title text-yellow">Parse "so far" / Commentary Signals as Watchlist</div>
+                    <div class="issue-desc">
+                        Messages like "SLXN 0.62-0.72. 0.72 must break" and "GCL 0.77-0.95 so far" contain valid
+                        entry-target ranges but are correctly not traded (commentary context). Consider adding them
+                        to a watchlist for manual review or auto-trade if price reconfirms.
+                    </div>
+                </div>
+            </div>
+            <div class="issue-item">
+                <div class="issue-icon" style="background: var(--blue-bg); font-size: 18px;">3</div>
+                <div>
+                    <div class="issue-title text-blue">Add Market-Order Fallback for STC Brackets</div>
+                    <div class="issue-desc">
+                        Schwab rejects limit STC orders on penny stocks with "oversold/overbought" error.
+                        After 3 limit failures, fall back to market STC for the stop-loss leg. This ensures
+                        positions always have exit protection.
+                    </div>
+                </div>
+            </div>
+            <div class="issue-item">
+                <div class="issue-icon" style="background: var(--blue-bg); font-size: 18px;">4</div>
+                <div>
+                    <div class="issue-title text-blue">Investigate Missing 13 Analyst Symbols</div>
+                    <div class="issue-desc">
+                        50% of the analyst's calls (MWC, EXYN, AIM, TANH, FCHL, ELPW, HYFT, GIPR, WOK, HIVE, FCUV,
+                        + duplicates) were never seen in the TEMP-BOOM channel. These may come from a different
+                        Discord channel, a private alert system, or a different time period. Verify if additional
+                        channels need to be monitored.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        BotifyTrades v10.2.2 &bull; TEMP OF BOOM Channel Analysis &bull; Generated 2026-05-20 &bull; Data source: bot_data.db (SQLite)
+    </div>
+
+</div>
+</body>
+</html>

@@ -17,20 +17,32 @@ KNOWLEDGE_BASE = {
 When you first access BotifyTrades, you'll be guided through a setup wizard to create your admin account with a username, email, and secure password.
 
 **Step 2: Configure Your Broker**
-Go to Settings and connect at least one broker:
-• **Alpaca** - Great for paper trading (testing)
-• **Webull** - Popular for options trading
-• **Interactive Brokers** - For professional traders
+Go to **Admin → Settings → Brokers** section and connect at least one broker:
+• **Schwab** - OAuth connection, click "Connect with Schwab"
+• **Webull** - Email/password login with DID
+• **Alpaca** - API key + secret (paper trading available)
+• **IBKR** - TWS/Gateway host, port, client ID
+• **Tastytrade** - Username + password or OAuth
+• **Robinhood** - Email + password + 2FA TOTP secret
 
 **Step 3: Add Discord Channels**
-Go to Channels page and add Discord channels to monitor:
-• **Execution Channels** - Bot will automatically execute trades
-• **Tracking Channels** - Bot will track signals without executing
+Go to **Trading → Channels** page and add Discord channels to monitor:
+• Click "Add Channel", paste the Discord Channel ID and give it a name
+• Toggle **Execute** (places real broker orders) and/or **Track** (P&L tracking only)
+• Assign a broker in the **Execution** column for each channel
 
-**Step 4: Configure Risk Management**
-Set your profit targets, stop losses, and position sizing in Settings or per-channel.
+**Step 4: Link Brokers to Channels**
+Go to **Trading → Execution** page to assign which broker(s) execute trades for each channel.
+• Select one or multiple brokers per channel (multi-broker execution supported)
 
-You're all set! The bot will now monitor your channels and execute/track trades automatically."""
+**Step 5: Configure Risk Management**
+Set profit targets, stop losses, and trailing stops in **Admin → Settings → Risk Management** (global defaults).
+Override per-channel in **Trading → Channels → click channel → Per-Channel Risk** settings.
+
+**Step 6: Configure Position Sizing**
+In each channel's settings, set position size %, max position $, or fixed default quantity.
+
+You're all set! The bot monitors your channels and executes/tracks trades automatically."""
     },
     
     "dashboard": {
@@ -60,20 +72,22 @@ Links to add Execution/Tracking channels, view Leaderboard, and access Settings.
     },
     
     "channels": {
-        "keywords": ["channel", "channels", "discord channel", "add channel", "execution", "tracking", "monitor", "configure channel", "channel settings", "channel features"],
+        "keywords": ["channel", "channels", "discord channel", "add channel", "execution", "tracking", "monitor", "configure channel", "channel settings", "channel features", "how many channels", "configured channels"],
         "title": "Channel Configuration & Settings",
-        "content": """Channels are Discord channels the bot monitors for trading signals. Found in Trading > Execution > Channel Management.
+        "content": """Channels are Discord channels the bot monitors for trading signals. Found in **Trading → Channels** page.
 
 **Two Types of Channels:**
 1. **Execution Channels** - Bot automatically places REAL orders with your broker
 2. **Tracking Channels** - Bot tracks signals for P&L without executing trades
 
 **Adding a Channel:**
-1. Get the Discord Channel ID (Right-click channel > Copy ID in Discord)
-2. Go to Trading > Execution > Channel Management
-3. Enter Channel ID and a friendly name
-4. Toggle "Execute" and/or "Track" modes
-5. Click Add Channel
+1. Enable Developer Mode in Discord (Settings → Advanced → Developer Mode)
+2. Right-click the Discord channel → Copy ID
+3. Go to **Trading → Channels** page in the bot dashboard
+4. Click **Add Channel**, paste the Channel ID and enter a friendly name
+5. Toggle **Execute** (real broker orders) and/or **Track** (P&L tracking only)
+6. Assign a broker in the Execution column
+7. Click Save
 
 **Channel Features:**
 - **Dual-Mode** - A channel can be both Execute AND Track simultaneously
@@ -1448,45 +1462,104 @@ def get_response(query: str) -> Dict:
             "topic": "greeting"
         }
     
-    # Check for event tracking commands
-    event_response = handle_event_commands(query)
-    if event_response:
-        return event_response
-    
-    # Check for format teaching/management commands
+    # Format teaching commands — explicit commands, always handle directly
     format_response = handle_format_commands(query)
     if format_response:
         return format_response
-    
-    topic_id, score = find_best_match(query)
-    
-    if topic_id and score >= 0.3:
-        topic = KNOWLEDGE_BASE[topic_id]
-        return {
-            "success": True,
-            "response": f"**{topic['title']}**\n\n{topic['content']}",
-            "topic": topic_id,
-            "confidence": round(score, 2)
-        }
-    
+
+    # Event commands (show events, show failures, etc.) — always use dedicated handlers
+    event_response = handle_event_commands(query)
+    if event_response:
+        return event_response
+
+    q_lower_pre = query.lower().strip()
+    _wants_channel_list = ('channel' in q_lower_pre and any(kw in q_lower_pre for kw in ['list', 'show', 'configured', 'how many', 'what are', 'which']))
+    if _wants_channel_list:
+        if not any(kw in q_lower_pre for kw in ['how do i', 'how to', 'what is a', 'explain', 'add channel']):
+            return _list_channels_from_db()
+
+    ai_available = is_ai_available()
+
+    if ai_available:
+        context_parts = []
+        sym = _extract_symbol(query)
+        q_lower = query.lower()
+
+        is_trade_question = sym and any(kw in q_lower for kw in [
+            'trade', 'what happened', 'position', 'pnl', 'p&l', 'profit', 'loss',
+            'buy', 'sell', 'entry', 'exit', 'fill', 'order', 'execute', 'status',
+            'close', 'open', 'held', 'stop', 'target', 'sl', 'why', 'fail',
+        ])
+        is_config_question = any(kw in q_lower for kw in [
+            'channel', 'setting', 'config', 'broker', 'risk', 'sizing', 'setup',
+            'how many', 'which', 'enable', 'disable', 'connect',
+        ])
+        is_issue_question = any(kw in q_lower for kw in [
+            'log', 'error', 'fail', 'issue', 'problem', 'not working', 'crash', 'bug',
+        ])
+
+        if is_trade_question:
+            result = analyze_trades(query)
+            if result.get('ai_powered') or result.get('topic') == 'trade_summary':
+                return result
+
+        analysis_type = "general"
+        if is_issue_question:
+            analysis_type = "log_analysis"
+
+        if sym:
+            trade_ctx = _get_trade_context_for_symbol(sym)
+            if trade_ctx:
+                context_parts.append(trade_ctx)
+
+        if is_config_question or not sym:
+            bot_status = _get_bot_status_context()
+            if bot_status:
+                context_parts.append(f"CURRENT BOT STATUS:\n{bot_status}")
+
+        if is_issue_question:
+            try:
+                log_lines = _get_log_context(count=100)
+                if sym and log_lines:
+                    symbol_lines = [l for l in log_lines.split('\n') if sym.upper() in l.upper()]
+                    if symbol_lines:
+                        context_parts.append(f"CONSOLE LOGS ({sym}):\n" + "\n".join(symbol_lines[-20:]))
+                elif log_lines:
+                    context_parts.append(f"RECENT CONSOLE LOGS:\n{log_lines}")
+            except Exception:
+                pass
+
+        full_context = "\n\n".join(context_parts) if context_parts else ""
+        ai_response = _call_ai(query, full_context, analysis_type)
+        if ai_response:
+            return {
+                "success": True,
+                "response": ai_response,
+                "topic": None,
+                "confidence": 0.9,
+                "ai_powered": True
+            }
+
+    # AI unavailable — fall back to keyword handlers and knowledge base
     query_lower_check = query.lower().strip()
+
     if is_trade_query(query_lower_check):
         return analyze_trades(query)
     elif is_log_query(query_lower_check):
         return analyze_logs(query)
     elif is_error_query(query_lower_check):
         return analyze_errors(query)
-    
-    ai_response = get_general_ai_response(query)
-    if ai_response:
+
+    topic_id, score = find_best_match(query)
+    if topic_id and score >= 0.3:
+        topic = KNOWLEDGE_BASE[topic_id]
         return {
             "success": True,
-            "response": ai_response,
-            "topic": None,
-            "confidence": 0.7,
-            "ai_powered": True
+            "response": f"**{topic['title']}**\n\n{topic['content']}",
+            "topic": topic_id,
+            "confidence": round(min(score, 1.0), 2)
         }
-    
+
     import random
     return {
         "success": True,
@@ -1939,15 +2012,41 @@ def handle_format_commands(query: str) -> Optional[Dict]:
     """
     query_lower = query.lower().strip()
     
-    # Scan channel command - auto-discover formats
+    # Analyze channel formats (new pipeline)
+    if query_lower.startswith('analyze channel ') or query_lower.startswith('analyze formats '):
+        channel_id = query.split()[-1].strip()
+        return _handle_analyze_channel(channel_id)
+
+    # Show format candidates
+    if query_lower.startswith('show candidates') or query_lower.startswith('format candidates'):
+        parts = query.split()
+        channel_id = parts[-1] if len(parts) > 2 and parts[-1].isdigit() else None
+        return _handle_show_candidates(channel_id)
+
+    # Approve format candidate
+    if query_lower.startswith('approve format #') or query_lower.startswith('approve format ') and query_lower.replace('approve format ', '').strip()[:1].isdigit():
+        cid = query_lower.replace('approve format #', '').replace('approve format ', '').strip()
+        return _handle_approve_candidate(cid)
+
+    if query_lower == 'approve all formats':
+        return _handle_approve_all_candidates()
+
+    # Reject format candidate
+    if query_lower.startswith('reject format #'):
+        parts = query_lower.replace('reject format #', '').strip().split(' ', 1)
+        cid = parts[0]
+        reason = parts[1] if len(parts) > 1 else ''
+        return _handle_reject_candidate(cid, reason)
+
+    # Scan channel command - legacy (still works)
     if query_lower.startswith('scan channel '):
         channel_id = query[13:].strip()
         return scan_channel_for_formats(channel_id)
-    
+
     # List scannable channels
     if query_lower in ['scan channels', 'list channels', 'show channels for scanning', 'which channels can i scan']:
         return list_scannable_channels()
-    
+
     # Teach format command
     if query_lower.startswith('teach this format:') or query_lower.startswith('teach format:'):
         signal_part = query.split(':', 1)[1].strip() if ':' in query else ''
@@ -2473,6 +2572,255 @@ def scan_channel_for_formats(channel_id: str) -> Dict:
             "response": f"**Error**\n\nCouldn't scan channel: {str(e)}",
             "topic": "format_discovery"
         }
+
+
+def _extract_channel_history(channel_id: str, limit: int = 1000) -> Dict:
+    """Extract channel history into DB via the running bot instance."""
+    try:
+        from .routes import _bot_instance
+        if not _bot_instance or not hasattr(_bot_instance, 'loop') or not _bot_instance.loop:
+            return {'success': False, 'error': 'Bot is not running. Start the bot first.'}
+
+        import asyncio
+        from src.services.format_learning_pipeline import async_extract_history_to_db
+
+        loop = _bot_instance.loop
+        if loop.is_closed():
+            return {'success': False, 'error': 'Bot event loop is closed.'}
+
+        future = asyncio.run_coroutine_threadsafe(
+            async_extract_history_to_db(_bot_instance, int(channel_id), limit),
+            loop
+        )
+        result = future.result(timeout=120)
+        return result
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def _handle_analyze_channel(channel_id: str) -> Dict:
+    """Trigger format analysis on a channel's buffered messages.
+    Auto-extracts history if not enough messages are buffered."""
+    try:
+        from . import database as db
+        msg_count = db.get_channel_message_count(channel_id)
+
+        if msg_count < 50:
+            extract_result = _extract_channel_history(channel_id, 1000)
+            if extract_result.get('success'):
+                msg_count = db.get_channel_message_count(channel_id)
+                print(f"[FORMAT_LEARN] Auto-extracted {extract_result.get('messages_saved', 0)} messages from {extract_result.get('channel_name', channel_id)}, total buffered: {msg_count}")
+            else:
+                if msg_count == 0:
+                    return {
+                        "success": True,
+                        "response": f"**Could Not Extract History**\n\n{extract_result.get('error', 'Unknown error')}\n\n"
+                                   f"Make sure:\n"
+                                   f"1. The channel `{channel_id}` is added in **Trading → Channels**\n"
+                                   f"2. The bot is running and connected to Discord\n"
+                                   f"3. The bot has access to read that channel",
+                        "topic": "format_learning"
+                    }
+
+        if msg_count == 0:
+            return {
+                "success": True,
+                "response": f"**No Messages Found**\n\nChannel `{channel_id}` has no messages. Make sure the channel is configured and the bot has access.",
+                "topic": "format_learning"
+            }
+
+        from src.services.format_learning_pipeline import analyze_channel_formats
+        result = analyze_channel_formats(channel_id)
+
+        if not result.get('success'):
+            return {"success": True, "response": f"**Analysis Failed**\n\n{result.get('error', 'Unknown error')}", "topic": "format_learning"}
+
+        from src.services.format_learning_pipeline import format_candidates_for_display
+        candidates_text = format_candidates_for_display(channel_id)
+
+        response = f"**Format Analysis Complete**\n\n"
+        response += f"Channel: **{result.get('channel_name', channel_id)}**\n"
+        response += f"Messages analyzed: {result.get('messages_analyzed', 0)}\n"
+        response += f"Heuristic patterns: {result.get('heuristic_patterns', 0)}\n"
+        response += f"AI patterns: {result.get('ai_patterns', 0)}\n"
+        response += f"Candidates saved: {result.get('candidates_saved', 0)}\n\n"
+        response += candidates_text
+
+        return {"success": True, "response": response, "topic": "format_learning", "ai_powered": True}
+
+    except Exception as e:
+        print(f"[CHAT] Analyze channel error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": True, "response": f"**Error**\n\n{str(e)}", "topic": "format_learning"}
+
+
+def _handle_show_candidates(channel_id: str = None) -> Dict:
+    """Show pending format candidates."""
+    try:
+        from . import database as db
+        if channel_id:
+            candidates = db.get_format_candidates(channel_id, status='pending')
+        else:
+            candidates = db.get_format_candidates(status='pending')
+
+        if not candidates:
+            return {
+                "success": True,
+                "response": "**No Pending Candidates**\n\nNo format candidates are awaiting approval.\n\nTo discover formats:\n1. `analyze channel <channel_id>` — Run AI analysis on buffered messages",
+                "topic": "format_learning"
+            }
+
+        from src.services.format_learning_pipeline import format_candidates_for_display
+        if channel_id:
+            text = format_candidates_for_display(channel_id)
+        else:
+            unique_channels = list(set(c['channel_id'] for c in candidates))
+            parts = []
+            for ch_id in unique_channels:
+                parts.append(format_candidates_for_display(ch_id))
+            text = "\n---\n".join(parts)
+
+        return {"success": True, "response": text, "topic": "format_learning"}
+
+    except Exception as e:
+        return {"success": True, "response": f"**Error**: {str(e)}", "topic": "format_learning"}
+
+
+def _handle_approve_candidate(candidate_id_str: str) -> Dict:
+    """Approve a specific format candidate."""
+    try:
+        from . import database as db
+        cid = int(candidate_id_str)
+        candidates = db.get_format_candidates()
+        candidate = next((c for c in candidates if c['id'] == cid), None)
+
+        if not candidate:
+            return {"success": True, "response": f"**Not Found**\n\nFormat candidate #{cid} not found.", "topic": "format_learning"}
+
+        if candidate['status'] != 'pending':
+            return {"success": True, "response": f"**Already {candidate['status'].title()}**\n\nCandidate #{cid} is already {candidate['status']}.", "topic": "format_learning"}
+
+        ok = db.approve_format_candidate(cid, approved_by='chatbot')
+        if not ok:
+            return {"success": True, "response": f"**Failed** to approve candidate #{cid}.", "topic": "format_learning"}
+
+        if candidate.get('regex_pattern'):
+            try:
+                pattern_id = db.add_learned_pattern(
+                    name=candidate['format_name'],
+                    pattern=candidate['regex_pattern'],
+                    example_text=candidate.get('example_messages', ''),
+                    action=candidate['action'],
+                    asset_type=candidate['asset_type'],
+                    description=f"Auto-discovered for channel {candidate['channel_id']}"
+                )
+                if pattern_id:
+                    db.approve_learned_pattern(pattern_id, 'format_learning')
+            except Exception as e:
+                print(f"[CHAT] Error registering learned pattern: {e}")
+
+        channel_id = candidate['channel_id']
+        try:
+            channel_info = db.get_channel_by_discord_id(channel_id)
+            if channel_info:
+                import json as _json
+                allowed = channel_info.get('allowed_signal_formats')
+                fmt_list = _json.loads(allowed) if allowed and isinstance(allowed, str) else (allowed or [])
+                if candidate['format_name'] not in fmt_list:
+                    fmt_list.append(candidate['format_name'])
+                    db.update_channel(channel_info['id'], allowed_signal_formats=_json.dumps(fmt_list))
+                    print(f"[CHAT] Updated allowed_signal_formats for channel {channel_id}: {fmt_list}")
+        except Exception as e:
+            print(f"[CHAT] Warning: approved format but failed to update channel allowed_signal_formats: {e}")
+
+        return {
+            "success": True,
+            "response": f"**Approved** ✓\n\nFormat **{candidate['format_name']}** (#{cid}) is now active for channel `{candidate['channel_id']}`.\n\nThe bot will now recognize this signal format and route matches through conditional orders.",
+            "topic": "format_learning"
+        }
+
+    except ValueError:
+        return {"success": True, "response": "**Invalid ID**. Use `approve format #123`.", "topic": "format_learning"}
+    except Exception as e:
+        return {"success": True, "response": f"**Error**: {str(e)}", "topic": "format_learning"}
+
+
+def _handle_approve_all_candidates() -> Dict:
+    """Approve all pending format candidates."""
+    try:
+        from . import database as db
+        candidates = db.get_format_candidates(status='pending')
+        if not candidates:
+            return {"success": True, "response": "**No Pending Candidates** to approve.", "topic": "format_learning"}
+
+        approved = 0
+        for c in candidates:
+            result = _handle_approve_candidate(str(c['id']))
+            if 'Approved' in result.get('response', ''):
+                approved += 1
+
+        return {
+            "success": True,
+            "response": f"**Approved {approved}/{len(candidates)} Formats** ✓\n\nAll approved formats are now active.",
+            "topic": "format_learning"
+        }
+    except Exception as e:
+        return {"success": True, "response": f"**Error**: {str(e)}", "topic": "format_learning"}
+
+
+def _handle_reject_candidate(candidate_id_str: str, reason: str = '') -> Dict:
+    """Reject a format candidate."""
+    try:
+        from . import database as db
+        cid = int(candidate_id_str)
+        ok = db.reject_format_candidate(cid, reason)
+        if ok:
+            return {"success": True, "response": f"**Rejected** ✗\n\nFormat candidate #{cid} has been rejected.{f' Reason: {reason}' if reason else ''}", "topic": "format_learning"}
+        return {"success": True, "response": f"**Not Found** — Candidate #{cid} not found.", "topic": "format_learning"}
+    except ValueError:
+        return {"success": True, "response": "**Invalid ID**. Use `reject format #123`.", "topic": "format_learning"}
+    except Exception as e:
+        return {"success": True, "response": f"**Error**: {str(e)}", "topic": "format_learning"}
+
+
+def _list_channels_from_db() -> Dict:
+    """List configured channels with real data from the database."""
+    try:
+        from . import database as db
+        channels = db.get_channels()
+        if not channels:
+            return {"success": True, "response": "**No Channels Configured**\n\nGo to **Trading → Channels** to add your first channel.", "topic": "channels"}
+
+        lines = [f"**Configured Channels ({len(channels)} total)**\n"]
+        for i, ch in enumerate(channels, 1):
+            name = ch.get('name', '?')
+            disc_id = ch.get('discord_channel_id', '')
+            exe = 'Execute' if ch.get('execute_enabled') else ''
+            trk = 'Track' if ch.get('track_enabled') else ''
+            mode = '+'.join(filter(None, [exe, trk])) or 'Disabled'
+            broker = ch.get('enabled_brokers', '') or ch.get('broker_override', '') or 'Not assigned'
+            risk = 'Risk ON' if ch.get('risk_management_enabled') else ''
+            pos_size = ch.get('position_size_pct', 0) or 0
+            default_qty = ch.get('default_quantity', '') or ''
+
+            line = f"{i}. **{name}** (ID: {disc_id}) [{mode}]"
+            if broker and broker != 'Not assigned':
+                line += f" — Broker: {broker}"
+            details = []
+            if pos_size:
+                details.append(f"Size: {pos_size}%")
+            if default_qty:
+                details.append(f"Qty: {default_qty}")
+            if risk:
+                details.append(risk)
+            if details:
+                line += f" | {', '.join(details)}"
+            lines.append(line)
+
+        return {"success": True, "response": "\n".join(lines), "topic": "channels_list"}
+    except Exception as e:
+        return {"success": True, "response": f"Error listing channels: {e}", "topic": "error"}
 
 
 def get_suggestions(partial_query: str) -> List[str]:
@@ -3074,11 +3422,52 @@ def test_signal_parsing(query: str) -> Dict:
         }
 
 
+_NON_TICKER_WORDS = {
+    'AI', 'IS', 'IT', 'TO', 'DO', 'IF', 'OR', 'ON', 'IN', 'UP', 'MY', 'NO', 'SO',
+    'AM', 'AN', 'AS', 'AT', 'BY', 'GO', 'HE', 'ME', 'OF', 'OK', 'WE', 'BE', 'US',
+    'HOW', 'THE', 'AND', 'FOR', 'NOT', 'ALL', 'CAN', 'HAS', 'HER', 'WAS', 'ONE',
+    'SET', 'GET', 'USE', 'ADD', 'NEW', 'BOT', 'APP', 'API', 'GUI', 'LOG', 'RUN',
+    'SHOW', 'HELP', 'GIVE', 'TELL', 'WHAT', 'WHEN', 'STEP', 'SETUP', 'WITH',
+    'RISK', 'STOP', 'LOSS', 'FROM', 'THIS', 'THAT', 'DOES', 'HAVE', 'WILL',
+    'BROKER', 'TRADE', 'ABOUT', 'WHICH', 'WHERE', 'THEIR', 'AFTER', 'FIRST',
+    'SCHWAB', 'WEBULL', 'ALPACA', 'IBKR', 'ROBINHOOD', 'TASTYTRADE',
+    'DISCORD', 'CHANNEL', 'SETTINGS', 'PAGE', 'CONFIGURE', 'CONNECT',
+    'POSITION', 'ORDER', 'ENTRY', 'EXIT', 'PRICE', 'MODE', 'SIZE',
+}
+
+def _extract_symbol(query: str) -> str:
+    """Extract a stock ticker symbol from a query if present."""
+    import re
+    words = re.findall(r'\b([A-Z]{1,5})\b', query.upper())
+    for w in words:
+        if w not in _NON_TICKER_WORDS and len(w) >= 2:
+            return w
+    return ""
+
+def _is_channel_query(query: str) -> bool:
+    """Check if query is about a channel's settings, not a stock trade."""
+    q = query.lower()
+    channel_kw = ["channel", "setting", "config", "sizing", "risk management",
+                  "broker connected", "which broker", "position size", "setup"]
+    return any(kw in q for kw in channel_kw)
+
 def is_trade_query(query: str) -> bool:
-    """Check if query is about trades."""
-    trade_keywords = ["trade", "position", "order", "buy", "sell", "bto", "stc",
-                      "filled", "executed", "profit", "loss", "p&l", "pnl"]
-    return any(kw in query for kw in trade_keywords)
+    """Check if query is about trades — only when a real ticker symbol is detected."""
+    if _is_channel_query(query):
+        return False
+    trade_keywords = ["trade history", "trade event", "what happened with", "show me trades",
+                      "show trades", "give me trades", "pnl for", "p&l for",
+                      "bto ", "stc ", "filled", "executed"]
+    q = query.lower()
+    if any(kw in q for kw in trade_keywords):
+        return True
+    sym = _extract_symbol(query)
+    if sym:
+        trade_context = ["history", "trade", "signal", "order", "position", "what happened",
+                         "show", "give", "pnl", "p&l", "event", "buy", "sell", "entry", "exit"]
+        if any(kw in q for kw in trade_context):
+            return True
+    return False
 
 
 def is_log_query(query: str) -> bool:
@@ -3096,36 +3485,248 @@ def is_error_query(query: str) -> bool:
 
 
 def analyze_trades(query: str) -> Dict:
-    """Analyze trades and provide AI-powered insights."""
+    """Analyze trades and provide AI-powered insights with real bot state."""
     try:
         from . import database as db
-        
+
+        symbol = _extract_symbol(query)
+
         recent_trades = []
+        symbol_trades = []
         try:
-            recent_trades = db.get_recent_filled_orders(limit=20) or []
-        except:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            if symbol:
+                cursor.execute("""
+                    SELECT direction, symbol, asset_type, strike, expiry, call_put,
+                           quantity, intended_price, executed_price, pnl, pnl_percent,
+                           broker, status, executed_at, closed_at, stop_loss_price, profit_target_price
+                    FROM trades WHERE UPPER(symbol) = ?
+                    ORDER BY created_at DESC LIMIT 20
+                """, (symbol.upper(),))
+                symbol_trades = [dict(r) for r in cursor.fetchall()]
+            cursor.execute("""
+                SELECT direction, symbol, asset_type, quantity, executed_price, pnl, pnl_percent,
+                       broker, status, executed_at
+                FROM trades ORDER BY created_at DESC LIMIT 15
+            """)
+            recent_trades = [dict(r) for r in cursor.fetchall()]
+        except Exception:
             pass
-        
+
         open_positions = []
         try:
             open_positions = db.get_open_positions() or []
-        except:
+        except Exception:
             pass
-        
-        log_context = _get_log_context()
-        
-        context = f"""Recent Trades (last 20):
-{_format_trades(recent_trades)}
 
-Open Positions:
-{_format_positions(open_positions)}
+        execution_lots_data = []
+        execution_closures = []
+        order_events_data = []
+        signals_data = []
+        if symbol:
+            try:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT el.symbol, el.asset_type, el.strike, el.expiry, el.call_put,
+                           el.original_qty, el.remaining_qty, el.fill_price, el.signal_price,
+                           el.broker, el.status, el.order_filled_at, el.slippage_pct
+                    FROM execution_lots el
+                    WHERE UPPER(el.symbol) = ?
+                    ORDER BY el.order_filled_at DESC LIMIT 15
+                """, (symbol.upper(),))
+                execution_lots_data = [dict(r) for r in cursor.fetchall()]
 
-Recent Console Activity:
-{log_context}
-"""
-        
-        ai_response = _call_openai(query, context, "trade_analysis")
-        
+                cursor.execute("""
+                    SELECT el.symbol, el.asset_type, el.strike, el.expiry, el.call_put,
+                           ec.closed_qty, el.fill_price as entry_price, ec.fill_price as exit_price,
+                           ec.pnl, ec.pnl_percent, ec.exit_source, ec.filled_at, ec.holding_days,
+                           ec.broker
+                    FROM execution_closures ec
+                    JOIN execution_lots el ON ec.execution_lot_id = el.id
+                    WHERE UPPER(el.symbol) = ?
+                    ORDER BY ec.filled_at DESC LIMIT 15
+                """, (symbol.upper(),))
+                execution_closures = [dict(r) for r in cursor.fetchall()]
+            except Exception:
+                pass
+
+            try:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT timestamp, event_type, symbol, broker, direction, asset_type,
+                           quantity, price, status, reason, channel_name, severity, source
+                    FROM order_events
+                    WHERE UPPER(symbol) = ?
+                    ORDER BY timestamp DESC LIMIT 20
+                """, (symbol.upper(),))
+                order_events_data = [dict(r) for r in cursor.fetchall()]
+            except Exception:
+                pass
+
+            try:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT direction, symbol, asset_type, strike, expiry, call_put,
+                           quantity, price, author_name, received_at, executed,
+                           execution_status, execution_reason
+                    FROM signals
+                    WHERE UPPER(symbol) = ?
+                    ORDER BY received_at DESC LIMIT 10
+                """, (symbol.upper(),))
+                signals_data = [dict(r) for r in cursor.fetchall()]
+            except Exception:
+                pass
+
+        conditional_orders = []
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            if symbol:
+                cursor.execute("SELECT * FROM conditional_orders WHERE UPPER(symbol) = ? ORDER BY created_at DESC LIMIT 10", (symbol.upper(),))
+            else:
+                cursor.execute("SELECT * FROM conditional_orders ORDER BY created_at DESC LIMIT 10")
+            conditional_orders = [dict(r) for r in cursor.fetchall()]
+        except Exception:
+            pass
+
+        cond_text = "None"
+        if conditional_orders:
+            cond_lines = []
+            for c in conditional_orders:
+                status = c.get('status', 'unknown')
+                sym = c.get('symbol', '?')
+                trigger = c.get('trigger_price', 0)
+                broker = c.get('broker', '?')
+                created = c.get('created_at', '')
+                sl = c.get('stop_loss', '')
+                targets = c.get('profit_targets', '')
+                cond_lines.append(f"  #{c.get('id','')} {sym} trigger=${trigger} broker={broker} status={status} SL={sl} targets={targets} created={created}")
+            cond_text = "\n".join(cond_lines)
+
+        log_context = ""
+        q_lower = query.lower()
+        needs_logs = any(kw in q_lower for kw in ['log', 'error', 'fail', 'why', 'issue', 'problem', 'what happened', 'not working'])
+        if needs_logs:
+            try:
+                log_lines = _get_log_context(count=150)
+                if symbol and log_lines:
+                    symbol_lines = [l for l in log_lines.split('\n') if symbol.upper() in l.upper()]
+                    if symbol_lines:
+                        log_context = "\n".join(symbol_lines[-20:])
+                else:
+                    log_context = log_lines
+            except Exception:
+                pass
+
+        symbol_trades_text = "None"
+        if symbol_trades:
+            lines = []
+            for t in symbol_trades:
+                d = t.get('direction', '?')
+                qty = t.get('quantity', 0)
+                ep = t.get('executed_price', 0)
+                ip = t.get('intended_price', 0)
+                pnl = t.get('pnl') or 0
+                pnl_pct = t.get('pnl_percent') or 0
+                brk = t.get('broker', '?')
+                st = t.get('status', '?')
+                at = (t.get('executed_at') or '')[:19]
+                sl = t.get('stop_loss_price', '')
+                pt = t.get('profit_target_price', '')
+                asset = t.get('asset_type', 'stock')
+                strike = t.get('strike', '')
+                expiry = t.get('expiry', '')
+                cp = t.get('call_put', '')
+                opt_info = f" {strike}{cp} {expiry}" if asset == 'option' and strike else ""
+                lines.append(f"  {at} | {d} {qty} {symbol}{opt_info} @ ${ep or ip} | broker={brk} status={st} P&L=${float(pnl):+.2f} ({float(pnl_pct):+.1f}%) SL={sl} PT={pt}")
+            symbol_trades_text = "\n".join(lines)
+
+        lots_text = "None"
+        if execution_lots_data:
+            lines = []
+            for lot in execution_lots_data:
+                asset = lot.get('asset_type', 'stock')
+                opt_info = ""
+                if asset == 'option':
+                    opt_info = f" ${lot.get('strike','')}{lot.get('call_put','')} {lot.get('expiry','')}"
+                slip = f" slippage={lot.get('slippage_pct',0):.1f}%" if lot.get('slippage_pct') else ""
+                lines.append(f"  {(lot.get('order_filled_at') or '')[:19]} | BUY {lot.get('original_qty',0)} {lot.get('symbol','?')}{opt_info} ({asset}) @ ${lot.get('fill_price',0):.2f} (signal=${lot.get('signal_price',0):.2f}) | broker={lot.get('broker','?')} status={lot.get('status','?')} remaining={lot.get('remaining_qty',0)}{slip}")
+            lots_text = "\n".join(lines)
+
+        closure_text = "None"
+        if execution_closures:
+            lines = []
+            for c in execution_closures:
+                asset = c.get('asset_type', 'stock')
+                opt_info = ""
+                if asset == 'option':
+                    opt_info = f" ${c.get('strike','')}{c.get('call_put','')} {c.get('expiry','')}"
+                hold = f" held={c.get('holding_days',0):.1f}d" if c.get('holding_days') else ""
+                lines.append(f"  {(c.get('filled_at') or '')[:19]} | EXIT {c.get('closed_qty',0)} {c.get('symbol','?')}{opt_info} ({asset}) entry=${float(c.get('entry_price') or 0):.2f} exit=${float(c.get('exit_price') or 0):.2f} | P&L=${float(c.get('pnl') or 0):+.2f} ({float(c.get('pnl_percent') or 0):+.1f}%) via {c.get('exit_source','?')} on {c.get('broker','?')}{hold}")
+            closure_text = "\n".join(lines)
+
+        events_text = "None"
+        if order_events_data:
+            lines = []
+            for ev in order_events_data:
+                ts = (ev.get('timestamp') or '')[:19]
+                etype = ev.get('event_type', '?')
+                sev = ev.get('severity', 'info')
+                d = ev.get('direction', '')
+                asset = ev.get('asset_type', '')
+                qty = ev.get('quantity', '')
+                price = ev.get('price', '')
+                brk = ev.get('broker', '')
+                status = ev.get('status', '')
+                reason = ev.get('reason', '')
+                ch = ev.get('channel_name', '')
+                price_str = f" @ ${price}" if price else ""
+                reason_str = f" | reason: {reason}" if reason else ""
+                lines.append(f"  {ts} [{sev.upper()}] {etype}: {d} {qty} {symbol} ({asset}){price_str} | {brk} {status}{reason_str} [ch: {ch}]")
+            events_text = "\n".join(lines)
+
+        signals_text = "None"
+        if signals_data:
+            lines = []
+            for sig in signals_data:
+                d = sig.get('direction', '?')
+                asset = sig.get('asset_type', 'stock')
+                qty = sig.get('quantity', '')
+                price = sig.get('price', 0) or 0
+                author = sig.get('author_name', '')
+                received = (sig.get('received_at') or '')[:19]
+                executed = 'Yes' if sig.get('executed') else 'No'
+                exec_status = sig.get('execution_status', '')
+                exec_reason = sig.get('execution_reason', '')
+                opt_info = ""
+                if asset == 'option':
+                    opt_info = f" ${sig.get('strike','')}{sig.get('call_put','')} {sig.get('expiry','')}"
+                reason_str = f" | {exec_reason}" if exec_reason else ""
+                lines.append(f"  {received} | {d} {qty} {symbol}{opt_info} ({asset}) @ ${price:.2f} | from: {author} | executed={executed} status={exec_status}{reason_str}")
+            signals_text = "\n".join(lines)
+
+        context_sections = [
+            f"COMPLETE TRADE DATA FOR: {symbol or 'ALL'}",
+            f"1. SIGNALS RECEIVED:\n{signals_text}",
+            f"2. ORDER EVENTS:\n{events_text}",
+            f"3. TRADE RECORDS:\n{symbol_trades_text}",
+            f"4. EXECUTION ENTRIES:\n{lots_text}",
+            f"5. EXECUTION EXITS:\n{closure_text}",
+            f"6. CONDITIONAL ORDERS:\n{cond_text}",
+        ]
+        if not symbol:
+            context_sections.append(f"7. RECENT TRADES (all symbols, last 15):\n{_format_trades(recent_trades)}")
+        context_sections.append(f"OPEN POSITIONS:\n{_format_positions(open_positions)}")
+        if log_context:
+            context_sections.append(f"CONSOLE LOGS:\n{log_context}")
+        context = "\n\n".join(context_sections)
+
+        ai_response = _call_ai(query, context, "trade_analysis")
+
         if ai_response:
             return {
                 "success": True,
@@ -3140,7 +3741,7 @@ Recent Console Activity:
                 "response": summary,
                 "topic": "trade_summary"
             }
-            
+
     except Exception as e:
         print(f"[CHAT] Trade analysis error: {e}")
         return {
@@ -3272,16 +3873,30 @@ def _format_trades(trades: List[Dict]) -> str:
     """Format trades for display."""
     if not trades:
         return "No recent trades found."
-    
+
     lines = []
-    for t in trades[:10]:
-        symbol = t.get('symbol', 'Unknown')
-        action = t.get('action', t.get('side', 'Unknown'))
+    for t in trades[:15]:
+        symbol = t.get('symbol', '?')
+        action = t.get('direction', t.get('action', t.get('side', '?')))
         qty = t.get('quantity', t.get('qty', 0))
-        price = t.get('price', t.get('fill_price', 0))
-        time = t.get('filled_at', t.get('created_at', ''))[:19] if t.get('filled_at') or t.get('created_at') else ''
-        lines.append(f"  {time} | {action} {qty} {symbol} @ ${price}")
-    
+        price = t.get('executed_price', t.get('price', t.get('fill_price', 0))) or 0
+        intended = t.get('intended_price', 0) or 0
+        pnl = t.get('pnl', 0) or 0
+        pnl_pct = t.get('pnl_percent', 0) or 0
+        broker = t.get('broker', '')
+        status = t.get('status', '')
+        asset = t.get('asset_type', 'stock')
+        time_str = (t.get('executed_at') or t.get('filled_at') or t.get('created_at') or '')[:19]
+        opt_info = ""
+        if asset == 'option':
+            strike = t.get('strike', '')
+            cp = t.get('call_put', '')
+            expiry = t.get('expiry', '')
+            if strike:
+                opt_info = f" ${strike}{cp} {expiry}"
+        price_str = f"${price:.2f}" if price else f"${intended:.2f}(intended)"
+        lines.append(f"  {time_str} | {action} {qty} {symbol}{opt_info} ({asset}) @ {price_str} | {broker} {status} P&L=${float(pnl):+.2f} ({float(pnl_pct):+.1f}%)")
+
     return "\n".join(lines) if lines else "No trades to display."
 
 
@@ -3289,14 +3904,20 @@ def _format_positions(positions: List[Dict]) -> str:
     """Format positions for display."""
     if not positions:
         return "No open positions."
-    
+
     lines = []
     for p in positions:
-        symbol = p.get('symbol', 'Unknown')
+        symbol = p.get('symbol', '?')
         qty = p.get('quantity', p.get('qty', 0))
-        pnl = p.get('unrealized_pnl', p.get('pnl', 0))
-        lines.append(f"  {symbol}: {qty} shares (P&L: ${pnl:.2f})")
-    
+        pnl = p.get('unrealized_pnl', p.get('pnl', 0)) or 0
+        asset = p.get('asset_type', 'stock')
+        broker = p.get('broker', '')
+        avg_cost = p.get('avg_cost', p.get('average_price', 0)) or 0
+        opt_info = ""
+        if asset == 'option':
+            opt_info = f" ${p.get('strike','')}{p.get('call_put','')} {p.get('expiry','')}"
+        lines.append(f"  {symbol}{opt_info} ({asset}): {qty} @ ${float(avg_cost):.2f} | P&L: ${float(pnl):+.2f} | {broker}")
+
     return "\n".join(lines) if lines else "No positions."
 
 
@@ -3336,7 +3957,7 @@ def _generate_trade_summary(trades: List[Dict], positions: List[Dict]) -> str:
     return "\n".join(parts)
 
 
-_chat_ai_cache = {'client': None, 'provider': None, 'is_anthropic': False, 'model': None}
+_chat_ai_cache = {'client': None, 'provider': None, 'is_anthropic': False, 'is_gemini': False, 'model': None}
 
 
 def _get_ai_client():
@@ -3370,28 +3991,49 @@ def _get_ai_client():
                 except Exception:
                     pass
             if not api_key:
+                try:
+                    from .config_service import load_config
+                    api_keys = load_config('api_keys') or {}
+                    api_key = api_keys.get('anthropic', '')
+                except Exception:
+                    pass
+            if not api_key:
                 print("[CHAT] Anthropic API key not configured")
                 return None, False, None
             client = Anthropic(api_key=api_key)
             model = "claude-haiku-4-5-20251001"
-            _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': True, 'model': model})
+            _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': True, 'is_gemini': False, 'model': model})
             print(f"[CHAT] Using Claude (model={model})")
             return client, True, model
 
-        if provider == 'replit_ai':
+        if provider == 'gemini':
             try:
-                from openai import OpenAI
+                from google import genai as _genai
             except ImportError:
+                print("[CHAT] Google GenAI SDK not installed (pip install google-genai)")
                 return None, False, None
-            ai_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
-            ai_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
-            if not ai_key:
-                print("[CHAT] Replit AI not available")
+            api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+            if not api_key:
+                try:
+                    from .broker_credentials_service import get_api_keys_extended
+                    keys = get_api_keys_extended()
+                    api_key = keys.get('gemini', '')
+                except Exception as e:
+                    print(f"[CHAT] Gemini key lookup via credentials service failed: {e}")
+            if not api_key:
+                try:
+                    from .config_service import load_config
+                    api_keys = load_config('api_keys') or {}
+                    api_key = api_keys.get('gemini', '')
+                except Exception:
+                    pass
+            if not api_key:
+                print("[CHAT] Gemini API key not configured (checked env, credentials service, config)")
                 return None, False, None
-            client = OpenAI(api_key=ai_key, base_url=ai_base)
-            model = "gpt-4o-mini"
-            _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': False, 'model': model})
-            print("[CHAT] Using Replit AI")
+            client = _genai.Client(api_key=api_key)
+            model = "gemini-3.5-flash"
+            _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': False, 'model': model, 'is_gemini': True})
+            print(f"[CHAT] Using Gemini (model={model})")
             return client, False, model
 
         # provider == 'openai'
@@ -3419,7 +4061,7 @@ def _get_ai_client():
             return None, False, None
         client = OpenAI(api_key=api_key)
         model = "gpt-4o-mini"
-        _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': False, 'model': model})
+        _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': False, 'is_gemini': False, 'model': model})
         print("[CHAT] Using OpenAI")
         return client, False, model
 
@@ -3590,11 +4232,168 @@ def analyze_uploaded_log(log_content: str, query: str = "") -> Dict:
         }
 
 
+def _get_trade_context_for_symbol(symbol: str) -> str:
+    """Build trade history + order events context for a symbol to pass to AI."""
+    parts = []
+    try:
+        from . import database as db
+        trades = db.get_trades(limit=200)
+        if trades:
+            symbol_trades = [t for t in trades if symbol.upper() in (t.get('symbol', '') or '').upper()]
+            if symbol_trades:
+                symbol_trades.sort(key=lambda t: t.get('executed_at') or t.get('filled_at') or t.get('created_at') or '0')
+                recent = symbol_trades[-10:]
+                lines = [f"TRADE HISTORY FOR {symbol} ({len(symbol_trades)} total, showing last {len(recent)}):"]
+                for t in recent:
+                    action = t.get('action', t.get('side', '?'))
+                    qty = t.get('quantity', t.get('qty', 0))
+                    price = t.get('price', t.get('fill_price', 0))
+                    status = t.get('status', '')
+                    broker = t.get('broker', '')
+                    ts = t.get('executed_at') or t.get('filled_at') or t.get('created_at') or ''
+                    channel = t.get('channel_name', '')
+                    pnl = t.get('pnl', '')
+                    pnl_pct = t.get('pnl_percent', t.get('pnl_pct', ''))
+                    line = f"  {ts} | {action} x{qty} @ ${price} | {status} | {broker}"
+                    if channel:
+                        line += f" | ch:{channel}"
+                    if pnl:
+                        line += f" | pnl:${pnl}"
+                    if pnl_pct:
+                        line += f" ({pnl_pct}%)"
+                    lines.append(line)
+                parts.append("\n".join(lines))
+    except Exception:
+        pass
+
+    try:
+        from . import database as db
+        import sqlite3
+        conn = sqlite3.connect(db.DATABASE_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT timestamp, event_type, symbol, broker, direction, price, quantity, reason, status FROM order_events WHERE UPPER(symbol)=? ORDER BY id DESC LIMIT 10", (symbol.upper(),))
+        events = cur.fetchall()
+        conn.close()
+        if events:
+            lines = [f"ORDER EVENTS FOR {symbol} (last {len(events)}):"]
+            for e in reversed(list(events)):
+                d = dict(e)
+                reason = (d.get('reason') or '')[:150]
+                line = f"  {d.get('timestamp','')} | {d.get('event_type','')} | {d.get('direction','')} x{d.get('quantity','')} @ ${d.get('price','')} | {d.get('broker','')}"
+                if reason:
+                    line += f" | {reason}"
+                lines.append(line)
+            parts.append("\n".join(lines))
+    except Exception:
+        pass
+
+    return "\n\n".join(parts)
+
+
+def _get_bot_status_context() -> str:
+    """Get real-time bot status — channels, brokers, settings — for AI context."""
+    try:
+        from . import database as db
+        lines = []
+
+        try:
+            channels = db.get_channels()
+            exec_channels = [c for c in channels if c.get('execute_enabled')]
+            track_channels = [c for c in channels if c.get('track_enabled')]
+            lines.append(f"Channels: {len(channels)} total, {len(exec_channels)} execution, {len(track_channels)} tracking")
+            for ch in channels:
+                name = ch.get('name', '?')
+                disc_id = ch.get('discord_channel_id', '')
+                exe = 'Execute' if ch.get('execute_enabled') else ''
+                trk = 'Track' if ch.get('track_enabled') else ''
+                mode = '+'.join(filter(None, [exe, trk])) or 'Disabled'
+                broker = ch.get('enabled_brokers', '') or ch.get('broker_override', '') or 'Not assigned'
+                pos_size = ch.get('position_size_pct', 0) or 0
+                default_qty = ch.get('default_quantity', '') or ''
+                risk_enabled = 'Yes' if ch.get('risk_management_enabled') else 'No'
+                pt1 = ch.get('profit_target_1_pct', 0) or 0
+                sl = ch.get('stop_loss_pct', 0) or 0
+                trail = ch.get('trailing_stop_pct', 0) or 0
+                trail_act = ch.get('trailing_activation_pct', 0) or 0
+                paper = 'Yes' if ch.get('paper_trade_enabled') else 'No'
+                entry_mode = ch.get('entry_order_mode', 'limit')
+                exit_mode = ch.get('exit_strategy_mode', 'hybrid')
+                cond_enabled = 'Yes' if ch.get('conditional_orders_enabled') else 'No'
+                max_pos = ch.get('max_positions', 0) or 0
+                lines.append(
+                    f"  - {name} (ID:{disc_id}) [{mode}] broker={broker} | "
+                    f"position_size={pos_size}% default_qty={default_qty} | "
+                    f"risk={risk_enabled} PT1={pt1}% SL={sl}% trail={trail}% trail_act={trail_act}% | "
+                    f"paper={paper} entry_mode={entry_mode} exit_mode={exit_mode} conditional={cond_enabled} max_positions={max_pos}"
+                )
+        except Exception:
+            pass
+
+        try:
+            from .config_service import get_ai_provider
+            lines.append(f"AI Provider: {get_ai_provider()}")
+        except Exception:
+            pass
+
+        try:
+            risk = db.get_global_risk_settings() if hasattr(db, 'get_global_risk_settings') else {}
+            if risk:
+                enabled = 'Enabled' if risk.get('enabled') else 'Disabled'
+                lines.append(f"Global Risk: {enabled}, PT={risk.get('profit_target_percent',0)}%, SL={risk.get('stop_loss_percent',0)}%, Trail={risk.get('trailing_stop_percent',0)}%")
+        except Exception:
+            pass
+
+        try:
+            settings = db.get_trading_settings() if hasattr(db, 'get_trading_settings') else {}
+            if settings:
+                lines.append(f"Max Position: ${settings.get('max_position_size',0)}, Default Qty: {settings.get('global_default_quantity',1)}")
+        except Exception:
+            pass
+
+        return "\n".join(lines) if lines else ""
+    except Exception:
+        return ""
+
+
+def _build_bot_knowledge_prompt() -> str:
+    """Build comprehensive system prompt from KB so AI knows everything about the bot."""
+    sections = []
+    priority_topics = [
+        'getting_started', 'brokers', 'channels', 'settings_discord',
+        'execution_mode', 'position_sizing', 'risk_management',
+        'profit_targets', 'stop_loss_settings', 'trailing_stop',
+        'conditional_orders', 'options_trading', 'broker_override',
+        'entry_order_mode', 'order_chasing', 'ticker_filter',
+        'notifications', 'troubleshooting', 'signal_formats',
+        'circuit_breaker', 'leave_runner', 'dynamic_sl_escalation',
+        'early_trailing_stop', 'giveback_guard', 'simulation',
+        'event_tracking', 'pnl_tracker', 'fifo_matching',
+    ]
+    for tid in priority_topics:
+        if tid in KNOWLEDGE_BASE:
+            t = KNOWLEDGE_BASE[tid]
+            sections.append(f"### {t['title']}\n{t['content']}")
+    return "\n\n".join(sections)
+
+_BOT_KNOWLEDGE = None
+
+def _get_bot_knowledge() -> str:
+    global _BOT_KNOWLEDGE
+    if _BOT_KNOWLEDGE is None:
+        _BOT_KNOWLEDGE = _build_bot_knowledge_prompt()
+    return _BOT_KNOWLEDGE
+
 _CHAT_SYSTEM_PROMPTS = {
-    "trade_analysis": """You are a trading assistant for BotifyTrades, a Discord trading bot.
-Analyze the provided trade data and console logs to answer the user's question.
-Be concise but helpful. If you see errors, explain what they mean.
-Format your response with markdown for readability.""",
+    "trade_analysis": """Answer ONLY about the specific symbol the user asked about. IGNORE all other symbols in the data.
+Use ONLY the real trade records and order events provided — never fabricate data.
+When explaining what happened with a trade:
+- Show the timeline: when it was placed, filled, closed, and why
+- Include entry price, exit price, P&L, broker, and any failure reasons from order events
+- If the trade failed, explain WHY from the order event reason field
+- If it was a conditional order, explain the trigger logic
+Do NOT show other symbols' data. Do NOT add warnings or troubleshooting unless asked.
+If no data exists for the symbol, say "No trade history found for [SYMBOL]" and stop.""",
 
     "log_analysis": """You are a technical assistant for BotifyTrades, a Discord trading bot.
 Analyze the console logs and activity to answer the user's question.
@@ -3625,34 +4424,54 @@ Analyze the signal text and determine:
 3. What fields can be extracted? (symbol, price, action, targets, stop loss)
 4. Is this a conditional order (break/trigger) or immediate entry?
 Be specific about what was parsed and what might be missing.""",
-
-    "general": """You are a helpful assistant for BotifyTrades, a Discord trading bot.
-BotifyTrades monitors Discord channels for trading signals and executes trades on Schwab, Webull, Alpaca, IBKR, and Tastytrade.
-
-Key features:
-- 140+ regex signal format parsers with AI fallback
-- AI-powered signal recognition (Claude/OpenAI) for unrecognized formats
-- Conditional order system (break/trigger entries)
-- Risk management: tiered PT, dynamic SL, trailing stops, OCO brackets
-- Per-channel broker assignment and risk settings
-- Format teaching: teach new signal formats via chat
-- Log analysis and error troubleshooting
-
-Answer helpfully and concisely. Use markdown formatting."""
 }
+
+def _get_system_prompt(analysis_type: str) -> str:
+    bot_kb = _get_bot_knowledge()
+    task_prompt = _CHAT_SYSTEM_PROMPTS.get(analysis_type, '')
+
+    return f"""You are a knowledgeable assistant for BotifyTrades, a multi-broker automated trading bot.
+You know EVERYTHING about this bot — setup, configuration, brokers, channels, risk management, and all features.
+BotifyTrades monitors Discord channels for trading signals and executes trades on Schwab, Webull, Alpaca, IBKR, Tastytrade, and Robinhood.
+
+{('TASK: ' + task_prompt) if task_prompt else ''}
+
+COMPLETE BOT DOCUMENTATION:
+{bot_kb}
+
+STRICT RULES:
+- ONLY answer what the user asked — nothing more
+- When asked about a specific symbol/ticker, ONLY show data for THAT symbol — ignore everything else
+- Do NOT add warnings, disclaimers, system errors, or unrelated information
+- Do NOT mention broker connection issues, encryption errors, or system status unless the user specifically asked
+- Do NOT hallucinate or guess — if data is not in the context provided, say "No data found" and stop
+- When showing trade data, use ONLY the real records provided — never fabricate trades
+- Keep responses SHORT and DIRECT — 2-5 sentences for simple questions, bullet points for complex ones
+- Use markdown formatting for readability
+- Do NOT suggest fixes or troubleshooting unless the user asked for help
+- Do NOT dump all data — be selective and relevant to the question
+- Do NOT make up features that don't exist in the documentation above"""
 
 
 def _call_ai(query: str, context: str, analysis_type: str) -> Optional[str]:
-    """Call AI provider (Claude or OpenAI) to analyze context and answer query."""
+    """Call AI provider (Claude, OpenAI, or Gemini) to analyze context and answer query."""
     try:
         client, is_anthropic, model = _get_ai_client()
         if not client:
             return None
 
-        system_prompt = _CHAT_SYSTEM_PROMPTS.get(analysis_type, _CHAT_SYSTEM_PROMPTS["general"])
+        system_prompt = _get_system_prompt(analysis_type)
         user_content = f"Context:\n{context}\n\nUser Question: {query}" if context else query
 
-        if is_anthropic:
+        is_gemini = _chat_ai_cache.get('is_gemini', False)
+
+        if is_gemini:
+            response = client.models.generate_content(
+                model=model,
+                contents=f"{system_prompt}\n\n{user_content}"
+            )
+            return response.text
+        elif is_anthropic:
             response = client.messages.create(
                 model=model,
                 max_tokens=600,
@@ -3673,7 +4492,10 @@ def _call_ai(query: str, context: str, analysis_type: str) -> Optional[str]:
             return response.choices[0].message.content
 
     except Exception as e:
-        print(f"[CHAT] AI call failed ({analysis_type}): {e}")
+        try:
+            print(f"[CHAT] AI call failed ({analysis_type}): {e}")
+        except UnicodeEncodeError:
+            print(f"[CHAT] AI call failed ({analysis_type}): {type(e).__name__}")
         return None
 
 

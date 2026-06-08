@@ -1207,7 +1207,7 @@ class SignalFormatRegistry:
             parse_temple_ts_options, parse_temple_options_exit,
             parse_temple_zz_breakout, parse_temple_zz_breakout_reverse,
             parse_temple_zz_ticker_price_now,
-            parse_temple_zz_range_entry, parse_temple_zz_sl_update_new,
+            parse_temple_zz_sl_update_new,
             parse_temple_zz_sl_update_move,
             parse_temple_zz_structured_entry, parse_temple_zz_plain_entry,
             parse_temple_zz_inline_role_entry,
@@ -1314,16 +1314,6 @@ class SignalFormatRegistry:
             pattern=r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s+now$',
             parser=parse_temple_zz_ticker_price_now,
             examples=["$EZGO 3.28 now", "ERNA 5.50 now"],
-            flags=re.IGNORECASE
-        )
-
-        self.register(
-            name="temple_zz_range_entry",
-            description="Temple ZZ range entry: SYMBOL LOW-HIGH (with optional trailing text)",
-            priority=77,
-            pattern=r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)',
-            parser=parse_temple_zz_range_entry,
-            examples=["CRE 2.80-3.91", "SDOT 0.36-0.50", "BLZE 5.70-6.47", "SPAI 3.80-4.15 already"],
             flags=re.IGNORECASE
         )
 
@@ -1643,11 +1633,11 @@ class SignalFormatRegistry:
 
         self.register(
             name="temple_rf_options",
-            description="Temple RF options: buy TICKER STRIKE+C at PRICE for EXPIRY",
+            description="Temple RF options: [buy] TICKER STRIKE[+]C at PRICE for EXPIRY",
             priority=78,
-            pattern=r'\bbuy\s+\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*\+\s*([CcPp])\s+at\s+\$?(\d+(?:\.\d+)?)\s+for\s+(\d{1,2}/\d{1,2}(?:/\d{2,4})?)',
+            pattern=r'(?:\bbuy\s+)?\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*\+?\s*([CcPp])\s+at\s+\$?(\d+(?:\.\d+)?)\s+for\s+(\d{1,2}/\d{1,2}(?:/\d{2,4})?)',
             parser=parse_temple_rf_options,
-            examples=["buy QQQ 530+C at 2.50 for 5/16", "buy SPY 580+P at 1.20 for 5/9"],
+            examples=["buy QQQ 530+C at 2.50 for 5/16", "buy SPY 580+P at 1.20 for 5/9", "buy UNH 397.5C at 8.5 for 6/12", "UNH 397.5C at 8.5 for 6/12"],
             flags=re.IGNORECASE
         )
 
@@ -2022,10 +2012,56 @@ class SignalFormatRegistry:
             ],
         )
 
+        # =====================================================================
+        # VIKING PLAYS FORMAT (penny stock entries/exits, all conditional)
+        # =====================================================================
+        from src.signals.viking_parser import (
+            parse_viking_entry, parse_viking_entry_role_first, parse_viking_exit,
+            VIKING_ENTRY_MAIN_RE, VIKING_ENTRY_ROLE_FIRST_RE, VIKING_EXIT_ALL_OUT_RE,
+        )
+
+        self.register(
+            name="viking_entry_role_first",
+            description="Viking entry with role first: @role $SYMBOL PRICE",
+            priority=85,
+            pattern=VIKING_ENTRY_ROLE_FIRST_RE.pattern,
+            parser=parse_viking_entry_role_first,
+            examples=["<@&1330929339134640179> $Anpa 6.5$", "<@&1330929339134640179> $Dxf .4450", "<@&1330915546513805463> $Anpa 6.50 short term swing"],
+            flags=re.IGNORECASE,
+        )
+
+        self.register(
+            name="viking_entry",
+            description="Viking stock entry: $SYMBOL [loto/starter/took] PRICE [@role]",
+            priority=86,
+            pattern=VIKING_ENTRY_MAIN_RE.pattern,
+            parser=parse_viking_entry,
+            examples=[
+                "$MWC 6.68 <@&1330929339134640179>",
+                "$Elpw loto .80 <@&1330929339134640179>",
+                "$UK starter 2.90$ <@&1330929339134640179>",
+                "$FCHL took some 2.60 <@&1330929339134640179>",
+                "$Mask took a starter 1.32$",
+                "$GLE .46$ entry",
+                "$Hkit adding again .66",
+            ],
+            flags=re.IGNORECASE,
+        )
+
+        self.register(
+            name="viking_exit",
+            description="Viking exit: SYMBOL all out / all out SYMBOL",
+            priority=87,
+            pattern=VIKING_EXIT_ALL_OUT_RE.pattern,
+            parser=parse_viking_exit,
+            examples=["Elpw all out banger", "$UK all out", "Mask all out", "all out $ELPW"],
+            flags=re.IGNORECASE,
+        )
+
     # =========================================================================
     # PARSER IMPLEMENTATIONS
     # =========================================================================
-    
+
     def _parse_jake_plusminus_simple(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Jake's +/- simple format: +5 IWM @ lim0.08"""
         sign, qty, symbol, price = match.groups()

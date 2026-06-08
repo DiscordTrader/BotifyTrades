@@ -420,7 +420,8 @@ def save_api_keys_extended(
     alpha_vantage: str = '',
     finnhub: str = '',
     license_key: str = '',
-    anthropic: str = ''
+    anthropic: str = '',
+    gemini: str = ''
 ):
     """Save all API keys including license"""
     save_config('api_keys_extended', {
@@ -428,7 +429,8 @@ def save_api_keys_extended(
         'alpha_vantage': alpha_vantage,
         'finnhub': finnhub,
         'license_key': license_key,
-        'anthropic': anthropic
+        'anthropic': anthropic,
+        'gemini': gemini
     })
 
 
@@ -439,7 +441,8 @@ def get_api_keys_extended() -> Dict[str, Any]:
         'alpha_vantage': '',
         'finnhub': '',
         'license_key': '',
-        'anthropic': ''
+        'anthropic': '',
+        'gemini': ''
     }
     stored = load_config('api_keys_extended')
     if stored:
