@@ -1676,9 +1676,9 @@ class SignalFormatRegistry:
             name="temple_tc_options_range",
             description="Toughcookie options: TICKER STRIKE C/P PRICE-PRICE C SL PRICE",
             priority=77,
-            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s+([CcPp])\s+[-–]?\s*(\.?\d+(?:\.\d+)?)\s*[-–]\s*\.?\d+(?:\.\d+)?\s*C\b',
+            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s+([CcPp])\s*[-–]?\s*(\.?\d+(?:\.\d+)?)\s*[-–]\s*\.?\d+(?:\.\d+)?\s*C?\b',
             parser=parse_temple_tc_options_range,
-            examples=["NVDA 210 C 0.35-.40 C  -  SL 0.30", "QQQ 720 C 0.30-.35 C SL 0.25 C", "QQQ 723 P 1.05 - .95 C"],
+            examples=["NVDA 210 C 0.35-.40 C  -  SL 0.30", "QQQ 720 C 0.30-.35 C SL 0.25 C", "QQQ 723 C0.40-0.45 SL 0.38 C"],
             flags=re.IGNORECASE
         )
 
