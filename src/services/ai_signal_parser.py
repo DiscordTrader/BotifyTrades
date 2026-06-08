@@ -125,10 +125,13 @@ class AISignalParser:
             self._initialized = False
             self._client = None
             self._anthropic_client = None
+            self._gemini_client = None
             self._provider = provider
 
         if self._initialized:
-            return self._client is not None or self._anthropic_client is not None
+            return (self._client is not None
+                    or self._anthropic_client is not None
+                    or (hasattr(self, '_gemini_client') and self._gemini_client is not None))
 
         self._initialized = True
 
