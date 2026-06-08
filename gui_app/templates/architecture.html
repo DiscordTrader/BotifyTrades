@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BotifyTrades - Automated Trading Platform</title>
+    <title>BotifyTrades - AI-Powered Trading Platform</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -674,9 +674,14 @@
                             <stop offset="0%" stop-color="#D0D8E8"/><stop offset="12%" stop-color="#FFFFFF"/><stop offset="30%" stop-color="#7DD3FC"/>
                             <stop offset="48%" stop-color="#FFFFFF"/><stop offset="65%" stop-color="#DDD6FE"/><stop offset="82%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#9CAFE0"/>
                         </linearGradient>
-                        <linearGradient id="btChart" x1="10" y1="40" x2="48" y2="14" gradientUnits="userSpaceOnUse">
-                            <stop offset="0%" stop-color="#00F5FF" stop-opacity="0"/><stop offset="25%" stop-color="#00F5FF" stop-opacity="0.18"/>
-                            <stop offset="60%" stop-color="#8B5CF6" stop-opacity="0.14"/><stop offset="100%" stop-color="#EC4899" stop-opacity="0"/>
+                        <linearGradient id="btNeural" x1="8" y1="8" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="#00F5FF" stop-opacity="0.4"/>
+                            <stop offset="50%" stop-color="#8B5CF6" stop-opacity="0.3"/>
+                            <stop offset="100%" stop-color="#EC4899" stop-opacity="0.2"/>
+                        </linearGradient>
+                        <linearGradient id="btPulse" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="#00F5FF" stop-opacity="0.6"/>
+                            <stop offset="100%" stop-color="#A855F7" stop-opacity="0.6"/>
                         </linearGradient>
                         <linearGradient id="btHL" x1="28" y1="4" x2="28" y2="30" gradientUnits="userSpaceOnUse">
                             <stop offset="0%" stop-color="white" stop-opacity="0.1"/><stop offset="100%" stop-color="white" stop-opacity="0"/>
@@ -693,22 +698,52 @@
                             <feFlood flood-color="#fff" flood-opacity="0.2" result="hClr"/><feComposite in="hClr" in2="hBlur" operator="in" result="hilite"/>
                             <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/><feMergeNode in="hilite"/></feMerge>
                         </filter>
+                        <filter id="btGlow" x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur stdDeviation="2" result="blur"/>
+                            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                        </filter>
                         <clipPath id="btCl"><rect x="4" y="4" width="48" height="48" rx="13.5"/></clipPath>
                     </defs>
+                    <!-- Outer glow ring -->
                     <rect x="0.5" y="0.5" width="55" height="55" rx="17" fill="none" stroke="url(#btBdr)" stroke-width="2.5" opacity="0.07"/>
                     <rect x="2" y="2" width="52" height="52" rx="15.5" fill="none" stroke="url(#btBdr)" stroke-width="2.2"/>
+                    <!-- Background -->
                     <rect x="4" y="4" width="48" height="48" rx="13.5" fill="url(#btFill)"/>
                     <rect x="4" y="4" width="48" height="48" rx="13.5" fill="none" stroke="white" stroke-width="0.5" opacity="0.05"/>
                     <rect x="4" y="4" width="48" height="48" rx="13.5" fill="url(#btHL)"/>
-                    <path d="M12 40 C18 38 23 32 28 27 C33 22 38 19 46 16" stroke="url(#btChart)" stroke-width="1.5" stroke-linecap="round" fill="none" clip-path="url(#btCl)"/>
+                    <!-- Neural network nodes & connections (AI brain) -->
+                    <g clip-path="url(#btCl)" opacity="0.35">
+                        <!-- Neural connections -->
+                        <line x1="12" y1="14" x2="22" y2="24" stroke="url(#btNeural)" stroke-width="0.8"><animate attributeName="opacity" values="0.2;0.6;0.2" dur="3s" repeatCount="indefinite"/></line>
+                        <line x1="12" y1="14" x2="28" y2="18" stroke="url(#btNeural)" stroke-width="0.6"><animate attributeName="opacity" values="0.3;0.7;0.3" dur="4s" repeatCount="indefinite"/></line>
+                        <line x1="22" y1="24" x2="36" y2="20" stroke="url(#btNeural)" stroke-width="0.7"><animate attributeName="opacity" values="0.2;0.5;0.2" dur="3.5s" repeatCount="indefinite"/></line>
+                        <line x1="28" y1="18" x2="36" y2="20" stroke="url(#btNeural)" stroke-width="0.6"><animate attributeName="opacity" values="0.4;0.8;0.4" dur="2.5s" repeatCount="indefinite"/></line>
+                        <line x1="36" y1="20" x2="46" y2="14" stroke="url(#btNeural)" stroke-width="0.7"><animate attributeName="opacity" values="0.2;0.6;0.2" dur="3s" repeatCount="indefinite"/></line>
+                        <line x1="22" y1="24" x2="18" y2="38" stroke="url(#btNeural)" stroke-width="0.6"><animate attributeName="opacity" values="0.3;0.5;0.3" dur="4s" repeatCount="indefinite"/></line>
+                        <line x1="36" y1="20" x2="40" y2="36" stroke="url(#btNeural)" stroke-width="0.6"><animate attributeName="opacity" values="0.2;0.7;0.2" dur="3.2s" repeatCount="indefinite"/></line>
+                        <line x1="18" y1="38" x2="40" y2="36" stroke="url(#btNeural)" stroke-width="0.7"><animate attributeName="opacity" values="0.3;0.6;0.3" dur="3.8s" repeatCount="indefinite"/></line>
+                        <line x1="28" y1="18" x2="30" y2="42" stroke="url(#btNeural)" stroke-width="0.5"><animate attributeName="opacity" values="0.2;0.4;0.2" dur="4.5s" repeatCount="indefinite"/></line>
+                        <!-- Neural nodes -->
+                        <circle cx="12" cy="14" r="2" fill="url(#btPulse)" filter="url(#btGlow)"><animate attributeName="r" values="1.5;2.5;1.5" dur="3s" repeatCount="indefinite"/></circle>
+                        <circle cx="28" cy="18" r="1.8" fill="url(#btPulse)" filter="url(#btGlow)"><animate attributeName="r" values="1.3;2.3;1.3" dur="2.5s" repeatCount="indefinite"/></circle>
+                        <circle cx="46" cy="14" r="1.8" fill="url(#btPulse)" filter="url(#btGlow)"><animate attributeName="r" values="1.5;2.2;1.5" dur="3.5s" repeatCount="indefinite"/></circle>
+                        <circle cx="22" cy="24" r="2.2" fill="url(#btPulse)" filter="url(#btGlow)"><animate attributeName="r" values="1.8;2.8;1.8" dur="2.8s" repeatCount="indefinite"/></circle>
+                        <circle cx="36" cy="20" r="2" fill="url(#btPulse)" filter="url(#btGlow)"><animate attributeName="r" values="1.6;2.6;1.6" dur="3.2s" repeatCount="indefinite"/></circle>
+                        <circle cx="18" cy="38" r="1.6" fill="url(#btPulse)" filter="url(#btGlow)"><animate attributeName="r" values="1.2;2;1.2" dur="4s" repeatCount="indefinite"/></circle>
+                        <circle cx="40" cy="36" r="1.6" fill="url(#btPulse)" filter="url(#btGlow)"><animate attributeName="r" values="1.3;2.1;1.3" dur="3.6s" repeatCount="indefinite"/></circle>
+                        <circle cx="30" cy="42" r="1.5" fill="url(#btPulse)" filter="url(#btGlow)"><animate attributeName="r" values="1;1.8;1" dur="4.2s" repeatCount="indefinite"/></circle>
+                    </g>
+                    <!-- BT text with emboss -->
                     <text x="28" y="37" text-anchor="middle" font-family="'Sora','Segoe UI',system-ui,sans-serif" font-weight="900" font-size="26" letter-spacing="-1" fill="url(#btMetal)" filter="url(#btEmb)">BT</text>
+                    <!-- Shimmer overlay -->
                     <rect x="4" y="4" width="48" height="48" rx="13.5" fill="url(#btShm)" clip-path="url(#btCl)"/>
-                    <circle cx="48" cy="8.5" r="1.8" fill="url(#btBdr)" opacity="0.45"><animate attributeName="opacity" values="0.25;0.55;0.25" dur="3s" repeatCount="indefinite"/></circle>
+                    <!-- AI indicator dot (pulsing) -->
+                    <circle cx="48" cy="8.5" r="2.2" fill="url(#btBdr)" opacity="0.55"><animate attributeName="opacity" values="0.3;0.7;0.3" dur="2s" repeatCount="indefinite"/><animate attributeName="r" values="1.8;2.5;1.8" dur="2s" repeatCount="indefinite"/></circle>
                 </svg>
             </div>
             <div class="brand-text">
                 <span class="brand-name">BotifyTrades</span>
-                <span class="brand-tagline">Automated Trading</span>
+                <span class="brand-tagline">AI-Powered Trading</span>
             </div>
         </a>
         <div class="nav-links">
@@ -729,16 +764,16 @@
 
         <div class="status-pill">
             <span class="status-dot"></span>
-            <span class="status-text">Automated Multi-Broker Execution Platform</span>
+            <span class="status-text">Next-Gen Signal Intelligence</span>
         </div>
 
         <h1 class="hero-title">
-            <span class="line1">Execute Smarter.</span>
-            <span class="line2">Trade Faster.</span>
+            <span class="line1">Decode Any Signal.</span>
+            <span class="line2">Arm Every Broker.</span>
         </h1>
 
         <p class="hero-subtitle">
-            From Discord signal to broker execution in under one second. Manage 7 brokers, intelligent risk brackets, and real-time position monitoring from a single dashboard.
+            130+ formats parsed in milliseconds. AI recognizes what regex can't. Five brokers execute before you blink.
         </p>
 
         <div class="hero-cta">
@@ -756,7 +791,8 @@
 
         <div class="trust-bar">
             <div class="trust-item"><div class="trust-value">5</div><div class="trust-label">Brokers Supported</div></div>
-            <div class="trust-item"><div class="trust-value">109+</div><div class="trust-label">Signal Formats</div></div>
+            <div class="trust-item"><div class="trust-value">130+</div><div class="trust-label">Signal Formats</div></div>
+            <div class="trust-item"><div class="trust-value">3</div><div class="trust-label">AI Providers</div></div>
             <div class="trust-item"><div class="trust-value">&lt;1s</div><div class="trust-label">Execution Latency</div></div>
             <div class="trust-item"><div class="trust-value">24/7</div><div class="trust-label">Position Monitoring</div></div>
             <div class="trust-item"><div class="trust-value">4-Tier</div><div class="trust-label">Risk Brackets</div></div>
@@ -776,13 +812,13 @@
                 <div class="step-number">1</div>
                 <div class="step-icon">📡</div>
                 <div class="step-title">Signal Detection</div>
-                <div class="step-desc">Monitors Discord and Telegram channels in real-time. Captures entries, exits, trims, stop-loss updates, and conditional breakout alerts.</div>
+                <div class="step-desc">Monitors Discord and Telegram channels in real-time. AI captures entries, exits, trims, stop-loss updates, and conditional breakout alerts across any trader format.</div>
             </div>
             <div class="step-card">
                 <div class="step-number">2</div>
                 <div class="step-icon">🧠</div>
-                <div class="step-title">Smart Parsing</div>
-                <div class="step-desc">AI-powered format registry matches 109+ signal patterns. Extracts ticker, price, action, strike, expiry, and risk parameters automatically.</div>
+                <div class="step-title">AI Signal Recognition</div>
+                <div class="step-desc">130+ regex patterns with AI fallback (Claude, Gemini, OpenAI). Unrecognized formats are auto-analyzed by AI in real-time. Auto-learning pipeline discovers new signal patterns and adapts with user approval.</div>
             </div>
             <div class="step-card">
                 <div class="step-number">3</div>
@@ -817,9 +853,9 @@
 
             <div class="feature-card animate-on-scroll" style="--card-glow: rgba(139,92,246,0.15);">
                 <div class="feature-icon violet">🧠</div>
-                <h3 class="feature-title">Signal Intelligence Engine</h3>
-                <p class="feature-desc">109+ signal format parsers detect entries, exits, trims, SL updates, and conditional orders. Pattern learning auto-adapts to new analyst formats over time.</p>
-                <div class="feature-tags"><span class="feature-tag">109+ Formats</span><span class="feature-tag">Auto-Learning</span><span class="feature-tag">Multi-Channel</span></div>
+                <h3 class="feature-title">AI Signal Intelligence</h3>
+                <p class="feature-desc">130+ regex parsers + multi-provider AI fallback (Claude, Gemini, OpenAI). Unrecognized signals are analyzed by AI in real-time. Auto-learning pipeline discovers new formats from channel history and adapts with user approval.</p>
+                <div class="feature-tags"><span class="feature-tag">130+ Formats</span><span class="feature-tag">3 AI Providers</span><span class="feature-tag">Auto-Learn</span><span class="feature-tag">AI Fallback</span></div>
             </div>
 
             <div class="feature-card animate-on-scroll" style="--card-glow: rgba(15,240,179,0.15);">
@@ -1136,7 +1172,7 @@
         <div class="footer-main">
             <div class="footer-brand">
                 <div class="footer-brand-name">BotifyTrades</div>
-                <p class="footer-brand-desc">Automated multi-broker trade execution platform. From signal detection to order placement in under one second.</p>
+                <p class="footer-brand-desc">AI-powered multi-broker trade execution platform. From signal recognition to order placement in under one second.</p>
                 <div style="display: flex; gap: 12px; margin-top: 1rem;">
                     <a href="https://x.com/BotifyTrades" target="_blank" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); transition: all 0.3s;" title="Follow @BotifyTrades on X">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>

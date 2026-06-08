@@ -1207,7 +1207,7 @@ class SignalFormatRegistry:
             parse_temple_ts_options, parse_temple_options_exit,
             parse_temple_zz_breakout, parse_temple_zz_breakout_reverse,
             parse_temple_zz_ticker_price_now,
-            parse_temple_zz_range_entry, parse_temple_zz_sl_update_new,
+            parse_temple_zz_sl_update_new,
             parse_temple_zz_sl_update_move,
             parse_temple_zz_structured_entry, parse_temple_zz_plain_entry,
             parse_temple_zz_inline_role_entry,
@@ -1314,16 +1314,6 @@ class SignalFormatRegistry:
             pattern=r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s+now$',
             parser=parse_temple_zz_ticker_price_now,
             examples=["$EZGO 3.28 now", "ERNA 5.50 now"],
-            flags=re.IGNORECASE
-        )
-
-        self.register(
-            name="temple_zz_range_entry",
-            description="Temple ZZ range entry: SYMBOL LOW-HIGH (with optional trailing text)",
-            priority=77,
-            pattern=r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)',
-            parser=parse_temple_zz_range_entry,
-            examples=["CRE 2.80-3.91", "SDOT 0.36-0.50", "BLZE 5.70-6.47", "SPAI 3.80-4.15 already"],
             flags=re.IGNORECASE
         )
 
