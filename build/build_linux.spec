@@ -11,6 +11,11 @@ block_cipher = None
 discord_imports = collect_submodules('discord')
 webull_imports = collect_submodules('webull')
 openai_imports = collect_submodules('openai')
+anthropic_imports = collect_submodules('anthropic')
+try:
+    genai_imports = collect_submodules('google.genai')
+except Exception:
+    genai_imports = []
 ta_imports = collect_submodules('ta')
 crypto_imports = collect_submodules('cryptography')
 
@@ -49,7 +54,7 @@ a = Analysis(
         ('src/brokers', 'src/brokers'),
         ('src/data_providers', 'src/data_providers'),
     ],
-    hiddenimports=discord_imports + webull_imports + openai_imports + ta_imports + crypto_imports + [
+    hiddenimports=discord_imports + webull_imports + openai_imports + anthropic_imports + genai_imports + ta_imports + crypto_imports + [
         # Market Data
         'yfinance',
         'pandas',

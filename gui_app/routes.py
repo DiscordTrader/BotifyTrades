@@ -9786,6 +9786,17 @@ def register_routes(app):
                     client, is_anthropic, m = _get_ai_client()
                     connected = client is not None
                     model = m or ''
+                    if not connected:
+                        if provider == 'gemini':
+                            try:
+                                from google import genai
+                            except ImportError:
+                                error_msg = 'google-genai package not installed — update required'
+                        elif provider == 'claude':
+                            try:
+                                import anthropic
+                            except ImportError:
+                                error_msg = 'anthropic package not installed — update required'
                 except Exception as e:
                     error_msg = str(e)
 

@@ -12,6 +12,12 @@ block_cipher = None
 discord_imports = collect_submodules('discord')
 webull_imports = collect_submodules('webull')
 openai_imports = collect_submodules('openai')
+anthropic_imports = collect_submodules('anthropic')
+try:
+    genai_imports = collect_submodules('google.genai')
+except Exception:
+    genai_imports = []
+    print("[BUILD] Warning: google-genai not installed, skipping submodule collection")
 ta_imports = collect_submodules('ta')
 crypto_imports = collect_submodules('cryptography')
 
@@ -73,7 +79,7 @@ a = Analysis(
         # Include GUI app (Flask web control panel)
         (os.path.join(PROJECT_ROOT, 'gui_app'), 'gui_app'),
     ] + pyarmor_runtime_data,
-    hiddenimports=discord_imports + webull_imports + openai_imports + ta_imports + crypto_imports + tastytrade_imports + upstox_imports + dhanhq_imports + kiteconnect_imports + pyarmor_hidden + [
+    hiddenimports=discord_imports + webull_imports + openai_imports + anthropic_imports + genai_imports + ta_imports + crypto_imports + tastytrade_imports + upstox_imports + dhanhq_imports + kiteconnect_imports + pyarmor_hidden + [
         # Market Data
         'yfinance',
         'pandas',
