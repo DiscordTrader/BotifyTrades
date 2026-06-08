@@ -2012,10 +2012,17 @@ def handle_format_commands(query: str) -> Optional[Dict]:
     """
     query_lower = query.lower().strip()
     
-    # Analyze channel formats (new pipeline)
-    if query_lower.startswith('analyze channel ') or query_lower.startswith('analyze formats '):
+    # Redirect Discord bot commands to chatbot equivalents
+    if query_lower.startswith('!extractraw ') or query_lower.startswith('!extract '):
         channel_id = query.split()[-1].strip()
-        return _handle_analyze_channel(channel_id)
+        if channel_id.isdigit():
+            return _handle_analyze_channel(channel_id)
+
+    # Analyze channel formats (new pipeline)
+    if query_lower.startswith('analyze channel ') or query_lower.startswith('analyze formats ') or query_lower.startswith('analyze '):
+        channel_id = query.split()[-1].strip()
+        if channel_id.isdigit():
+            return _handle_analyze_channel(channel_id)
 
     # Show format candidates
     if query_lower.startswith('show candidates') or query_lower.startswith('format candidates'):
@@ -2039,8 +2046,8 @@ def handle_format_commands(query: str) -> Optional[Dict]:
         return _handle_reject_candidate(cid, reason)
 
     # Scan channel command - legacy (still works)
-    if query_lower.startswith('scan channel '):
-        channel_id = query[13:].strip()
+    if query_lower.startswith('scan channel ') or (query_lower.startswith('scan ') and query.split()[-1].strip().isdigit()):
+        channel_id = query.split()[-1].strip()
         return scan_channel_for_formats(channel_id)
 
     # List scannable channels
