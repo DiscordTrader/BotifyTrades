@@ -2712,11 +2712,26 @@ def _handle_approve_candidate(candidate_id_str: str) -> Dict:
         if not ok:
             return {"success": True, "response": f"**Failed** to approve candidate #{cid}.", "topic": "format_learning"}
 
-        if candidate.get('regex_pattern'):
+        regex = candidate.get('regex_pattern') or ''
+        if not regex:
+            _HEURISTIC_REGEX = {
+                'heuristic_option_bto': r'\$?([A-Z]{1,5})\s+\$?(\d+(?:\.\d+)?)\s*([CcPp])\s+(?:@\s*)?\$?(\.?\d+(?:\.\d+)?)',
+                'heuristic_option_stc': r'(?:out|sold|STC|cut|trim|exit)\s+\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])',
+                'heuristic_bto_keyword': r'(?:BTO|BUY|BUYING|LONG)\s+\$?([A-Z]{1,5})\s+\$?(\d+(?:\.\d+)?)\s*([CcPp])\s+(?:at\s+)?\$?(\.?\d+(?:\.\d+)?)',
+                'heuristic_stc_keyword': r'(?:STC|SELL|SOLD|OUT|EXIT|TRIM|CLOSING|CUT)\s+\$?([A-Z]{1,5})',
+                'heuristic_dollar_ticker': r'\$([A-Z]{1,5})\s+(?:.*?)(\d+(?:\.\d+)?)\s*([CcPp])\s+(?:.*?)(\.?\d+(?:\.\d+)?)',
+                'heuristic_emoji_entry': r'[✅▶🟢]\s*\$?([A-Z]{1,5})\s+\$?(\d+(?:\.\d+)?)',
+                'heuristic_emoji_exit': r'[❌⛔🔴]\s*\$?([A-Z]{1,5})',
+            }
+            regex = _HEURISTIC_REGEX.get(candidate['format_name'], '')
+
+        if regex:
             try:
+                import re as _re
+                _re.compile(regex)
                 pattern_id = db.add_learned_pattern(
                     name=candidate['format_name'],
-                    pattern=candidate['regex_pattern'],
+                    pattern=regex,
                     example_text=candidate.get('example_messages', ''),
                     action=candidate['action'],
                     asset_type=candidate['asset_type'],
@@ -2724,6 +2739,7 @@ def _handle_approve_candidate(candidate_id_str: str) -> Dict:
                 )
                 if pattern_id:
                     db.approve_learned_pattern(pattern_id, 'format_learning')
+                    print(f"[CHAT] Registered learned pattern: {candidate['format_name']} -> {regex[:60]}")
             except Exception as e:
                 print(f"[CHAT] Error registering learned pattern: {e}")
 
@@ -2740,6 +2756,14 @@ def _handle_approve_candidate(candidate_id_str: str) -> Dict:
                     print(f"[CHAT] Updated allowed_signal_formats for channel {channel_id}: {fmt_list}")
         except Exception as e:
             print(f"[CHAT] Warning: approved format but failed to update channel allowed_signal_formats: {e}")
+
+        try:
+            from src.services.signal_format_registry import SignalFormatRegistry
+            registry = SignalFormatRegistry()
+            loaded = registry.reload_learned_patterns()
+            print(f"[CHAT] Hot-reloaded learned patterns: {loaded} active")
+        except Exception as e:
+            print(f"[CHAT] Warning: could not hot-reload patterns: {e}")
 
         return {
             "success": True,

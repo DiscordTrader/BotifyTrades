@@ -1988,6 +1988,11 @@ class SignalFormatRegistry:
         except Exception as e:
             print(f"[FORMAT REGISTRY] Warning: Could not load learned patterns: {e}")
 
+    def reload_learned_patterns(self) -> int:
+        """Hot-reload learned patterns from DB without restarting. Returns count loaded."""
+        self._load_learned_patterns()
+        return len([n for n in self._formats if n.startswith('learned_')])
+
         # =====================================================================
         # ABTRADES FORMAT (bold-wrapped options entries, trims, exits)
         # =====================================================================
