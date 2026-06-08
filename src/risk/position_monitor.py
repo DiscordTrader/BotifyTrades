@@ -2891,7 +2891,7 @@ class RiskManager:
         
         _force_webull = getattr(self, '_force_webull_rest_refresh', False)
         _force_global = getattr(self, '_force_rest_refresh', False)
-        _hub_max_age = 0 if (_force_webull or _force_global) else 20
+        _hub_max_age = 0 if (_force_webull or _force_global) else 45
         if _force_webull:
             self._force_webull_rest_refresh = False
 
@@ -2926,11 +2926,45 @@ class RiskManager:
         try:
             from src.services.webull_data_hub import get_webull_data_hub
             hub = get_webull_data_hub()
+            _detailed_positions = hub.get_positions_detailed(max_age_seconds=_hub_max_age)
+            if _detailed_positions is not None and len(_detailed_positions) > 0:
+                fetched = []
+                for pos in _detailed_positions:
+                    position_qty = float(pos.get('quantity', 0))
+                    if position_qty <= 0:
+                        continue
+                    symbol = pos.get('symbol', '')
+                    is_option = pos.get('asset', 'stock') == 'option'
+                    if not is_option:
+                        current_price = float(pos.get('current_price', 0))
+                        snap_data = {
+                            'broker': 'Webull', 'asset': 'stock', 'symbol': symbol,
+                            'quantity': position_qty, 'avg_cost': float(pos.get('avg_cost', 0)),
+                            'current_price': current_price,
+                            'unrealized_pl': float(pos.get('unrealized_pl', 0)),
+                            'ticker_id': pos.get('ticker_id', 0)
+                        }
+                        fetched.append(self._to_snapshot(snap_data))
+                    else:
+                        snap_data = {
+                            'broker': 'Webull', 'asset': 'option', 'symbol': symbol,
+                            'quantity': position_qty, 'avg_cost': float(pos.get('avg_cost', 0)),
+                            'current_price': float(pos.get('current_price', 0)),
+                            'unrealized_pl': float(pos.get('unrealized_pl', 0)),
+                            'option_id': pos.get('option_id', 0),
+                            'strike': float(pos.get('strike', 0)),
+                            'expiry': pos.get('expiry', ''),
+                            'direction': pos.get('direction', ''),
+                            'ticker_id': pos.get('ticker_id', 0)
+                        }
+                        fetched.append(self._to_snapshot(snap_data))
+                if fetched:
+                    self._last_webull_positions = fetched
+                    self._webull_cache_ts = _time.time()
+                    return fetched
             hub_positions = hub.get_positions(max_age_seconds=_hub_max_age)
             if hub_positions is not None and len(hub_positions) == 0:
-                _empty_age = hub.get_positions_age()
-                if _empty_age > 2.0:
-                    hub_positions = None
+                webull_snapshots = []
             if hub_positions is not None and len(hub_positions) > 0:
                 fetched = []
                 for pos in hub_positions:
@@ -3083,7 +3117,7 @@ class RiskManager:
         except Exception as e:
             pass
         
-        _REST_CACHE_TTL = 10
+        _REST_CACHE_TTL = 30
         if _force_global:
             self._force_rest_refresh = False
             if _has_open:
@@ -3092,14 +3126,13 @@ class RiskManager:
         async def _fetch_webull_rest():
             if webull_snapshots is not None:
                 return []
-            if not _has_open and not self._has_active_fill_watches():
+            _webull_has_positions = hasattr(self, '_last_webull_positions') and self._last_webull_positions
+            if not _webull_has_positions and not self._has_active_fill_watches():
                 _now_disc = _time.time()
                 _disc_age = _now_disc - getattr(self, '_webull_discovery_ts', 0)
                 if _disc_age < 60:
-                    return []
+                    return list(self._last_webull_positions) if hasattr(self, '_last_webull_positions') and self._last_webull_positions is not None else []
                 self._webull_discovery_ts = _now_disc
-                self._schwab_discovery_ts = _now_disc
-                self._tastytrade_discovery_ts = _now_disc
             cache_age = _time.time() - getattr(self, '_webull_cache_ts', 0)
             if hasattr(self, '_last_webull_positions') and self._last_webull_positions is not None and cache_age < _REST_CACHE_TTL:
                 return list(self._last_webull_positions)
@@ -3125,6 +3158,42 @@ class RiskManager:
                     if (_wt.time() - self._wb_resolve_warn_ts) > 60:
                         self._wb_resolve_warn_ts = _wt.time()
                         print(f"[RISK] ⚠️ Could not resolve Webull broker for REST refresh — using cached data (count={self._wb_resolve_warn_total})")
+                _detailed_rest = _hub.get_positions_detailed(max_age_seconds=30)
+                if _detailed_rest is not None and len(_detailed_rest) > 0:
+                    fetched = []
+                    for pos in _detailed_rest:
+                        position_qty = float(pos.get('quantity', 0))
+                        if position_qty <= 0:
+                            continue
+                        symbol = pos.get('symbol', '')
+                        is_option = pos.get('asset', 'stock') == 'option'
+                        if not is_option:
+                            snap_data = {
+                                'broker': 'Webull', 'asset': 'stock', 'symbol': symbol,
+                                'quantity': position_qty, 'avg_cost': float(pos.get('avg_cost', 0)),
+                                'current_price': float(pos.get('current_price', 0)),
+                                'unrealized_pl': float(pos.get('unrealized_pl', 0)),
+                                'ticker_id': pos.get('ticker_id', 0)
+                            }
+                            fetched.append(self._to_snapshot(snap_data))
+                        else:
+                            snap_data = {
+                                'broker': 'Webull', 'asset': 'option', 'symbol': symbol,
+                                'quantity': position_qty, 'avg_cost': float(pos.get('avg_cost', 0)),
+                                'current_price': float(pos.get('current_price', 0)),
+                                'unrealized_pl': float(pos.get('unrealized_pl', 0)),
+                                'option_id': pos.get('option_id', 0),
+                                'strike': float(pos.get('strike', 0)),
+                                'expiry': pos.get('expiry', ''),
+                                'direction': pos.get('direction', ''),
+                                'ticker_id': pos.get('ticker_id', 0)
+                            }
+                            fetched.append(self._to_snapshot(snap_data))
+                    if fetched:
+                        self._last_webull_positions = fetched
+                        self._webull_cache_ts = _time.time()
+                        print(f"[RISK] ✓ REST refresh: {len(fetched)} Webull positions updated via hub (detailed)")
+                        return fetched
                 _refreshed = _hub.get_positions(max_age_seconds=30)
                 if _refreshed is not None and len(_refreshed) > 0:
                     fetched = []
@@ -3287,10 +3356,11 @@ class RiskManager:
                 if _schwab_streaming:
                     if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < _REST_CACHE_TTL:
                         return list(self._last_schwab_positions)
-                if not _has_open and not self._has_active_fill_watches():
+                _schwab_has_positions = hasattr(self, '_last_schwab_positions') and self._last_schwab_positions
+                if not _schwab_has_positions and not self._has_active_fill_watches():
                     _disc_age = _time.time() - getattr(self, '_schwab_discovery_ts', 0)
                     if _disc_age < 60:
-                        return []
+                        return list(self._last_schwab_positions) if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None else []
                     self._schwab_discovery_ts = _time.time()
                 if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('schwab')
@@ -3419,10 +3489,11 @@ class RiskManager:
                 tt_cache_age = _time.time() - getattr(self, '_tastytrade_cache_ts', 0)
                 if hasattr(self, '_last_tastytrade_positions') and self._last_tastytrade_positions is not None and tt_cache_age < _REST_CACHE_TTL:
                     return list(self._last_tastytrade_positions)
-                if not _has_open and not self._has_active_fill_watches():
+                _tt_has_positions = hasattr(self, '_last_tastytrade_positions') and self._last_tastytrade_positions
+                if not _tt_has_positions and not self._has_active_fill_watches():
                     _disc_age = _time.time() - getattr(self, '_tastytrade_discovery_ts', 0)
                     if _disc_age < 60:
-                        return []
+                        return list(self._last_tastytrade_positions) if hasattr(self, '_last_tastytrade_positions') and self._last_tastytrade_positions is not None else []
                     self._tastytrade_discovery_ts = _time.time()
                 if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('tastytrade')
@@ -4280,8 +4351,22 @@ class RiskManager:
             cache._bracket_placed_qty = 0
 
         if channel_settings and not cache.broker_orders_placed:
-            _bracket_attempts = getattr(cache, '_bracket_attempt_count', 0)
-            if _bracket_attempts >= 3:
+            _skip_bracket_placement = False
+            if position.asset == 'option':
+                try:
+                    from src.services.market_hours import is_regular_market_hours
+                    if not is_regular_market_hours():
+                        _skip_bracket_placement = True
+                        if not hasattr(self, '_bracket_ah_logged'):
+                            self._bracket_ah_logged = set()
+                        if pos_key not in self._bracket_ah_logged:
+                            self._bracket_ah_logged.add(pos_key)
+                            print(f"[RISK] ⏸️ AFTER HOURS — deferring bracket placement for option {position.symbol} until market opens")
+                except Exception:
+                    pass
+            if _skip_bracket_placement:
+                pass
+            elif (_bracket_attempts := getattr(cache, '_bracket_attempt_count', 0)) >= 3:
                 if _bracket_attempts == 3:
                     print(f"[RISK] ⚠️ Bracket placement failed 3 times for {position.symbol} on {position.broker} — giving up (risk engine will manage exits)")
                     cache._bracket_attempt_count = _bracket_attempts + 1
@@ -5095,6 +5180,13 @@ class RiskManager:
     async def _detect_and_handle_bracket_fill(self, position, cache, channel_settings) -> bool:
         """Detect if a broker bracket (OCO/standalone) was filled and handle tier marking + cascade.
         Returns True if a fill was detected and processed."""
+        if position.asset == 'option':
+            try:
+                from src.services.market_hours import is_regular_market_hours
+                if not is_regular_market_hours():
+                    return False
+            except Exception:
+                pass
         if cache.broker_oco_order_id:
             check_id = cache.broker_oco_order_id
             _check_type = 'oco'
@@ -5553,7 +5645,7 @@ class RiskManager:
                         if _ibkr_oca_group:
                             sl_order.ocaGroup = _ibkr_oca_group
                             sl_order.ocaType = 2
-                        sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
+                        sl_trade = await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, contract, sl_order)
                         await asyncio.sleep(1)
                         if sl_trade and sl_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_stop_order_id = str(sl_trade.order.orderId)
@@ -5568,7 +5660,7 @@ class RiskManager:
                         if _ibkr_oca_group:
                             pt_order.ocaGroup = _ibkr_oca_group
                             pt_order.ocaType = 2
-                        pt_trade = self.ibkr_broker.ib.placeOrder(contract, pt_order)
+                        pt_trade = await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, contract, pt_order)
                         await asyncio.sleep(1)
                         if pt_trade and pt_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_pt_order_id = str(pt_trade.order.orderId)
@@ -6162,7 +6254,7 @@ class RiskManager:
                     pt_order.ocaType = 2
                     cache.broker_oco_order_id = _oca_group
 
-                pt_trade = self.ibkr_broker.ib.placeOrder(_pt_contract, pt_order)
+                pt_trade = await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, _pt_contract, pt_order)
                 await asyncio.sleep(1)
                 _ibkr_pt_ok = ('Submitted', 'PreSubmitted', 'PendingSubmit', 'Filled', 'ApiPending')
                 if pt_trade and pt_trade.orderStatus.status in _ibkr_pt_ok:
@@ -6635,7 +6727,7 @@ class RiskManager:
                         sl_order.ocaGroup = _oca_group
                         sl_order.ocaType = 2
                         cache.broker_oco_order_id = _oca_group
-                    sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
+                    sl_trade = await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, contract, sl_order)
                     await asyncio.sleep(1)
                     _ibkr_sync_ok = ('Submitted', 'PreSubmitted', 'PendingSubmit', 'Filled', 'ApiPending')
                     if sl_trade and sl_trade.orderStatus.status in _ibkr_sync_ok:
@@ -6909,7 +7001,7 @@ class RiskManager:
                 await self.ibkr_broker.ib.qualifyContractsAsync(contract)
 
                 _existing_trade = None
-                for t in self.ibkr_broker.ib.openTrades():
+                for t in await asyncio.to_thread(self.ibkr_broker.ib.openTrades):
                     if t.order.orderId == pt_order_id:
                         _existing_trade = t
                         break
@@ -6919,7 +7011,7 @@ class RiskManager:
                     return False
 
                 _existing_trade.order.lmtPrice = new_pt_price
-                self.ibkr_broker.ib.placeOrder(contract, _existing_trade.order)
+                await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, contract, _existing_trade.order)
                 await asyncio.sleep(1)
                 print(f"[RISK PT REPLACE] ✅ IBKR PT #{pt_order_id} modified: new limit ${new_pt_price:.2f}")
                 cache.broker_oco_pt_price = new_pt_price

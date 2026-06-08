@@ -67,6 +67,10 @@ class WebullDataHub:
         self._positions_lock = threading.Lock()
         self._positions_time: float = 0
 
+        self._positions_detailed: List[Dict[str, Any]] = []
+        self._positions_detailed_lock = threading.Lock()
+        self._positions_detailed_time: float = 0
+
         self._pending_orders: List[Dict[str, Any]] = []
         self._orders_lock = threading.Lock()
         self._orders_time: float = 0
@@ -240,6 +244,19 @@ class WebullDataHub:
     def get_positions_age(self) -> float:
         with self._positions_lock:
             return time.time() - self._positions_time if self._positions_time > 0 else float('inf')
+
+    def update_positions_detailed(self, positions: List[Dict[str, Any]]):
+        with self._positions_detailed_lock:
+            self._positions_detailed = list(positions)
+            self._positions_detailed_time = time.time()
+        self._emit('positions_detailed_updated', positions)
+
+    def get_positions_detailed(self, max_age_seconds: Optional[int] = None) -> Optional[List[Dict[str, Any]]]:
+        ttl = max_age_seconds if max_age_seconds is not None else self.POSITION_CACHE_TTL
+        with self._positions_detailed_lock:
+            if self._positions_detailed_time > 0 and (time.time() - self._positions_detailed_time) < ttl:
+                return list(self._positions_detailed)
+        return None
 
     def update_pending_orders(self, orders: List[Dict[str, Any]]):
         with self._orders_lock:

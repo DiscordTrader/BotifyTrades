@@ -5283,8 +5283,15 @@ class WebullBroker:
             if positions and self._streaming_client:
                 self._streaming_client.subscribe_positions(positions)
 
+            if positions:
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    get_webull_data_hub().update_positions_detailed(positions)
+                except Exception:
+                    pass
+
             return positions
-        
+
         return await self.loop.run_in_executor(None, _blocking_get)
 
     async def get_positions_detailed(self) -> list:

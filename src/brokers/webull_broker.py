@@ -776,6 +776,8 @@ class WebullBroker(BrokerInterface):
             
             if self._data_hub and _from_rest:
                 self._data_hub.update_positions(positions_raw, source="rest")
+                if positions:
+                    self._data_hub.update_positions_detailed(positions)
             if self._streaming_client:
                 self._streaming_client.subscribe_positions(positions)
 
