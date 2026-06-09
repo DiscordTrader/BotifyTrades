@@ -30,7 +30,9 @@ from broker_interface import BrokerInterface, OrderResult, BrokerFactory
 
 class IBKRBroker(BrokerInterface):
     """Interactive Brokers implementation using ib_insync"""
-    
+
+    MAX_ORDER_SIZE = 70000
+
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.name = "IBKR"
@@ -276,7 +278,7 @@ class IBKRBroker(BrokerInterface):
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""
         try:
-            positions = self.ib.positions()
+            positions = await asyncio.to_thread(self.ib.positions)
             result = {}
             for pos in positions:
                 if hasattr(pos.contract, 'symbol'):
@@ -291,14 +293,15 @@ class IBKRBroker(BrokerInterface):
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         try:
             trade = None
-            for t in self.ib.openTrades():
+            open_trades = await asyncio.to_thread(self.ib.openTrades)
+            for t in open_trades:
                 if str(t.order.orderId) == str(order_id):
                     trade = t
                     break
             if not trade:
                 return {'success': False, 'msg': f'Order {order_id} not found in open trades'}
-            
-            self.ib.cancelOrder(trade.order)
+
+            await asyncio.to_thread(self.ib.cancelOrder, trade.order)
             print(f"[{self.name}] ✓ Cancelled order {order_id}")
             return {'success': True, 'order_id': order_id}
         except Exception as e:
@@ -310,7 +313,7 @@ class IBKRBroker(BrokerInterface):
         try:
             if not self.ib.isConnected():
                 return []
-            trades = self.ib.openTrades()
+            trades = await asyncio.to_thread(self.ib.openTrades)
             pending = []
             for trade in trades:
                 order = trade.order
@@ -340,18 +343,18 @@ class IBKRBroker(BrokerInterface):
         try:
             if not self.ib.isConnected():
                 return None
-            for trade in self.ib.openTrades():
+            ib_to_internal = {
+                'Filled': 'FILLED', 'Cancelled': 'CANCELLED', 'Inactive': 'CANCELLED',
+                'Submitted': 'WORKING', 'PreSubmitted': 'PENDING',
+                'PendingSubmit': 'PENDING', 'PendingCancel': 'PENDING_CANCEL',
+                'ApiCancelled': 'CANCELLED'
+            }
+            for trade in await asyncio.to_thread(self.ib.openTrades):
                 if str(trade.order.orderId) == str(order_id):
                     status = trade.orderStatus.status if trade.orderStatus else 'Unknown'
                     filled_qty = int(trade.orderStatus.filled) if trade.orderStatus else 0
                     remaining = int(trade.orderStatus.remaining) if trade.orderStatus else 0
                     avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus and trade.orderStatus.avgFillPrice else 0
-                    ib_to_internal = {
-                        'Filled': 'FILLED', 'Cancelled': 'CANCELLED', 'Inactive': 'CANCELLED',
-                        'Submitted': 'WORKING', 'PreSubmitted': 'PENDING',
-                        'PendingSubmit': 'PENDING', 'PendingCancel': 'PENDING_CANCEL',
-                        'ApiCancelled': 'CANCELLED'
-                    }
                     return {
                         'order_id': str(order_id),
                         'status': ib_to_internal.get(status, status),
@@ -361,17 +364,11 @@ class IBKRBroker(BrokerInterface):
                         'avg_fill_price': avg_price,
                         'raw_status': status
                     }
-            for trade in self.ib.trades():
+            for trade in await asyncio.to_thread(self.ib.trades):
                 if str(trade.order.orderId) == str(order_id):
                     status = trade.orderStatus.status if trade.orderStatus else 'Unknown'
                     filled_qty = int(trade.orderStatus.filled) if trade.orderStatus else 0
                     avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus and trade.orderStatus.avgFillPrice else 0
-                    ib_to_internal = {
-                        'Filled': 'FILLED', 'Cancelled': 'CANCELLED', 'Inactive': 'CANCELLED',
-                        'Submitted': 'WORKING', 'PreSubmitted': 'PENDING',
-                        'PendingSubmit': 'PENDING', 'PendingCancel': 'PENDING_CANCEL',
-                        'ApiCancelled': 'CANCELLED'
-                    }
                     return {
                         'order_id': str(order_id),
                         'status': ib_to_internal.get(status, status),
@@ -394,13 +391,13 @@ class IBKRBroker(BrokerInterface):
 
             portfolio_prices = {}
             try:
-                for item in self.ib.portfolio():
+                for item in await asyncio.to_thread(self.ib.portfolio):
                     if item.contract and item.marketPrice and item.marketPrice > 0:
                         portfolio_prices[item.contract.conId] = float(item.marketPrice)
             except Exception:
                 pass
 
-            raw_positions = self.ib.positions()
+            raw_positions = await asyncio.to_thread(self.ib.positions)
             positions = []
             for pos in raw_positions:
                 contract = pos.contract
@@ -412,7 +409,7 @@ class IBKRBroker(BrokerInterface):
 
                 current_price = 0.0
                 try:
-                    tickers = self.ib.tickers()
+                    tickers = await asyncio.to_thread(self.ib.tickers)
                     for t in tickers:
                         if t.contract and t.contract.conId == contract.conId:
                             if t.last and t.last > 0:
@@ -481,9 +478,13 @@ class IBKRBroker(BrokerInterface):
             contract = Stock(symbol, 'SMART', 'USD')
             
             await self.ib.qualifyContractsAsync(contract)
-            
+
             side = 'BUY' if action == 'BTO' else 'SELL'
-            
+
+            if quantity > self.MAX_ORDER_SIZE:
+                print(f"[{self.name}] ⚠️ Order size {quantity} exceeds IBKR max {self.MAX_ORDER_SIZE} — capping")
+                quantity = self.MAX_ORDER_SIZE
+
             if price is None:
                 order = MarketOrder(side, quantity)
             else:
@@ -496,13 +497,12 @@ class IBKRBroker(BrokerInterface):
 
             order.outsideRth = self._get_extended_hours_enabled()
 
-            trade = self.ib.placeOrder(contract, order)
+            trade = await asyncio.to_thread(self.ib.placeOrder, contract, order)
 
             filled_price = await self._wait_for_fill(trade, symbol, timeout=10)
 
             status = trade.orderStatus.status if trade and trade.orderStatus else 'Unknown'
             if status in ('Cancelled', 'Inactive'):
-                # Defense-in-depth: Gateway/TWS auto-adjustments (TIF→DAY) cause transient Cancelled
                 await asyncio.sleep(2)
                 status = trade.orderStatus.status if trade and trade.orderStatus else status
             if status in ('Cancelled', 'Inactive'):
@@ -583,7 +583,7 @@ class IBKRBroker(BrokerInterface):
             # Enable extended hours trading if configured
             order.outsideRth = self._get_extended_hours_enabled()
             
-            trade = self.ib.placeOrder(contract, order)
+            trade = await asyncio.to_thread(self.ib.placeOrder, contract, order)
 
             filled_price = await self._wait_for_fill(trade, symbol, timeout=10)
 
@@ -609,7 +609,7 @@ class IBKRBroker(BrokerInterface):
                 symbol=symbol,
                 action=action
             )
-                
+
         except Exception as e:
             return OrderResult(
                 success=False,

@@ -90,7 +90,7 @@ class SchwabDataHub:
         self._pending_subs_lock = threading.Lock()
         self._risk_eval_requested = threading.Event()
 
-        self.POSITION_CACHE_TTL = 15
+        self.POSITION_CACHE_TTL = 30
         self.ORDER_CACHE_TTL = 15
         self.ACCOUNT_CACHE_TTL = 30
         self.ORDER_HISTORY_CACHE_TTL = 60

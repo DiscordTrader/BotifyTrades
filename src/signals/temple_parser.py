@@ -756,10 +756,83 @@ def parse_temple_zz_options_a(match: re.Match, text: str) -> Optional[Dict[str, 
     }
 
 
+def parse_temple_zz_options_exp(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse 'NKE 52.5 C 18.09 exp 1.00-1.30' — TICKER STRIKE C/P DD.MM exp PRICE[-PRICE]."""
+    groups = match.groups()
+    symbol = groups[0].upper()
+    strike = float(groups[1])
+    opt_type = groups[2].upper()
+    day = groups[3]
+    month = groups[4]
+    price_low = float(groups[5])
+
+    expiry = f"{month}/{day}"
+
+    sl = None
+    sl_match = re.search(r'SL\s+(\.?\d+(?:\.\d+)?)', text, re.IGNORECASE)
+    if sl_match:
+        sl = float(sl_match.group(1))
+
+    result = {
+        "asset": "option",
+        "action": "BTO",
+        "qty": 1,
+        "qty_specified": False,
+        "symbol": symbol,
+        "strike": strike,
+        "opt_type": opt_type,
+        "expiry": expiry,
+        "price": price_low,
+        "is_market_order": False,
+        "confidence": 0.95,
+        "_temple_zz_options_entry": True,
+        "_expiry_defaulted": False,
+    }
+    if sl is not None:
+        result["stop_loss"] = sl
+    return result
+
+
+def parse_temple_tc_options_range(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse 'NVDA 210 C 0.35-.40 C - SL 0.30' — TICKER STRIKE C/P PRICE-PRICE C SL PRICE."""
+    groups = match.groups()
+    symbol = groups[0].upper()
+    strike = float(groups[1])
+    opt_type = groups[2].upper()
+    price = float(groups[3])
+
+    sl = None
+    sl_match = re.search(r'SL\s*\.?(\d+(?:\.\d+)?)\s*C?\b', text, re.IGNORECASE)
+    if sl_match:
+        sl = float(sl_match.group(1))
+
+    result = {
+        "asset": "option",
+        "action": "BTO",
+        "qty": 1,
+        "qty_specified": False,
+        "symbol": symbol,
+        "strike": strike,
+        "opt_type": opt_type,
+        "expiry": _default_expiry_today(),
+        "price": price,
+        "is_market_order": False,
+        "confidence": 0.95,
+        "_temple_tc_options_entry": True,
+        "_expiry_defaulted": True,
+    }
+    if sl is not None:
+        result["stop_loss"] = sl
+    return result
+
+
 def parse_temple_zz_options_b(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
     """Parse 'SPY 580c 1.80' — TICKER STRIKEc/p PRICE."""
     text_upper = text.strip().upper()
     if text_upper.startswith(('BTO ', 'STC ', 'BUY ', 'SELL ')):
+        return None
+
+    if re.search(r'\d{2}\.\d{2}\s*exp', text, re.IGNORECASE):
         return None
 
     groups = match.groups()

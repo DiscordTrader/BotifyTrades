@@ -692,9 +692,9 @@ class BrokerSyncService:
                 if hasattr(broker_instance, 'ib') and broker_instance.ib.isConnected():
                     try:
                         ib = broker_instance.ib
-                        raw_positions = ib.positions()
+                        raw_positions = await asyncio.to_thread(ib.positions)
                         if not raw_positions:
-                            raw_positions = ib.portfolio()
+                            raw_positions = await asyncio.to_thread(ib.portfolio)
 
                         for pos in raw_positions:
                             contract = pos.contract
@@ -735,7 +735,7 @@ class BrokerSyncService:
                                     'asset_type': 'stock'
                                 })
 
-                        raw_trades = ib.openTrades()
+                        raw_trades = await asyncio.to_thread(ib.openTrades)
                         for trade in raw_trades:
                             order = trade.order
                             contract = trade.contract
@@ -2992,7 +2992,7 @@ class BrokerSyncService:
                 if hasattr(broker_instance, 'ib') and broker_instance.ib.isConnected():
                     try:
                         ib = broker_instance.ib
-                        for trade in ib.trades():
+                        for trade in await asyncio.to_thread(ib.trades):
                             if not trade.orderStatus or trade.orderStatus.status != 'Filled':
                                 continue
                             order = trade.order

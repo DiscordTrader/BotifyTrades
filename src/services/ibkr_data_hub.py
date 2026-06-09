@@ -141,6 +141,9 @@ class IBKRDataHub:
         if self._reconcile_task is None or self._reconcile_task.done():
             if self._loop and not self._loop.is_closed():
                 self._reconcile_task = self._loop.create_task(self.start_reconciliation_loop(interval=10.0))
+        self._tick_pump_task = None
+        if self._loop and not self._loop.is_closed():
+            self._tick_pump_task = self._loop.create_task(self._tick_pump_loop())
         print("[IBKR_HUB] ✓ Attached to IBKRBroker — streaming events active")
 
     def detach_broker(self):
@@ -687,9 +690,9 @@ class IBKRDataHub:
             return
         try:
             if from_event_callback:
-                raw_positions = self._ib.portfolio()
+                raw_positions = await asyncio.to_thread(self._ib.portfolio)
             else:
-                raw_positions = self._ib.positions()
+                raw_positions = await asyncio.to_thread(self._ib.positions)
             parsed = []
             for pos in raw_positions:
                 contract = pos.contract
@@ -734,6 +737,20 @@ class IBKRDataHub:
 
         except Exception as e:
             print(f"[IBKR_HUB] Position refresh error: {e}")
+
+    async def _tick_pump_loop(self):
+        """Yield to the event loop frequently so ib_insync's socket reader
+        and pendingTickersEvent can fire promptly. Without this, ticks queue up
+        when the main event loop is busy with risk engine or sync service work."""
+        logged = False
+        while True:
+            try:
+                await asyncio.sleep(0.2)
+                if not logged and self._ib and self._ib.isConnected():
+                    logged = True
+                    print("[IBKR_HUB] ✓ Tick pump active — event loop yields every 200ms for ib_insync")
+            except Exception:
+                await asyncio.sleep(1)
 
     async def start_reconciliation_loop(self, interval: float = 5.0):
         print(f"[IBKR_HUB] ✓ Position reconciliation loop started ({interval}s)")

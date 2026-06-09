@@ -396,8 +396,8 @@ class SchwabStreamingClient:
                             except Exception:
                                 break
 
-                        if now - self._last_heartbeat > 180:
-                            print("[SCHWAB_STREAM] ⚠️ No heartbeat for 180s, reconnecting...")
+                        if now - self._last_heartbeat > 60:
+                            print("[SCHWAB_STREAM] ⚠️ No heartbeat for 60s, reconnecting...")
                             break
 
                         if now - self._last_pending_drain >= 10:

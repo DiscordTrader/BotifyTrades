@@ -5283,8 +5283,15 @@ class WebullBroker:
             if positions and self._streaming_client:
                 self._streaming_client.subscribe_positions(positions)
 
+            if positions:
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    get_webull_data_hub().update_positions_detailed(positions)
+                except Exception:
+                    pass
+
             return positions
-        
+
         return await self.loop.run_in_executor(None, _blocking_get)
 
     async def get_positions_detailed(self) -> list:
@@ -12377,8 +12384,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             except Exception:
                                 pass
                     if _ch_allowed_fmts and _all_results:
-                        _filtered = [r for r in _all_results if r.get('_format_name') in _ch_allowed_fmts]
-                        _blocked = [r for r in _all_results if r.get('_format_name') not in _ch_allowed_fmts]
+                        def _fmt_allowed(fname, allowed):
+                            if not fname:
+                                return False
+                            if fname in allowed:
+                                return True
+                            if fname.startswith('learned_') and fname[8:] in allowed:
+                                return True
+                            if f'learned_{fname}' in allowed:
+                                return True
+                            return False
+                        _filtered = [r for r in _all_results if _fmt_allowed(r.get('_format_name'), _ch_allowed_fmts)]
+                        _blocked = [r for r in _all_results if not _fmt_allowed(r.get('_format_name'), _ch_allowed_fmts)]
                         for _blk in _blocked:
                             print(f"[FORMAT FILTER] Blocked '{_blk.get('_format_name')}' for {_blk.get('symbol')} on channel {channel_info.get('name')} — not in allowed formats")
                         _all_results = _filtered
