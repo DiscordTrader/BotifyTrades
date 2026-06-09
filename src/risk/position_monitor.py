@@ -3357,7 +3357,17 @@ class RiskManager:
                     if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < _REST_CACHE_TTL:
                         return list(self._last_schwab_positions)
                 _schwab_has_positions = hasattr(self, '_last_schwab_positions') and self._last_schwab_positions
-                if not _schwab_has_positions and not self._has_active_fill_watches():
+                _schwab_db_open = 0
+                if not _schwab_has_positions:
+                    try:
+                        from gui_app.database import get_connection as _gc_schwab_disc
+                        _sdc = _gc_schwab_disc()
+                        _sdc_cur = _sdc.cursor()
+                        _sdc_cur.execute("SELECT COUNT(*) FROM trades WHERE UPPER(broker) = 'SCHWAB' AND status IN ('OPEN','PENDING','PARTIAL') AND direction = 'BTO'")
+                        _schwab_db_open = _sdc_cur.fetchone()[0]
+                    except Exception:
+                        pass
+                if not _schwab_has_positions and not self._has_active_fill_watches() and _schwab_db_open == 0:
                     _disc_age = _time.time() - getattr(self, '_schwab_discovery_ts', 0)
                     if _disc_age < 60:
                         return list(self._last_schwab_positions) if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None else []
@@ -3414,6 +3424,13 @@ class RiskManager:
                     if not is_auth:
                         return []
                 schwab_positions = await self._fetch_schwab_positions()
+                if schwab_positions:
+                    if not hasattr(self, '_schwab_pos_logged') or not self._schwab_pos_logged:
+                        print(f"[RISK] ✓ Schwab REST: {len(schwab_positions)} positions found ({', '.join(p.symbol for p in schwab_positions)})")
+                        self._schwab_pos_logged = True
+                elif hasattr(self, '_schwab_pos_logged') and self._schwab_pos_logged:
+                    print(f"[RISK] Schwab REST: 0 positions (previously had positions)")
+                    self._schwab_pos_logged = False
                 self._last_schwab_positions = schwab_positions
                 self._schwab_cache_ts = _time.time()
                 return schwab_positions

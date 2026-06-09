@@ -11283,14 +11283,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         except Exception as _lot_err:
                             print(f"[CONDITIONAL EXEC] ⚠️ lot_id recovery failed: {_lot_err}", flush=True)
 
-                        # Use sync signal queue (thread-safe, same as Telegram)
-                        if _telegram_signal_queue is not None:
-                            _telegram_signal_queue.put_nowait(signal)
-                            print(f"[CONDITIONAL EXEC] ✓ Signal queued: {symbol}{option_info} @ {currency}{triggered_price:.2f} → {broker_name}", flush=True)
-                            return True
-                        else:
-                            print(f"[CONDITIONAL EXEC] ❌ Sync signal queue not available!", flush=True)
-                            return False
+                        # Direct to order queue — this coroutine runs on main event loop via run_coroutine_threadsafe
+                        await self.order_queue.put(signal)
+                        print(f"[CONDITIONAL EXEC] ✓ Signal queued direct: {symbol}{option_info} @ {currency}{triggered_price:.2f} → {broker_name}", flush=True)
+                        return True
                         
                     except Exception as e:
                         print(f"[CONDITIONAL EXEC] ❌ Execution error: {e}", flush=True)
