@@ -4419,10 +4419,12 @@ class RiskManager:
         # 'signal' mode = follow trader exit signals only, no automated exits
         # 'risk' mode = use automated risk management only
         # 'hybrid' mode = both trader signals AND automated exits
-        # Exception: EMA risk still runs in 'signal' mode when explicitly enabled
+        # Signal mode evaluates: EMA (if enabled) + signal SL price + channel SL % as safety net
+        # Signal mode skips: tiered targets, trailing stops, dynamic SL, giveback guard
         if channel_settings and channel_settings.exit_strategy_mode == 'signal':
+            self._log_position_status(position, cache, channel_settings, pct_change)
+
             if channel_settings.ema_risk_enabled:
-                self._log_position_status(position, cache, channel_settings, pct_change)
                 ema_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position, ema_only=True)
                 if ema_decision and ema_decision.should_exit:
                     from src.services.market_hours import is_regular_market_hours, is_extended_hours
@@ -4441,7 +4443,30 @@ class RiskManager:
                     if hasattr(self, '_after_hours_logged'):
                         self._after_hours_logged.discard(pos_key)
                     await self._execute_exit(position, cache, ema_decision, channel_settings)
-                return
+                    return
+
+            _has_signal_sl = cache.stop_loss_price is not None and cache.stop_loss_price > 0
+            _has_manual_sl = cache.manual_sl_price is not None or cache.manual_sl_pct is not None
+            _signal_sl_decision = evaluate_price_based_stops(position, cache)
+            if not _signal_sl_decision.should_exit and (not _has_signal_sl or _has_manual_sl):
+                _signal_sl_decision = evaluate_channel_stop_loss(position, cache, channel_settings)
+            if _signal_sl_decision.should_exit:
+                from src.services.market_hours import is_regular_market_hours, is_extended_hours
+                if position.asset == 'option':
+                    market_open = is_regular_market_hours()
+                else:
+                    market_open = is_regular_market_hours() or is_extended_hours()
+                if not market_open:
+                    if not hasattr(self, '_after_hours_logged'):
+                        self._after_hours_logged = set()
+                    if pos_key not in self._after_hours_logged:
+                        self._after_hours_logged.add(pos_key)
+                        print(f"[RISK] ⏸️ AFTER HOURS — suppressing SL exit for {pos_key} "
+                              f"(reason: {_signal_sl_decision.reason}). Will re-evaluate when market opens.")
+                    return
+                if hasattr(self, '_after_hours_logged'):
+                    self._after_hours_logged.discard(pos_key)
+                await self._execute_exit(position, cache, _signal_sl_decision, channel_settings)
             return
         
         self._log_position_status(position, cache, channel_settings, pct_change)
