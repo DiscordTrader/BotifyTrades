@@ -1,4 +1,4 @@
-# BotifyTrades v11.1.9 — Project Context
+# BotifyTrades v11.1.10 — Project Context
 
 ## Summary
 Multi-broker automated trading bot. Monitors Discord signals, executes trades across 5 brokers (Schwab, Webull, Alpaca, IBKR, Tastytrade), manages risk with tiered PT/SL/trailing/OCO brackets. Desktop app built with PyInstaller + PyArmor (user build) or plain PyInstaller (admin build). Web GUI via Flask. ~21K lines in selfbot_webull.py, ~9K in position_monitor.py.
