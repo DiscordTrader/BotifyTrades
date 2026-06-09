@@ -1,5 +1,19 @@
 # BotifyTrades Progress Log
 
+## Session: June 9, 2026 — Risk Engine Schwab Position Blindness
+
+### FIX: Risk engine blind to Schwab positions (v11.1.11)
+- **Problem**: Risk engine showed `Schwab: 0` in every monitoring cycle even when SYNC service reported PAVS/RGNT/AZI on Schwab. Channel risk settings (SL 10%, targets [8%, 10%, 12%, 25%]) were correctly attached to signals at entry, but risk engine never evaluated them because it couldn't see the positions.
+- **Root cause**: Schwab streaming hub never started → `get_positions(detailed=True)` returns `None` → falls to REST path → `_fetch_schwab_cached()` discovery timer (60s) blocks REST fetches when no cached positions AND no fill watches → cached empty → repeats forever. Even after fill watch expired (30s), the discovery timer prevented further REST fetches.
+- **Fix**: Discovery timer now checks DB for open Schwab trades. If `trades` table has open Schwab BTO trades, always proceed to REST fetch instead of skipping via discovery timer.
+- **Also added**: Debug logging when Schwab positions found/lost via REST (`[RISK] ✓ Schwab REST: N positions found`).
+- **Impact**: With this fix, risk engine will see Schwab positions and apply channel risk settings (PT/SL/trailing) for automated exits.
+
+### FIX: Conditional orders bypass Telegram bridge (v11.1.11)
+- **Problem**: Discord conditional orders went through `_telegram_signal_queue` → `telegram_signal_bridge()` → `order_queue` instead of direct.
+- **Fix**: Changed `execute_conditional_order()` to `await self.order_queue.put(signal)` directly — the coroutine runs on the main event loop via `run_coroutine_threadsafe`.
+- **Impact**: ~1s latency reduction, no more confusing `[TELEGRAM BRIDGE]` logs for Discord signals.
+
 ## Session: June 8-9, 2026 — IBKR Event Loop Fix + Temple Parser SL/Target Bugs
 
 ### FIX: IBKR Event Loop Starvation (v11.1.8)
