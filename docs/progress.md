@@ -1,5 +1,24 @@
 # BotifyTrades Progress Log
 
+## Session: June 8-9, 2026 — IBKR Event Loop Fix + Temple Parser SL/Target Bugs
+
+### FIX: IBKR Event Loop Starvation (v11.1.8)
+- **Problem**: All `ib_insync` calls (`positions()`, `portfolio()`, `openTrades()`, `trades()`, `placeOrder()`, `tickers()`) are synchronous and blocked the asyncio event loop, starving `pendingTickersEvent` for real-time prices
+- **Impact**: IBKR sync showed 0 positions, bracket orders looped on "unreachable", conditional order prices stuck
+- **Fix**: Wrapped 16 blocking calls across 4 files with `asyncio.to_thread()`: `ibkr_broker.py` (10), `broker_sync_service.py` (4), `position_monitor.py` (6), `ibkr_data_hub.py` (2)
+- **Also**: Added `MAX_ORDER_SIZE = 70000` cap for IBKR non-algo orders (order rejection error 201 at 131K shares)
+- **Released**: v11.1.8 pushed to private + public repos, admin + user builds triggered
+
+### FIX: Temple Parser SL Line-Boundary Bleed
+- **Problem**: `sl_raw_text = text[text.index('❌'):text.index('❌')+40]` grabbed 40 chars past ❌, bleeding into 🎯 targets line. For `❌ 1.38\n🎯 5% 10% 15%`, the `%` from targets caused price SL $1.38 to be misclassified as 1.38%
+- **Fix**: Limit SL slice to the ❌ line only (up to `\n` boundary)
+- **Validated**: 102 real signals from ⚡│zz channel — all 49 fixed-price SLs and 7 percent SLs classified correctly
+
+### FIX: Multi-Dash Target Parsing
+- **Problem**: `🎯 1.20-1.50-1.70-2.00` only captured [1.2, 1.5] — the split regex didn't handle `-` separators, and the range regex only matched 2 numbers
+- **Fix**: Detect 3+ numbers in a dash-separated part and extract all; preserve 2-number range behavior
+- **Validated**: `1.20-1.50-1.70-2.00` → [1.2, 1.5, 1.7, 2.0], `2.60-3.00` → [2.6, 3.0] (range still works)
+
 ## Session: May 29, 2026 — PANW Risk Analysis + TEMPLE-BOOM Format Filter + Webull Diagnosis
 
 ### ANALYSIS + FIX: PANW 280C 05/29 — Risk Engine Post-Mortem
