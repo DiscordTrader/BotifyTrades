@@ -8805,13 +8805,13 @@ class SelfClient(discord.Client):
         self.processing_ready.set()
         print("[Init] ✓ Worker task started; processing signals.")
         
-        _original_print(f"[WATCHDOG] Debug: _gateway_watchdog_started={self._gateway_watchdog_started}", flush=True)
+        print(f"[WATCHDOG] Debug: _gateway_watchdog_started={self._gateway_watchdog_started}", flush=True)
         if not self._gateway_watchdog_started:
             self._gateway_watchdog_started = True
             self._watchdog_task = asyncio.create_task(self._gateway_watchdog())
-            _original_print("[WATCHDOG] ✓ Gateway health monitor started (reconnect if no messages for 2 min)", flush=True)
+            print("[WATCHDOG] ✓ Gateway health monitor started (reconnect if no messages for 2 min)", flush=True)
         else:
-            _original_print("[WATCHDOG] ⚠️ Watchdog already started - skipping", flush=True)
+            print("[WATCHDOG] ⚠️ Watchdog already started - skipping", flush=True)
 
         self._start_power_resume_monitor()
 
@@ -18325,10 +18325,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 order_succeeded = False
                 if hasattr(result, 'success'):
                     if result.success:
-                        _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.order_id}")
+                        print(f"[{broker_name}] ✅ Option order SUCCESS: {result.order_id}")
                         order_succeeded = True
                     else:
-                        _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.message}")
+                        print(f"[{broker_name}] ❌ Option order FAILED: {result.message}")
                 elif isinstance(result, dict):
                     if result.get('success') or result.get('orderId'):
                         _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.get('orderId', result.get('msg'))}")
@@ -18643,6 +18643,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 else:
                     resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
                 
+                print(f"[{broker_name}] Stock order {'✅ SUCCESS' if stock_order_succeeded else '❌ FAILED'}: {signal['action']} {signal.get('qty')} {signal['symbol']} → {resp.get('msg') or resp.get('orderId') or resp.get('result')}")
                 if stock_order_succeeded:
                     try:
                         stock_placed_id = None
@@ -19030,15 +19031,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if _telegram_signal_queue is None:
             return
         
-        _original_print("[TELEGRAM BRIDGE] ✓ Started - bridging Telegram signals to order queue", flush=True)
-        
+        print("[TELEGRAM BRIDGE] ✓ Started - bridging Telegram signals to order queue", flush=True)
+
         while True:
             try:
                 try:
                     import queue as std_queue
                     signal = _telegram_signal_queue.get(timeout=1.0)
-                    
-                    _original_print(f"[TELEGRAM BRIDGE] Received signal: {signal.get('action')} {signal.get('symbol')}", flush=True)
+
+                    print(f"[TELEGRAM BRIDGE] Received signal: {signal.get('action')} {signal.get('symbol')}", flush=True)
 
                     if not signal.get('detected_at'):
                         signal['detected_at'] = datetime.now().isoformat()
@@ -19065,7 +19066,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[EXIT MODE] ⛔ BLOCKED: Telegram bridge STC for {signal.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)", flush=True)
                         else:
                             await self.order_queue.put(signal)
-                            _original_print(f"[TELEGRAM BRIDGE] ✓ Signal forwarded to order queue", flush=True)
+                            print(f"[TELEGRAM BRIDGE] ✓ Signal forwarded to order queue: {signal.get('action')} {signal.get('symbol')}", flush=True)
                     
                 except std_queue.Empty:
                     pass
@@ -19073,10 +19074,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 await asyncio.sleep(0.1)
                 
             except asyncio.CancelledError:
-                _original_print("[TELEGRAM BRIDGE] Shutdown requested", flush=True)
+                print("[TELEGRAM BRIDGE] Shutdown requested", flush=True)
                 break
             except Exception as e:
-                _original_print(f"[TELEGRAM BRIDGE] Error: {e}", flush=True)
+                print(f"[TELEGRAM BRIDGE] Error: {e}", flush=True)
                 await asyncio.sleep(1.0)
     
     async def _route_telegram_conditional_order(self, signal):
@@ -19206,9 +19207,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
     async def worker(self):
         """Process orders from queue with pre-trade analysis"""
-        _original_print("[WORKER] 💤 Waiting for broker_ready event...", flush=True)
+        print("[WORKER] 💤 Waiting for broker_ready event...", flush=True)
         await self.broker_ready.wait()
-        _original_print("[WORKER] 🚀 Order processor started — processing risk exits immediately, regular orders after sync", flush=True)
+        print("[WORKER] 🚀 Order processor started — processing risk exits immediately, regular orders after sync", flush=True)
         
         _heartbeat_count = 0
         while True:
@@ -19223,12 +19224,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 is_risk_order = signal.get('_risk_management_order', False)
                 if not self.sync_ready.is_set() and not is_risk_order:
-                    _original_print(f"[WORKER] ⏸️ Waiting for first sync to complete (up to 5s)...", flush=True)
+                    print(f"[WORKER] ⏸️ Waiting for first sync to complete (up to 5s)...", flush=True)
                     try:
                         await asyncio.wait_for(self.sync_ready.wait(), timeout=5.0)
-                        _original_print(f"[WORKER] ✅ Sync ready — proceeding with {signal.get('action')} {signal.get('symbol')}", flush=True)
+                        print(f"[WORKER] ✅ Sync ready — proceeding with {signal.get('action')} {signal.get('symbol')}", flush=True)
                     except asyncio.TimeoutError:
-                        _original_print(f"[WORKER] ⚠️ Sync not ready after 5s — proceeding anyway with {signal.get('action')} {signal.get('symbol')}", flush=True)
+                        print(f"[WORKER] ⚠️ Sync not ready after 5s — proceeding anyway with {signal.get('action')} {signal.get('symbol')}", flush=True)
                 
                 if is_risk_order and not self.sync_ready.is_set():
                     _original_print(f"[WORKER] ⚡ Processing risk exit {signal.get('symbol')} IMMEDIATELY (bypassing sync gate)", flush=True)
@@ -19268,7 +19269,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 _queue_latency = ''
                 if signal.get('_queued_at'):
                     _queue_latency = f" (queue→worker: {(_tmod.monotonic() - signal['_queued_at'])*1000:.0f}ms)"
-                _original_print(f"[WORKER] ✅ Got signal from queue: {signal.get('action')} {signal.get('symbol')}{_queue_latency}", flush=True)
+                print(f"[WORKER] ✅ Got signal from queue: {signal.get('action')} {signal.get('symbol')}{_queue_latency}", flush=True)
                 
                 # Handle NOTIFICATION signals (not orders - just messages)
                 if signal.get('action') == 'NOTIFICATION':
@@ -19325,7 +19326,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # 1. Check permanent cache for Discord/Telegram
                     elif is_platform_signal:
                         if order_key in self._executed_orders_permanent:
-                            _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (platform msg_id: {signal_id})", flush=True)
+                            print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (platform msg_id: {signal_id})", flush=True)
                             try:
                                 from gui_app.database import record_order_event
                                 record_order_event('DUPLICATE_BLOCKED', symbol=signal.get('symbol'), broker=signal.get('broker'), direction=signal.get('action'), quantity=signal.get('qty'), price=signal.get('price'), channel_name=signal.get('_channel_name'), reason=f"Platform duplicate (msg_id: {signal_id})", severity='warning', source='dedup')
@@ -19470,14 +19471,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             # STRICT ROUTING: No primary broker fallback allowed
                             # Every order MUST have explicit channel broker configuration
                             channel_name = signal.get('_channel_name', 'Unknown')
-                            _original_print(f"[ROUTING] ❌ REJECTED - No broker configured for channel '{channel_name}' (channel_id={channel_id})")
-                            _original_print(f"[ROUTING] Configure enabled_brokers in channel settings to execute trades")
+                            print(f"[ROUTING] ❌ REJECTED - No broker configured for channel '{channel_name}' (channel_id={channel_id})")
+                            print(f"[ROUTING] Configure enabled_brokers in channel settings to execute trades")
                             self.order_queue.task_done()
                             continue
 
                 if enabled_brokers and isinstance(enabled_brokers, list) and len(enabled_brokers) > 0:
                     # MULTI-BROKER EXECUTION - Execute on all selected brokers IN PARALLEL
-                    _original_print(f"[MULTI-BROKER] Executing on {len(enabled_brokers)} brokers IN PARALLEL: {enabled_brokers}")
+                    print(f"[MULTI-BROKER] Executing on {len(enabled_brokers)} brokers IN PARALLEL: {enabled_brokers}")
                     
                     import copy
                     
@@ -19513,19 +19514,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             # Match the requested mode with the actual mode
                             if broker_name_lower == 'ibkr_paper' and ibkr_is_paper:
                                 broker_instance = self.ibkr_broker
-                                _original_print(f"[MULTI-BROKER] Queuing IBKR PAPER broker")
+                                print(f"[MULTI-BROKER] Queuing IBKR PAPER broker")
                             elif broker_name_lower == 'ibkr_live' and not ibkr_is_paper:
                                 broker_instance = self.ibkr_broker
-                                _original_print(f"[MULTI-BROKER] Queuing IBKR LIVE broker")
+                                print(f"[MULTI-BROKER] Queuing IBKR LIVE broker")
                             elif broker_name_lower == 'ibkr':
                                 # Generic 'ibkr' route uses whatever mode is configured
                                 broker_instance = self.ibkr_broker
                                 mode = "PAPER" if ibkr_is_paper else "LIVE"
-                                _original_print(f"[MULTI-BROKER] Queuing IBKR broker ({mode} mode)")
+                                print(f"[MULTI-BROKER] Queuing IBKR broker ({mode} mode)")
                             else:
                                 # Requested mode doesn't match configured mode - append failure response
                                 configured_mode = "PAPER" if ibkr_is_paper else "LIVE"
-                                _original_print(f"[MULTI-BROKER] ⚠️ IBKR mode mismatch: requested '{broker_name}' but configured as {configured_mode}")
+                                print(f"[MULTI-BROKER] ⚠️ IBKR mode mismatch: requested '{broker_name}' but configured as {configured_mode}")
                                 immediate_failures.append({
                                     'success': False,
                                     'msg': f'IBKR mode mismatch: requested {broker_name} but configured as {configured_mode}',
@@ -19576,8 +19577,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             mode = "LIVE" if getattr(self.trading212_broker, 'is_live', True) else "PAPER"
                             _original_print(f"[MULTI-BROKER] Queuing Trading 212 {mode} broker (UK/EU stocks)")
                         else:
-                            _original_print(f"[MULTI-BROKER] ⚠️  Broker '{broker_name}' not available or not connected")
-                            _original_print(f"[DEBUG] Requested: '{broker_name_lower}', paper_broker: {getattr(self.paper_broker, 'name', None) if self.paper_broker else None}, broker: {getattr(self.broker, 'name', None) if self.broker else None}")
+                            print(f"[MULTI-BROKER] ⚠️  Broker '{broker_name}' not available or not connected")
+                            print(f"[MULTI-BROKER] Requested: '{broker_name_lower}', ibkr={getattr(self.ibkr_broker, 'connected', None) if hasattr(self, 'ibkr_broker') and self.ibkr_broker else 'None'}")
                             immediate_failures.append({
                                 'success': False,
                                 'msg': f'{broker_name} not available',
@@ -19594,7 +19595,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     responses = list(immediate_failures)  # Start with any mapping failures
                     
                     if broker_tasks:
-                        _original_print(f"[MULTI-BROKER] ⚡ Launching {len(broker_tasks)} orders in parallel...")
+                        print(f"[MULTI-BROKER] ⚡ Launching {len(broker_tasks)} orders in parallel...")
                         
                         _sync_svc = getattr(self, '_sync_service', None)
                         if _sync_svc:
@@ -19635,7 +19636,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         _exec_elapsed = _time_mod.monotonic() - _exec_start
                         _e2e_ms = (_time_mod.monotonic() - _worker_t0) * 1000
-                        _original_print(f"[MULTI-BROKER] ⚡ Parallel execution complete ({_exec_elapsed:.1f}s) | Worker total: {_e2e_ms:.0f}ms")
+                        print(f"[MULTI-BROKER] ⚡ Parallel execution complete ({_exec_elapsed:.1f}s) | Worker total: {_e2e_ms:.0f}ms")
                     
                     # Handle multi-broker responses
                     # Only treat as success if: success=True, OR orderId present without explicit failure
@@ -19649,11 +19650,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     successes = [r for r in responses if _is_broker_success(r)]
                     failures = [r for r in responses if not _is_broker_success(r)]
                     
-                    _original_print(f"[MULTI-BROKER] Results: {len(successes)} succeeded, {len(failures)} failed")
-                    
+                    print(f"[MULTI-BROKER] Results: {len(successes)} succeeded, {len(failures)} failed")
+
                     # For now, treat as success if at least one broker succeeded
                     if successes:
-                        _original_print(f"[MULTI-BROKER] ✅ At least one broker executed successfully")
+                        print(f"[MULTI-BROKER] ✅ At least one broker executed successfully")
                         resp = successes[0]
                         
                         resp['_multi_broker_results'] = responses
@@ -19830,13 +19831,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 _original_print(f"[ORDER_CHASER] ℹ️ Skipped tracking - order chase disabled for channel")
                     else:
-                        _original_print(f"[MULTI-BROKER] ❌ All brokers failed")
+                        print(f"[MULTI-BROKER] ❌ All brokers failed")
                         broker_errors = []
                         for fail_resp in failures:
                             fb = fail_resp.get('broker', '?')
                             fe = fail_resp.get('msg') or fail_resp.get('message') or fail_resp.get('error') or 'Unknown'
                             broker_errors.append(f"{fb}: {fe}")
-                            _original_print(f"[MULTI-BROKER] ❌ {fb} → {fe}")
+                            print(f"[MULTI-BROKER] ❌ {fb} → {fe}")
                             try:
                                 from gui_app.discord_notifier import notify_order_failed
                                 notify_order_failed(
