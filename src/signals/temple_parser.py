@@ -923,7 +923,7 @@ def parse_temple_options_exit(match: re.Match, text: str) -> Optional[Dict[str, 
 # =============================================================================
 
 def _parse_zz_targets(targets_str: str, entry_price: float = None) -> list:
-    """Parse targets from '0.33...0.37...0.40', '2.60-3.00', or '5% 10% 15%' format."""
+    """Parse targets from '0.33...0.37...0.40', '2.60-3.00', '1.20-1.50-1.70-2.00', or '5% 10% 15%' format."""
     targets_str = targets_str.strip().rstrip('​').rstrip('+')
     pct_parts = re.findall(r'(\d+(?:\.\d+)?)\s*%', targets_str)
     if pct_parts and entry_price and entry_price > 0:
@@ -934,15 +934,23 @@ def _parse_zz_targets(targets_str: str, entry_price: float = None) -> list:
         part = part.strip().rstrip('%+')
         if not part:
             continue
-        range_match = re.match(r'(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)', part)
-        if range_match:
-            targets.append(float(range_match.group(1)))
-            targets.append(float(range_match.group(2)))
+        all_nums = re.findall(r'\d+(?:\.\d+)?', part)
+        if len(all_nums) > 2:
+            for n in all_nums:
+                try:
+                    targets.append(float(n))
+                except ValueError:
+                    continue
         else:
-            try:
-                targets.append(float(part))
-            except ValueError:
-                continue
+            range_match = re.match(r'(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)', part)
+            if range_match:
+                targets.append(float(range_match.group(1)))
+                targets.append(float(range_match.group(2)))
+            else:
+                try:
+                    targets.append(float(part))
+                except ValueError:
+                    continue
     return targets
 
 
@@ -992,7 +1000,11 @@ def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dic
     sl_pct = None
     if raw_sl is not None:
         is_pct = raw_sl <= 50 and raw_sl > 0 and (entry_high == 0 or raw_sl < entry_high * 0.5)
-        sl_raw_text = text[text.index('❌'):text.index('❌')+40] if '❌' in text else ''
+        sl_raw_text = ''
+        if '❌' in text:
+            _sl_start = text.index('❌')
+            _sl_line_end = text.index('\n', _sl_start) if '\n' in text[_sl_start:] else _sl_start + 40
+            sl_raw_text = text[_sl_start:_sl_line_end]
         if '%' in sl_raw_text or '-' in sl_raw_text.split('❌')[-1][:10]:
             sl_type = 'percent'
             sl_pct = raw_sl
