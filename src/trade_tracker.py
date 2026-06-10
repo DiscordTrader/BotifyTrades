@@ -202,27 +202,8 @@ class TradeTracker:
                 # Get current option price
                 def fetch_option_price():
                     try:
-                        # Convert MM/DD to YYYY-MM-DD format
-                        from datetime import datetime
-                        month, day = trade.expiry.split('/')
-                        month_int = int(month)
-                        
-                        # Use stored expiry_year if available, otherwise infer from current date
-                        if trade.expiry_year:
-                            year = trade.expiry_year
-                        else:
-                            # Infer year: if expiry month is before current month, likely next year
-                            current_date = datetime.now()
-                            current_year = current_date.year
-                            current_month = current_date.month
-                            
-                            if month_int < current_month:
-                                # Expiry is in a past month, probably next year
-                                year = current_year + 1
-                            else:
-                                year = current_year
-                        
-                        expire_date_iso = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+                        from src.core.expiry import normalize_expiry_iso
+                        expire_date_iso = normalize_expiry_iso(trade.expiry)
                         
                         # Normalize option_type: handle C/P or CALL/PUT
                         opt_type_upper = trade.option_type.upper()

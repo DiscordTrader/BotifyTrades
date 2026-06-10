@@ -146,25 +146,12 @@ def detect_signal_type(embed_title: Optional[str], embed_description: Optional[s
 
 
 def normalize_expiry(expiry_str: str) -> str:
-    """Convert MM/DD format to YYYY-MM-DD."""
+    """Convert any expiry format to YYYY-MM-DD."""
+    from src.core.expiry import normalize_expiry_iso
     try:
-        parts = expiry_str.split('/')
-        if len(parts) == 2:
-            month = int(parts[0])
-            day = int(parts[1])
-            
-            today = datetime.now()
-            year = today.year
-            
-            candidate = datetime(year, month, day)
-            if candidate < today - timedelta(days=7):
-                year += 1
-            
-            return f"{year}-{month:02d}-{day:02d}"
-    except Exception:
-        pass
-    
-    return expiry_str
+        return normalize_expiry_iso(expiry_str)
+    except ValueError:
+        return expiry_str
 
 
 def parse_option_signal(text: str) -> Optional[Dict[str, Any]]:
@@ -187,10 +174,11 @@ def parse_option_signal(text: str) -> Optional[Dict[str, Any]]:
         else:
             price = float(price_str)
     
+    normalized = normalize_expiry(expiry)
     return {
         "symbol": symbol,
-        "expiry": expiry,
-        "expiry_date": normalize_expiry(expiry),
+        "expiry": normalized,
+        "expiry_date": normalized,
         "strike": strike,
         "option_type": option_type,
         "price": price

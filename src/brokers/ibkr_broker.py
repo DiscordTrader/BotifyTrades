@@ -53,34 +53,8 @@ class IBKRBroker(BrokerInterface):
     
     @staticmethod
     def _normalize_expiry_yyyymmdd(expiry: str) -> str:
-        """Convert any expiry format to YYYYMMDD for IB contract construction.
-        
-        Supported: MM/DD, MM/DD/YY, MM/DD/YYYY, YYYY-MM-DD, YYYYMMDD
-        """
-        from datetime import datetime
-        if '/' in expiry:
-            parts = expiry.split('/')
-            if len(parts) == 2:
-                m, d = parts
-                y = datetime.now().year
-                return f"{y}{int(m):02d}{int(d):02d}"
-            elif len(parts) == 3:
-                p0, p1, p2 = parts
-                if len(p0) == 4:
-                    y, m, d = p0, p1, p2
-                else:
-                    m, d, y = p0, p1, p2
-                    if len(y) == 2:
-                        y = f"20{y}"
-                return f"{int(y)}{int(m):02d}{int(d):02d}"
-            raise ValueError(f"Invalid expiry format: {expiry}")
-        elif '-' in expiry:
-            parts = expiry.split('-')
-            if len(parts) == 3:
-                y, m, d = parts
-                return f"{y}{m.zfill(2)}{d.zfill(2)}"
-            raise ValueError(f"Invalid expiry format: {expiry}")
-        return expiry
+        from src.core.expiry import expiry_to_yyyymmdd
+        return expiry_to_yyyymmdd(expiry)
 
     async def connect(self) -> bool:
         """Connect to Interactive Brokers TWS/Gateway"""

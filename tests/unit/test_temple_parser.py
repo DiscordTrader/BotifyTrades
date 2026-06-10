@@ -287,7 +287,7 @@ class TestTempleParserOutput:
         assert r['strike'] == 530.0
         assert r['opt_type'] == 'C'
         assert r['price'] == 2.50
-        assert r['expiry'] == '5/16'
+        assert r['expiry'].endswith('-05-16')
         assert r['_temple_rf_entry'] is True
 
     def test_standard_options_dot_price(self):
@@ -315,7 +315,7 @@ class TestTempleParserOutput:
     def test_zz_options_a_with_date(self):
         r = self._parse(TEMPLE_ZZ_OPTIONS_A, parse_temple_zz_options_a,
                         "QQQ C 480 5/16")
-        assert r['expiry'] == '5/16'
+        assert r['expiry'].endswith('-05-16')
 
     def test_zz_options_b_output(self):
         r = self._parse(TEMPLE_ZZ_OPTIONS_B, parse_temple_zz_options_b,
@@ -469,7 +469,7 @@ class TestTempleEdgeCases:
         m = TEMPLE_RF_OPTIONS.search(text)
         assert m is not None
         r = parse_temple_rf_options(m, text)
-        assert r['expiry'] == '5/16/25'
+        assert r['expiry'] == '2025-05-16'
 
     def test_dollar_sign_optional_in_symbol(self):
         """$SYMBOL and SYMBOL should both work."""

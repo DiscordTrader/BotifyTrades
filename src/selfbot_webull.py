@@ -2120,13 +2120,10 @@ class WebullBroker:
                 print(f"[PREFETCH] ⚡ Skipping Webull lookup for {symbol} (index option, not on Webull)", flush=True)
                 return
 
-            _yr = signal.get('expiry_year') or datetime.now().strftime('%Y')
-            if '/' in str(expiry):
-                _parts = str(expiry).split('/')
-                full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
-            elif '-' in str(expiry) and len(str(expiry)) >= 10:
-                full_expiry = str(expiry)[:10]
-            else:
+            from src.core.expiry import normalize_expiry_iso
+            try:
+                full_expiry = normalize_expiry_iso(str(expiry))
+            except ValueError:
                 full_expiry = str(expiry)
 
             cached = self.get_cached_option_id(symbol, float(strike), full_expiry, opt_type)
@@ -3786,10 +3783,10 @@ class WebullBroker:
             
             def _build_option_hub_func():
                 try:
+                    from src.core.expiry import expiry_to_occ
                     _hub_sym = fix_symbol(symbol, "in")
-                    _yr = expiry_year[2:] if expiry_year and len(expiry_year) >= 4 else ''
-                    _exp = expiry_mmdd.replace('/', '') if expiry_mmdd else ''
-                    _occ = f"{_hub_sym:<6}{_yr}{_exp}{(opt_type or '').upper()}{int((strike or 0) * 1000):08d}"
+                    _occ_date = expiry_to_occ(expiry_mmdd) if expiry_mmdd else ''
+                    _occ = f"{_hub_sym:<6}{_occ_date}{(opt_type or '').upper()}{int((strike or 0) * 1000):08d}"
                     def _hub_price():
                         if self._data_hub:
                             p = self._data_hub.get_quote_price(_occ)
@@ -3832,11 +3829,10 @@ class WebullBroker:
                 if ALLOW_ORDER_WHEN_NO_QUOTE:
                     print(f"[SLIPPAGE] ⚡ Hub miss — skipping REST fallback (allow_when_no_quote=true, limit ${limit_price:.2f} protects)")
                 else:
-                    _chk_yr = expiry_year or datetime.now().strftime('%Y')
-                    if '/' in expiry_mmdd:
-                        _chk_parts = expiry_mmdd.split('/')
-                        _chk_exp = f"{_chk_yr}-{_chk_parts[0].zfill(2)}-{_chk_parts[1].zfill(2)}"
-                    else:
+                    from src.core.expiry import normalize_expiry_iso as _norm_exp
+                    try:
+                        _chk_exp = _norm_exp(expiry_mmdd)
+                    except ValueError:
                         _chk_exp = expiry_mmdd
                     cached_opt_id = self.get_cached_option_id(symbol, float(strike), _chk_exp, opt_type)
                     if cached_opt_id:
@@ -4217,10 +4213,16 @@ class WebullBroker:
                             
                             pos_type = 'C' if pos_direction == 'CALL' else 'P' if pos_direction == 'PUT' else ''
                             
-                            if ((pos_symbol == symbol or pos_symbol == broker_sym) and 
-                                abs(pos_strike - strike) < 0.01 and 
-                                pos_type == opt_type.upper() and 
-                                pos_expiry_mmdd == expiry_mmdd and
+                            from src.core.expiry import normalize_expiry_iso as _nei
+                            try:
+                                _pos_iso = _nei(pos_expiry_mmdd) if pos_expiry_mmdd else ''
+                                _sig_iso = _nei(expiry_mmdd) if expiry_mmdd else ''
+                            except ValueError:
+                                _pos_iso, _sig_iso = pos_expiry_mmdd, expiry_mmdd
+                            if ((pos_symbol == symbol or pos_symbol == broker_sym) and
+                                abs(pos_strike - strike) < 0.01 and
+                                pos_type == opt_type.upper() and
+                                _pos_iso == _sig_iso and
                                 pos_qty > 0):
                                 
                                 actual_qty = int(pos_qty)
@@ -18062,6 +18064,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         matched_qty = 0
                         matched_pos = None
+                        sig_option_id = signal.get('option_id')
                         for p in pos_list:
                             if p.get('asset') != 'option':
                                 continue
@@ -18069,10 +18072,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             p_strike = float(p.get('strike', 0))
                             p_dir = p.get('direction', '').upper()[:1]
                             p_exp = _normalize_expiry(p.get('expiry', ''))
-                            
+                            p_option_id = p.get('option_id')
+
+                            if sig_option_id and p_option_id and str(sig_option_id) == str(p_option_id):
+                                matched_qty = int(p.get('quantity', 0))
+                                matched_pos = p
+                                _original_print(f"[{broker_name}] ✓ STC matched by option_id={sig_option_id} (strike={p_strike}, sym={p_sym})")
+                                break
+
                             expiry_match = (not norm_sig_expiry or not p_exp or norm_sig_expiry == p_exp)
-                            strike_match = (sig_strike < 0.01 or abs(p_strike - sig_strike) < 0.01)
-                            opt_type_match = (not sig_opt or p_dir == sig_opt)
+                            strike_match = (sig_strike < 0.01 or p_strike < 0.01 or abs(p_strike - sig_strike) < 0.01)
+                            opt_type_match = (not sig_opt or not p_dir or p_dir == sig_opt)
 
                             if (p_sym in sig_symbol_set and
                                 strike_match and
@@ -18100,8 +18110,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _original_print(f"[{broker_name}] STC: Backfilled opt_type={signal['opt_type']} from matched position")
                         
                         if matched_qty <= 0:
-                            _original_print(f"[{broker_name}] ⚠️ STC rejected: No matching position for {sig_symbol} ${sig_strike}{sig_opt} {sig_expiry}")
-                            return {'success': False, 'msg': f'No matching position for {sig_symbol} ${sig_strike}{sig_opt} on {broker_name}', 'broker': broker_name}
+                            is_risk_order = signal.get('_risk_management_order', False)
+                            if is_risk_order and sig_option_id:
+                                matched_qty = int(signal.get('qty', 1))
+                                _original_print(f"[{broker_name}] ⚠️ RISK BYPASS: Broker API returned no positions but risk monitor confirmed position exists — proceeding with option_id={sig_option_id}, qty={matched_qty}")
+                            else:
+                                _original_print(f"[{broker_name}] ⚠️ STC rejected: No matching position for {sig_symbol} ${sig_strike}{sig_opt} {sig_expiry}")
+                                return {'success': False, 'msg': f'No matching position for {sig_symbol} ${sig_strike}{sig_opt} on {broker_name}', 'broker': broker_name}
                         
                         if matched_qty > 0:
                             trim_pct = signal.get('trim_percentage')
@@ -18211,11 +18226,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         from src.services.schwab_data_hub import get_schwab_data_hub
                                         _sh = get_schwab_data_hub()
                                         if _sh:
-                                            _yr = (signal.get('expiry_year') or '')
-                                            _exp = (signal.get('expiry') or '').replace('/', '')
-                                            _yr2 = _yr[2:] if len(_yr) >= 4 else ''
+                                            from src.core.expiry import expiry_to_occ
+                                            _exp_raw = signal.get('expiry') or ''
+                                            _occ_date = expiry_to_occ(_exp_raw) if _exp_raw else ''
                                             _ot = (signal.get('opt_type') or signal.get('option_type') or '').upper()
-                                            _occ = f"{signal['symbol']:<6}{_yr2}{_exp}{_ot}{int((signal.get('strike') or 0)*1000):08d}"
+                                            _occ = f"{signal['symbol']:<6}{_occ_date}{_ot}{int((signal.get('strike') or 0)*1000):08d}"
                                             return _sh.get_quote_price(_occ)
                                     except Exception:
                                         pass

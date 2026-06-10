@@ -71,6 +71,17 @@ from .thread_manager import (
     ThreadSafeFlag,
 )
 
+from .expiry import (
+    normalize_expiry_iso,
+    expiry_to_yyyymmdd,
+    expiry_to_date,
+    expiry_to_mmdd,
+    expiry_to_occ,
+    expiry_year,
+    is_expired,
+    is_same_day,
+)
+
 from .imports import (
     load_optional_imports,
     is_available,
@@ -143,6 +154,15 @@ __all__ = [
     'create_isolated_event_loop',
     'ThreadSafeCounter',
     'ThreadSafeFlag',
+    # Expiry
+    'normalize_expiry_iso',
+    'expiry_to_yyyymmdd',
+    'expiry_to_date',
+    'expiry_to_mmdd',
+    'expiry_to_occ',
+    'expiry_year',
+    'is_expired',
+    'is_same_day',
     # Imports
     'load_optional_imports',
     'is_available',

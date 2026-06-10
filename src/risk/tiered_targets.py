@@ -60,11 +60,16 @@ def calculate_tier_exit_qty(
         is_partial = exit_qty < current_qty
         return exit_qty, is_partial
 
+    if custom_trim_pct is not None and custom_trim_pct == 0:
+        return 0, False
+
     if custom_trim_pct is not None and custom_trim_pct > 0:
         import math
         exit_qty = math.floor(max_sellable * (custom_trim_pct / 100.0))
         exit_qty = min(exit_qty, max_sellable)
-        if exit_qty <= 0:
+        if exit_qty <= 0 and max_sellable > 0:
+            exit_qty = 1
+        elif exit_qty <= 0:
             return 0, False
         is_partial = exit_qty < current_qty
         return exit_qty, is_partial
@@ -150,38 +155,63 @@ def evaluate_tiered_targets(
     def has_pending(tier: int) -> bool:
         return cache.has_pending_order_for_tier(tier)
     
+    trim_pct_map = {
+        1: channel_settings.profit_target_trim_pct_1,
+        2: channel_settings.profit_target_trim_pct_2,
+        3: channel_settings.profit_target_trim_pct_3,
+        4: channel_settings.profit_target_trim_pct_4,
+    }
+
+    def _check_escalation_only(tier_num):
+        """If trim_pct is explicitly 0, mark tier hit without selling (escalation-only)."""
+        tp = trim_pct_map.get(tier_num)
+        qty_map = {1: channel_settings.profit_target_qty_1, 2: channel_settings.profit_target_qty_2,
+                   3: channel_settings.profit_target_qty_3, 4: channel_settings.profit_target_qty_4}
+        if tp is not None and tp == 0 and not qty_map.get(tier_num):
+            setattr(cache, f'tier{tier_num}_hit', True)
+            print(f"[RISK] T{tier_num} ESCALATION ONLY ({pct_change:.2f}% >= target) — tier marked, no sell (trim=0%)")
+            return True
+        return False
+
     # Tier 1 check - skip if tier hit OR pending order exists
     if not cache.tier1_hit and not has_pending(1) and t1 > 0 and pct_change >= t1:
-        exit_qty, is_partial = calculate_tier_exit_qty(1, current_qty, channel_settings, cache)
-        if exit_qty > 0:
-            qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_1 else f"{exit_qty} of {current_qty}"
-            return ExitDecision(
-                should_exit=True,
-                reason=f"({pct_change:.2f}% >= {t1}%) - Selling {qty_info}",
-                exit_qty=exit_qty,
-                is_partial=is_partial,
-                risk_trigger='profit_target',
-                tier_hit=1
-            )
-    
+        if _check_escalation_only(1):
+            pass
+        else:
+            exit_qty, is_partial = calculate_tier_exit_qty(1, current_qty, channel_settings, cache)
+            if exit_qty > 0:
+                qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_1 else f"{exit_qty} of {current_qty}"
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"({pct_change:.2f}% >= {t1}%) - Selling {qty_info}",
+                    exit_qty=exit_qty,
+                    is_partial=is_partial,
+                    risk_trigger='profit_target',
+                    tier_hit=1
+                )
+
     # Tier 2 check - skip if tier hit OR pending order exists
-    elif cache.tier1_hit and not cache.tier2_hit and not has_pending(2) and t2 > 0 and pct_change >= t2:
-        exit_qty, is_partial = calculate_tier_exit_qty(2, current_qty, channel_settings, cache)
-        if exit_qty > 0:
-            qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_2 else f"{exit_qty} of {current_qty}"
-            return ExitDecision(
-                should_exit=True,
-                reason=f"({pct_change:.2f}% >= {t2}%) - Selling {qty_info}",
-                exit_qty=exit_qty,
-                is_partial=is_partial,
-                risk_trigger='profit_target',
-                tier_hit=2
-            )
-    
+    if cache.tier1_hit and not cache.tier2_hit and not has_pending(2) and t2 > 0 and pct_change >= t2:
+        if _check_escalation_only(2):
+            pass
+        else:
+            exit_qty, is_partial = calculate_tier_exit_qty(2, current_qty, channel_settings, cache)
+            if exit_qty > 0:
+                qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_2 else f"{exit_qty} of {current_qty}"
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"({pct_change:.2f}% >= {t2}%) - Selling {qty_info}",
+                    exit_qty=exit_qty,
+                    is_partial=is_partial,
+                    risk_trigger='profit_target',
+                    tier_hit=2
+                )
+
     # Tier 3 check - skip if tier hit OR pending order exists
-    elif cache.tier2_hit and not cache.tier3_hit and not has_pending(3) and t3 > 0 and pct_change >= t3:
-        # If T4 is configured, T3 is not the final tier
-        if t4 > 0:
+    if cache.tier2_hit and not cache.tier3_hit and not has_pending(3) and t3 > 0 and pct_change >= t3:
+        if _check_escalation_only(3):
+            pass
+        elif t4 > 0:
             exit_qty, is_partial = calculate_tier_exit_qty(3, current_qty, channel_settings, cache)
             if exit_qty > 0:
                 qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_3 else f"{exit_qty} of {current_qty}"
@@ -194,7 +224,6 @@ def evaluate_tiered_targets(
                     tier_hit=3
                 )
         else:
-            # T3 is the final tier - apply leave runner logic
             exit_qty, is_partial = calculate_tier_exit_qty(3, current_qty, channel_settings, cache)
             if exit_qty > 0:
                 runner_info = ""
@@ -209,23 +238,26 @@ def evaluate_tiered_targets(
                     risk_trigger='profit_target',
                     tier_hit=3
                 )
-    
+
     # Tier 4 check - skip if tier hit OR pending order exists
-    elif cache.tier3_hit and not cache.tier4_hit and not has_pending(4) and t4 > 0 and pct_change >= t4:
-        exit_qty, is_partial = calculate_tier_exit_qty(4, current_qty, channel_settings, cache)
-        if exit_qty > 0:
-            runner_info = ""
-            if is_partial and channel_settings.leave_runner_enabled:
-                runner_qty = current_qty - exit_qty
-                runner_info = f", leaving {runner_qty} as runner"
-            return ExitDecision(
-                should_exit=True,
-                reason=f"({pct_change:.2f}% >= {t4}%) - Selling {exit_qty}{runner_info}",
-                exit_qty=exit_qty,
-                is_partial=is_partial,
-                risk_trigger='profit_target',
-                tier_hit=4
-            )
+    if cache.tier3_hit and not cache.tier4_hit and not has_pending(4) and t4 > 0 and pct_change >= t4:
+        if _check_escalation_only(4):
+            pass
+        else:
+            exit_qty, is_partial = calculate_tier_exit_qty(4, current_qty, channel_settings, cache)
+            if exit_qty > 0:
+                runner_info = ""
+                if is_partial and channel_settings.leave_runner_enabled:
+                    runner_qty = current_qty - exit_qty
+                    runner_info = f", leaving {runner_qty} as runner"
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"({pct_change:.2f}% >= {t4}%) - Selling {exit_qty}{runner_info}",
+                    exit_qty=exit_qty,
+                    is_partial=is_partial,
+                    risk_trigger='profit_target',
+                    tier_hit=4
+                )
     
     return ExitDecision.no_exit()
 

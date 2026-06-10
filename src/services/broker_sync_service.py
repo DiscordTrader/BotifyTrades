@@ -127,8 +127,18 @@ class BrokerSyncService:
             try:
                 symbol_upper = symbol.upper()
                 broker_upper = broker_name.upper()
+                _SYNC_ALIASES = {
+                    'SPX': {'SPX', 'SPXW'}, 'SPXW': {'SPX', 'SPXW'},
+                    'NDX': {'NDX', 'NDXP'}, 'NDXP': {'NDX', 'NDXP'},
+                    'VIX': {'VIX', 'VIXW'}, 'VIXW': {'VIX', 'VIXW'},
+                    'RUT': {'RUT', 'RUTW'}, 'RUTW': {'RUT', 'RUTW'},
+                }
+                symbols_to_match = _SYNC_ALIASES.get(symbol_upper, {symbol_upper})
                 for cache_key in list(cache._cache.keys()):
-                    if symbol_upper in cache_key.upper() and broker_upper in cache_key.upper():
+                    cache_key_upper = cache_key.upper()
+                    if broker_upper not in cache_key_upper:
+                        continue
+                    if any(s in cache_key_upper for s in symbols_to_match):
                         e = cache._cache.get(cache_key)
                         if e and getattr(e, 'current_price', 0) > 0:
                             return e

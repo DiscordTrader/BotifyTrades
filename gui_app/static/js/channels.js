@@ -298,8 +298,11 @@ async function loadChannels() {
                                     </div>
                                 </div>
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(234, 179, 8, 0.05); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 8px;">
-                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #eab308; margin-bottom: 8px;">Custom Trim Percentages (optional)</label>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Specify % of position to trim at each target. Overridden by custom qty if both set. Leave empty for auto.</p>
+                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                        <label style="display: block; font-size: 12px; font-weight: 600; color: #eab308;">Custom Trim Percentages (optional)</label>
+                                        <button type="button" onclick="showRiskHelp('custom-trim')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Specify % of position to trim at each target. Set 0 for escalation-only (mark tier, no sell). Leave empty for auto-split.</p>
                                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
                                         <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P1 Trim %</label><input type="number" id="risk-trim-pct-1-${channel.id}" value="${channel.profit_target_trim_pct_1 != null ? channel.profit_target_trim_pct_1 : ''}" placeholder="Auto" step="1" min="0" max="100" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                         <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P2 Trim %</label><input type="number" id="risk-trim-pct-2-${channel.id}" value="${channel.profit_target_trim_pct_2 != null ? channel.profit_target_trim_pct_2 : ''}" placeholder="Auto" step="1" min="0" max="100" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
@@ -1546,10 +1549,10 @@ async function saveRiskManagement(channelId) {
                 profit_target_qty_2: qty2 ? parseInt(qty2) : null,
                 profit_target_qty_3: qty3 ? parseInt(qty3) : null,
                 profit_target_qty_4: qty4 ? parseInt(qty4) : null,
-                profit_target_trim_pct_1: trimPct1 ? parseFloat(trimPct1) : null,
-                profit_target_trim_pct_2: trimPct2 ? parseFloat(trimPct2) : null,
-                profit_target_trim_pct_3: trimPct3 ? parseFloat(trimPct3) : null,
-                profit_target_trim_pct_4: trimPct4 ? parseFloat(trimPct4) : null,
+                profit_target_trim_pct_1: trimPct1 !== '' && trimPct1 !== null && trimPct1 !== undefined ? parseFloat(trimPct1) : null,
+                profit_target_trim_pct_2: trimPct2 !== '' && trimPct2 !== null && trimPct2 !== undefined ? parseFloat(trimPct2) : null,
+                profit_target_trim_pct_3: trimPct3 !== '' && trimPct3 !== null && trimPct3 !== undefined ? parseFloat(trimPct3) : null,
+                profit_target_trim_pct_4: trimPct4 !== '' && trimPct4 !== null && trimPct4 !== undefined ? parseFloat(trimPct4) : null,
                 stop_loss_pct: stopLoss ? parseFloat(stopLoss) : null,
                 trailing_stop_pct: trailingStop ? parseFloat(trailingStop) : null,
                 trailing_activation_pct: trailingActivation ? parseFloat(trailingActivation) : null,
@@ -1942,6 +1945,38 @@ const RISK_HELP_CONTENT = {
                         <div style="padding:10px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.2);border-radius:8px;text-align:center;"><strong style="color:#FACC15;">Trim 60/40%</strong><br>P1: sell 60 shares<br>P2: sell 40 shares</div>
                     </div>
                 </div>`
+            }
+        ]
+    },
+    'custom-trim': {
+        title: 'Custom Trim Percentages',
+        sections: [
+            {
+                heading: 'How Trim % Works',
+                body: 'Each trim % specifies how much of the <strong>remaining position</strong> to sell when that target hits. Trim applies to what is left after previous trims, not the original size.'
+            },
+            {
+                heading: 'Trim Values',
+                body: '<strong>Empty (Auto):</strong> Position is auto-split equally across remaining targets.<br><br>' +
+                    '<strong>1-100%:</strong> Sell that percentage of remaining position. Minimum 1 contract/share is always sold even if % rounds to zero.<br><br>' +
+                    '<strong>0% (Escalation Only):</strong> Mark the tier as hit but do NOT sell. Use this for Dynamic SL escalation markers — the tier hit advances your Dynamic SL level without trimming the position.'
+            },
+            {
+                heading: 'Example: Trim + Escalation',
+                body: 'Config: P1=8% (trim 60%), P2=10% (trim 0%), P3=15% (trim 0%), P4=20% (trim 100%)',
+                diagram: `<div style="margin:12px 0;padding:14px;background:#1E1E24;border-radius:12px;border:1px solid #2D2D30;">
+                    <div style="font-size:13px;color:#D4D4D8;line-height:1.8;">
+                        <div><span style="color:#22D3EE;font-weight:600;">P1 +8%:</span> Sell 60% of position — lock profits</div>
+                        <div><span style="color:#FACC15;font-weight:600;">P2 +10%:</span> Trim 0% = escalation only — Dynamic SL moves to breakeven</div>
+                        <div><span style="color:#FACC15;font-weight:600;">P3 +15%:</span> Trim 0% = escalation only — Dynamic SL moves to +10%</div>
+                        <div><span style="color:#34D399;font-weight:600;">P4 +20%:</span> Sell 100% — close remaining position</div>
+                        <div style="margin-top:8px;padding-top:8px;border-top:1px solid #2D2D30;color:#A1A1AA;font-size:12px;">If price reverses after P3 but before P4, Dynamic SL at +10% protects your gains automatically.</div>
+                    </div>
+                </div>`
+            },
+            {
+                heading: 'Priority',
+                body: 'If both Custom Qty and Trim % are set for the same target, <strong>Custom Qty wins</strong>. Trim % is only used when Custom Qty is empty.'
             }
         ]
     },

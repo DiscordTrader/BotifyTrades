@@ -111,6 +111,7 @@ class SignalFormatRegistry:
         'temple_zz_structured_entry', 'temple_zz_structured_entry_no_targets',
         'temple_zz_single_line_entry', 'temple_zz_inline_role_entry',
         'temple_zz_swing_update',
+        'viking_entry_role_first', 'viking_entry', 'viking_exit',
     })
 
     def parse(self, text: str) -> Optional[Dict[str, Any]]:
@@ -206,7 +207,7 @@ class SignalFormatRegistry:
             name="jake_option_exp",
             description="Jake's option with DDMMMYYYY expiry",
             priority=16,
-            pattern=r'^([+-])?(\d+)\s+\$?([A-Za-z]+)\s+\$?(\d+(?:\.\d+)?)([CPcp])\s+(\d{1,2})([A-Za-z]{3})(\d{2,4})\s*@?\s*(?:lim)?([0-9.]+)',
+            pattern=r'^([+-])?(?:(\d+)\s+)?\$?([A-Za-z]+)\s+\$?(\d+(?:\.\d+)?)([CPcp])\s+(\d{1,2})([A-Za-z]{3})(\d{2,4})\s*@?\s*(?:lim)?([0-9.]+)',
             parser=self._parse_jake_option_exp,
             examples=["+1 $ONON $55c 20FEB2026 @lim0.75", "$BBAI $8c 16JAN2026 @lim0.59"]
         )
@@ -216,7 +217,7 @@ class SignalFormatRegistry:
             name="jake_order_executed",
             description="Jake's order execution notification",
             priority=20,
-            pattern=r'(Bought|Sold)\s+(\d+)\s+Single\s+([A-Za-z]+)\s+(\d{1,2})/(\d{1,2})/(\d{2,4})\s+(\d+(?:\.\d+)?)\s+(CALL|PUT)\s*@\s*([0-9.]+)',
+            pattern=r'(Bought|Sold)\s+-?(\d+)\s+Single\s+([A-Za-z]+)\s+(\d{1,2})/(\d{1,2})/(\d{2,4})\s+(\d+(?:\.\d+)?)\s+(CALL|PUT)\s*@\s*([0-9.]+)',
             parser=self._parse_jake_order_executed,
             examples=["Bought 1 Single MSTR 12/12/2025 185 CALL @1.68", "Sold -1 Single MSTR 1/2/2026 150 PUT @1.38"]
         )
@@ -235,6 +236,16 @@ class SignalFormatRegistry:
         # SLEM FORMAT
         # =====================================================================
         
+        # Slem lotto format: $MDB 422.5c 2.20 1/9 @Lottos (more specific — check first)
+        self.register(
+            name="slem_lotto",
+            description="Slem's lotto format with @ tag",
+            priority=24,
+            pattern=r'\$([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+([0-9.]+)\s+(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\s*@',
+            parser=self._parse_slem_option,
+            examples=["$MDB 422.5c 2.20 1/9 @Lottos", "$IREN 60c 1.45 1/30 @Leaps"]
+        )
+
         # Slem format: $TSLA 445p 4.18 1/9 exp
         self.register(
             name="slem_option",
@@ -243,16 +254,6 @@ class SignalFormatRegistry:
             pattern=r'\$([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+([0-9.]+)\s+(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\s*(?:exp)?',
             parser=self._parse_slem_option,
             examples=["$TSLA 445p 4.18 1/9 exp", "$LITE 400c 2.25 1/9 exp", "$NVDA 187.5c 1.05 1/9 exp"]
-        )
-        
-        # Slem lotto format: $MDB 422.5c 2.20 1/9 @Lottos
-        self.register(
-            name="slem_lotto",
-            description="Slem's lotto format with @ tag",
-            priority=26,
-            pattern=r'\$([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+([0-9.]+)\s+(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\s*@',
-            parser=self._parse_slem_option,
-            examples=["$MDB 422.5c 2.20 1/9 @Lottos", "$IREN 60c 1.45 1/30 @Leaps"]
         )
         
         # Slem gain update: $MDB 270% gain (not actionable)
@@ -1414,8 +1415,8 @@ class SignalFormatRegistry:
             pattern=r'^\$?([A-Z]{1,5})\s*(?:<@&\d+>\s*)+(?:✅\s*)?(?:\$\s*)?(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?',
             parser=parse_temple_zz_single_line_entry,
             examples=[
-                "$ACXP <@&swing> ✅ 1.75-1.80",
-                "CTNT <@&momentum> <@&swing> 2.18",
+                "$ACXP <@&1330915546513805463> ✅ 1.75-1.80",
+                "CTNT <@&1330929339134640179> <@&1330915546513805463> 2.18",
             ],
             flags=re.IGNORECASE
         )
@@ -1491,7 +1492,7 @@ class SignalFormatRegistry:
             name="temple_zz_will_enter_if_breaks",
             description="ZZ will enter if breaks: SYMBOL will enter [only] if [it] breaks PRICE for TARGETS",
             priority=48,
-            pattern=r'^\$?([A-Z]{1,5})\s+(?:I\s+)?will\s+(?:only\s+)?(?:re-?)?enter\s+(?:only\s+)?(?:if\s+)?(?:it\s+)?(?:give[s]?\s+(?:us\s+)?(?:a\s+)?)?(?:clear\s+)?(?:strong\s+)?(?:bre?a?k(?:s)?(?:\s+(?:and\s+)?holds?)?\s+(?:of\s+)?|(?:at\s+(?:a\s+)?)?(?:clear\s+)?)\$?(\d+(?:\.\d+)?)\s+(?:for|(?:bre?a?k\s+)?for)\s+(.+)',
+            pattern=r'^\$?([A-Z]{1,5})\s+(?:good\s+news\s+-\s+)?(?:I\s+)?will\s+(?:only\s+)?(?:re-?)?enter\s+(?:only\s+)?(?:if\s+)?(?:it\s+)?(?:give[s]?\s+(?:us\s+)?(?:a\s+)?)?(?:a\s+)?(?:clear\s+)?(?:strong\s+)?(?:(?:at\s+)?(?:a\s+)?\$?(\d+(?:\.\d+)?)\s+(?:clear\s+)?bre?a?k|bre?a?k(?:s)?(?:\s+(?:and\s+)?holds?)?\s+(?:of\s+)?\$?(\d+(?:\.\d+)?))\s+(?:for|(?:bre?a?k\s+)?for)\s+(.+)',
             parser=parse_temple_zz_will_enter_if_breaks,
             examples=[
                 "SMTK will enter only if it breaks 0.55 for 0.60...0.65....0.68 retest",
@@ -1535,9 +1536,9 @@ class SignalFormatRegistry:
 
         self.register(
             name="temple_zz_i_will_take_break",
-            description="ZZ I will take/buy break: I will take/buy PRICE break or breaks PRICE",
+            description="ZZ I will take/buy break: I will take/buy PRICE break or buy if it breaks PRICE",
             priority=48,
-            pattern=r'^\$?([A-Z]{1,5})\s+I\s+will\s+(?:take|buy)\s+(?:(?:clear\s+)?bre?a?k\s+(?:of\s+)?)?\$?(\d+(?:\.\d+)?)\s*(?:bre?a?k)?(?:\s+for\s+(.+))?',
+            pattern=r'^\$?([A-Z]{1,5})\s+I\s+will\s+(?:take|buy)\s+(?:if\s+it\s+breaks\s+\$?(\d+(?:\.\d+)?)|(?:(?:clear\s+)?bre?a?k\s+(?:of\s+)?)?\$?(\d+(?:\.\d+)?)\s*(?:bre?a?k)?)(?:\s+for\s+(.+))?',
             parser=parse_temple_zz_will_enter_if_breaks,
             examples=[
                 "DRCT I will take 3.67 break",
@@ -1594,9 +1595,9 @@ class SignalFormatRegistry:
 
         self.register(
             name="temple_zz_ciss_reversal",
-            description="ZZ reversal entry: SYMBOL for the reversal [here] at PRICE [SL -X%]",
+            description="ZZ reversal entry: SYMBOL for the reversal [here] at PRICE or SYMBOL PRICE for the reversal",
             priority=73,
-            pattern=r'^\$?([A-Z]{2,5})\s+for\s+the\s+reversal\s+(?:here\s+)?(?:at\s+)?\$?(\d+(?:\.\d+)?)',
+            pattern=r'^\$?([A-Z]{2,5})\s+(?:for\s+the\s+reversal\s+(?:here\s+)?(?:at\s+)?\$?(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s+for\s+the\s+reversal)',
             parser=parse_temple_zz_scalp,
             examples=[
                 "$CISS for the reversal here at 2.55. SL -10%",
@@ -1686,7 +1687,7 @@ class SignalFormatRegistry:
             name="temple_zz_options_b",
             description="Temple zz options: TICKER STRIKEc PRICE",
             priority=79,
-            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])\s+(\d+(?:\.\d+)?)(?!\s*/)(?!\d)',
+            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])\s+(\d+(?:\.\d+)?)(?!\s*/)(?!\d)(?!\s*%)',
             parser=parse_temple_zz_options_b,
             examples=["SPY 580c 1.80", "NVDA 135c 2.50"],
             flags=re.IGNORECASE
@@ -1949,50 +1950,6 @@ class SignalFormatRegistry:
             ]
         )
 
-        # Load learned patterns from database
-        self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
-        self._load_learned_patterns()
-    
-    def _load_learned_patterns(self) -> None:
-        """Load learned patterns from database with full metadata."""
-        try:
-            old_learned = [name for name in self._formats if name.startswith('learned_')]
-            for name in old_learned:
-                self.unregister(name)
-            self._learned_pattern_metadata.clear()
-
-            from gui_app.database import get_active_learned_patterns
-            patterns = get_active_learned_patterns()
-            loaded = 0
-            for p in patterns:
-                if p.get('pattern') and p.get('name'):
-                    pattern_name = f"learned_{p['name']}"
-                    self._learned_pattern_metadata[pattern_name] = {
-                        'action': p.get('action', 'BTO'),
-                        'asset_type': p.get('asset_type', 'stock'),
-                        'confidence': p.get('confidence', 0.85),
-                        'approved_by': p.get('approved_by'),
-                        'approved_at': p.get('approved_at'),
-                        'admin_approved': p.get('approved_by') is not None
-                    }
-                    self.register(
-                        name=pattern_name,
-                        description=p.get('description', 'Learned pattern'),
-                        priority=50 + p.get('id', 0),
-                        pattern=p['pattern'],
-                        parser=lambda m, t, pn=pattern_name: self._parse_learned_pattern_with_metadata(m, t, pn),
-                        examples=[p.get('example_text', '')]
-                    )
-                    loaded += 1
-            print(f"[FORMAT REGISTRY] ✓ Loaded {loaded} learned patterns (cleared {len(old_learned)} old)")
-        except Exception as e:
-            print(f"[FORMAT REGISTRY] Warning: Could not load learned patterns: {e}")
-
-    def reload_learned_patterns(self) -> int:
-        """Hot-reload learned patterns from DB without restarting. Returns count loaded."""
-        self._load_learned_patterns()
-        return len([n for n in self._formats if n.startswith('learned_')])
-
         # =====================================================================
         # ABTRADES FORMAT (bold-wrapped options entries, trims, exits)
         # =====================================================================
@@ -2084,6 +2041,50 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE,
         )
 
+        # Load learned patterns from database
+        self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
+        self._load_learned_patterns()
+
+    def _load_learned_patterns(self) -> None:
+        """Load learned patterns from database with full metadata."""
+        try:
+            old_learned = [name for name in self._formats if name.startswith('learned_')]
+            for name in old_learned:
+                self.unregister(name)
+            self._learned_pattern_metadata.clear()
+
+            from gui_app.database import get_active_learned_patterns
+            patterns = get_active_learned_patterns()
+            loaded = 0
+            for p in patterns:
+                if p.get('pattern') and p.get('name'):
+                    pattern_name = f"learned_{p['name']}"
+                    self._learned_pattern_metadata[pattern_name] = {
+                        'action': p.get('action', 'BTO'),
+                        'asset_type': p.get('asset_type', 'stock'),
+                        'confidence': p.get('confidence', 0.85),
+                        'approved_by': p.get('approved_by'),
+                        'approved_at': p.get('approved_at'),
+                        'admin_approved': p.get('approved_by') is not None
+                    }
+                    self.register(
+                        name=pattern_name,
+                        description=p.get('description', 'Learned pattern'),
+                        priority=50 + p.get('id', 0),
+                        pattern=p['pattern'],
+                        parser=lambda m, t, pn=pattern_name: self._parse_learned_pattern_with_metadata(m, t, pn),
+                        examples=[p.get('example_text', '')]
+                    )
+                    loaded += 1
+            print(f"[FORMAT REGISTRY] ✓ Loaded {loaded} learned patterns (cleared {len(old_learned)} old)")
+        except Exception as e:
+            print(f"[FORMAT REGISTRY] Warning: Could not load learned patterns: {e}")
+
+    def reload_learned_patterns(self) -> int:
+        """Hot-reload learned patterns from DB without restarting. Returns count loaded."""
+        self._load_learned_patterns()
+        return len([n for n in self._formats if n.startswith('learned_')])
+
     # =========================================================================
     # PARSER IMPLEMENTATIONS
     # =========================================================================
@@ -2109,10 +2110,11 @@ class SignalFormatRegistry:
     
     def _parse_jake_full_option(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Jake's full format: +1 $GRAB $7c 17APR2026 @ lim0.65"""
+        from src.core.expiry import normalize_expiry_iso
         sign, qty, symbol, strike, opt_type, day, month_name, year, price = match.groups()
         action = "BTO" if sign == "+" else "STC"
         month = self._month_name_to_num(month_name)
-        expiry = f"{month}/{day}"
+        expiry = normalize_expiry_iso(f"{month}/{day}", year_hint=str(year))
         return {
             "asset": "option",
             "action": action,
@@ -2129,10 +2131,11 @@ class SignalFormatRegistry:
     
     def _parse_jake_option_exp(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Jake's option format: $BBAI $8c 16JAN2026 @lim0.59"""
+        from src.core.expiry import normalize_expiry_iso
         sign, qty, symbol, strike, opt_type, day, month_name, year, price = match.groups()
         action = "BTO" if sign == "+" or sign is None else "STC"
         month = self._month_name_to_num(month_name)
-        expiry = f"{month}/{day}"
+        expiry = normalize_expiry_iso(f"{month}/{day}", year_hint=str(year))
         return {
             "asset": "option",
             "action": action,
@@ -2149,9 +2152,10 @@ class SignalFormatRegistry:
     
     def _parse_jake_order_executed(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Jake's order executed: Bought 1 Single MSTR 12/12/2025 185 CALL @1.68"""
+        from src.core.expiry import normalize_expiry_iso
         bought_sold, qty, symbol, month, day, year, strike, opt_type, price = match.groups()
         action = "BTO" if bought_sold.upper() == "BOUGHT" else "STC"
-        expiry = f"{month}/{day}"
+        expiry = normalize_expiry_iso(f"{month}/{day}", year_hint=str(year))
         return {
             "asset": "option",
             "action": action,
@@ -2180,10 +2184,11 @@ class SignalFormatRegistry:
     
     def _parse_slem_option(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Slem's format: $TSLA 445p 4.18 1/9 exp"""
+        from src.core.expiry import normalize_expiry_iso
         groups = match.groups()
         symbol, strike, opt_type, price, month, day = groups[:6]
         year = groups[6] if len(groups) > 6 and groups[6] else None
-        expiry = f"{month}/{day}"
+        expiry = normalize_expiry_iso(f"{month}/{day}", year_hint=year)
         return {
             "asset": "option",
             "action": "BTO",  # Slem's callouts are entries
@@ -2212,8 +2217,9 @@ class SignalFormatRegistry:
     
     def _parse_stack_option(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse STACK$ format: BTO 1 NVDA 185p 01/16 @ 4.50"""
+        from src.core.expiry import normalize_expiry_iso
         action, qty, symbol, strike, opt_type, month, day, price = match.groups()
-        expiry = f"{month}/{day}"
+        expiry = normalize_expiry_iso(f"{month}/{day}")
         return {
             "asset": "option",
             "action": action.upper(),
@@ -2230,8 +2236,9 @@ class SignalFormatRegistry:
     
     def _parse_stack_0dte(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse STACK$ 0DTE: BTO 1 SPX 6925c @ 1.90"""
+        from src.core.expiry import normalize_expiry_iso
         action, qty, symbol, strike, opt_type, price = match.groups()
-        expiry = datetime.now().strftime("%m/%d")
+        expiry = normalize_expiry_iso("daily")
         return {
             "asset": "option",
             "action": action.upper(),
@@ -2248,10 +2255,11 @@ class SignalFormatRegistry:
     
     def _parse_stack_tickerless(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse STACK$ ticker-less: STC 1 6935c @ 1.50"""
+        from src.core.expiry import normalize_expiry_iso
         action, qty, strike, opt_type, price = match.groups()
         strike_val = float(strike)
         symbol = "NDX" if strike_val >= 10000 else "SPX"
-        expiry = datetime.now().strftime("%m/%d")
+        expiry = normalize_expiry_iso("daily")
         return {
             "asset": "option",
             "action": action.upper(),
@@ -4069,25 +4077,29 @@ class SignalFormatRegistry:
 
     def _resolve_relative_expiry(self, expiry_text: str) -> str:
         from datetime import timedelta
+        from src.core.expiry import normalize_expiry_iso
         now = datetime.now()
         lower = expiry_text.lower().strip()
         if '0dte' in lower or 'today' in lower:
-            return now.strftime("%m/%d")
+            return now.strftime("%Y-%m-%d")
         if 'tomorrow' in lower:
-            return (now + timedelta(days=1)).strftime("%m/%d")
+            return (now + timedelta(days=1)).strftime("%Y-%m-%d")
         if 'next week' in lower:
             days_to_monday = (7 - now.weekday()) % 7
             if days_to_monday == 0:
                 days_to_monday = 7
             friday = now + timedelta(days=days_to_monday + 4)
-            return friday.strftime("%m/%d")
+            return friday.strftime("%Y-%m-%d")
         if 'this week' in lower:
             days_to_friday = (4 - now.weekday()) % 7
             if days_to_friday == 0:
                 days_to_friday = 0
             friday = now + timedelta(days=days_to_friday)
-            return friday.strftime("%m/%d")
-        return expiry_text
+            return friday.strftime("%Y-%m-%d")
+        try:
+            return normalize_expiry_iso(expiry_text)
+        except ValueError:
+            return expiry_text
 
     def _extract_stop_loss(self, text: str) -> float:
         m = re.search(r'(?:STOP\s+LOSS\s+AT|stop\s+at|SL|Stop)\s+\$?([\d.]+)', text, re.IGNORECASE)
@@ -4099,11 +4111,15 @@ class SignalFormatRegistry:
         return None
 
     def _parse_ashley_entry(self, match: re.Match, text: str) -> Optional[Dict]:
+        from src.core.expiry import normalize_expiry_iso
         symbol, strike, opt_type_raw, expiry_raw, price = match.groups()
         opt_type = 'C' if 'CALL' in opt_type_raw.upper() else 'P'
         expiry = self._resolve_relative_expiry(expiry_raw)
-        if '/' not in expiry:
-            expiry = expiry_raw
+        if not re.match(r'\d{4}-\d{2}-\d{2}', expiry):
+            try:
+                expiry = normalize_expiry_iso(expiry_raw)
+            except ValueError:
+                expiry = normalize_expiry_iso("daily")
         stop_loss = self._extract_stop_loss(text)
         try:
             price_f = float(price)
@@ -4153,6 +4169,10 @@ class SignalFormatRegistry:
         }
 
     def _parse_ashley_all_out(self, match: re.Match, text: str) -> Optional[Dict]:
+        if re.search(r'\*\*\$[A-Z]{1,5}\*\*', text):
+            return None
+        if re.search(r'\$[A-Z]{1,5}\s+\d+(?:\.\d+)?[cpCP]\s+\d+', text):
+            return None
         symbol = match.group(1) or match.group(2) if match.lastindex and match.lastindex >= 2 else match.group(1)
         return {
             "asset": "option",
@@ -4165,12 +4185,14 @@ class SignalFormatRegistry:
         }
 
     def _parse_angela_entry(self, match: re.Match, text: str) -> Optional[Dict]:
+        from src.core.expiry import normalize_expiry_iso
         symbol, strike, price, expiry = match.groups()
         text_lower = text.lower()
         opt_type = 'P' if 'put' in text_lower else 'C'
         stop_loss = self._extract_stop_loss(text)
         try:
             price_f = float(price)
+            expiry = normalize_expiry_iso(expiry)
         except ValueError:
             return None
         return {
@@ -4252,8 +4274,9 @@ class SignalFormatRegistry:
         if date_expiry:
             expiry = date_expiry
         else:
+            from src.core.expiry import normalize_expiry_iso
             expiry_m = re.search(r'(tomorrow|today|this\s+week|next\s+week)\s+expiry', text, re.IGNORECASE)
-            expiry = self._resolve_relative_expiry(expiry_m.group(1)) if expiry_m else datetime.now().strftime("%m/%d")
+            expiry = self._resolve_relative_expiry(expiry_m.group(1)) if expiry_m else normalize_expiry_iso("daily")
 
         stop_loss = self._extract_stop_loss(text)
         return {
@@ -4288,8 +4311,9 @@ class SignalFormatRegistry:
         if date_expiry:
             expiry = date_expiry
         else:
+            from src.core.expiry import normalize_expiry_iso
             expiry_m = re.search(r'(tomorrow|today|this\s+week|next\s+week)\s+expiry', text, re.IGNORECASE)
-            expiry = self._resolve_relative_expiry(expiry_m.group(1)) if expiry_m else datetime.now().strftime("%m/%d")
+            expiry = self._resolve_relative_expiry(expiry_m.group(1)) if expiry_m else normalize_expiry_iso("daily")
 
         stop_loss = self._extract_stop_loss(text)
         return {

@@ -553,24 +553,8 @@ class AlpacaBroker(BrokerInterface):
                          PositionIntent.BUY_TO_OPEN # Fallback
 
             # Normalize expiry to YYYY-MM-DD
-            expiry_date = expiry
-            if "/" in expiry:
-                parts = expiry.split("/")
-                if len(parts) == 2:
-                    # MM/DD format
-                    m, d = parts
-                    y = datetime.now().year
-                    expiry_date = f"{y:04d}-{int(m):02d}-{int(d):02d}"
-                elif len(parts) == 3:
-                    # MM/DD/YY or MM/DD/YYYY
-                    m, d, y = parts
-                    if len(y) == 2:
-                        y = f"20{y}"
-                    expiry_date = f"{y}-{int(m):02d}-{int(d):02d}"
-                else:
-                    raise ValueError(f"Invalid expiry format: {expiry}")
-            else:
-                expiry_date = expiry  # assume already YYYY-MM-DD
+            from src.core.expiry import normalize_expiry_iso
+            expiry_date = normalize_expiry_iso(expiry)
 
             # Resolve the option contract using Alpaca's endpoint
             req = GetOptionContractsRequest(

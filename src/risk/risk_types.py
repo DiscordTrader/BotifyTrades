@@ -36,7 +36,15 @@ class PositionSnapshot:
     direction: Optional[str] = None  # 'C' or 'P' for options
     raw_symbol: Optional[str] = None  # Original symbol for execution (Alpaca OCC format)
     option_id: Optional[int] = None
-    
+
+    def __post_init__(self):
+        if self.expiry:
+            try:
+                from src.core.expiry import normalize_expiry_iso
+                self.expiry = normalize_expiry_iso(str(self.expiry))
+            except (ValueError, ImportError):
+                pass
+
     @property
     def position_key(self) -> str:
         """Generate unique position key including broker for monitoring cache."""
@@ -496,6 +504,7 @@ class PositionCacheEntry:
         'no stock position', 'no option position',
         'insufficient position', 'position not found',
         'no shares available', 'no position to sell',
+        'no matching position',
     ]
     NO_POSITION_PERMANENT_THRESHOLD = 3
     

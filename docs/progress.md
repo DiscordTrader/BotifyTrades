@@ -1,5 +1,18 @@
 # BotifyTrades Progress Log
 
+## Session: June 9, 2026 — Centralized Expiry Architecture (v11.2.0)
+
+### FEATURE: Centralized Expiry Normalization (`src/core/expiry.py`)
+- **Problem**: 17 duplicate expiry normalize functions scattered across codebase, 13 inline `datetime.now().year` assumptions with no year rollover for cross-year options. Risk engine stripped YYYY-MM-DD → MM/DD + expiry_year, then only reconstructed for IBKR/Tastytrade (not Schwab/Alpaca).
+- **Solution**: Created `src/core/expiry.py` — single source of truth. Canonical format: YYYY-MM-DD (ISO 8601). Handles all formats: MM/DD, MM/DD/YY, YYYY-MM-DD, YYYYMMDD, "daily"/"weekly"/"0dte", "June 10", "17.07" (European), month names with/without year. Year rollover for cross-year expiries.
+- **Output adapters**: `expiry_to_yyyymmdd` (IBKR), `expiry_to_date` (Tastytrade), `expiry_to_mmdd` (display), `expiry_to_occ` (OCC symbols), `expiry_year`, `is_expired`, `is_same_day`
+- **Phase 1**: Created centralized normalizer, 34 unit tests all passing
+- **Phase 2**: Wired all signal parsers (temple, signal_format_registry, parser, kc_trades, sir_goldman) to output YYYY-MM-DD via `normalize_expiry_iso()`
+- **Phase 3**: Fixed risk engine `_build_stc_signal` to pass YYYY-MM-DD directly (removed MM/DD + expiry_year split). Fixed `_direct_execute_exit` to remove broker-specific reconstruction. Fixed OCC construction to use `expiry_to_occ()`.
+- **Phase 4**: Replaced inline normalizers in all 5 broker APIs (Schwab, Alpaca, IBKR, Tastytrade, Webull) with centralized imports
+- **Impact**: Eliminated 17 duplicate functions, fixed year rollover for all brokers, unified expiry handling across entire signal → risk → broker pipeline
+- **Validated**: Agent-validated at each phase gate. 34/34 tests pass.
+
 ## Session: June 9, 2026 — Risk Engine Schwab Position Blindness
 
 ### FIX: Risk engine blind to Schwab positions (v11.1.11)

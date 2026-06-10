@@ -137,53 +137,20 @@ def is_kc_trades_embed(author_id: int, embeds: list) -> bool:
 
 
 def _normalize_expiry(raw_expiry: str) -> Optional[str]:
+    from src.core.expiry import normalize_expiry_iso
+
     raw = raw_expiry.strip()
 
     dte_m = DTE_PATTERN.match(raw)
     if dte_m:
         days = int(dte_m.group(1))
         target = datetime.now() + timedelta(days=days)
-        return target.strftime('%m/%d/%Y')
+        return target.strftime('%Y-%m-%d')
 
-    if raw.upper() == '0DTE':
-        return datetime.now().strftime('%m/%d/%Y')
-
-    md_m = MONTH_DAY_PATTERN.match(raw)
-    if md_m:
-        try:
-            month = int(md_m.group(1))
-            day = int(md_m.group(2))
-            year_str = md_m.group(3)
-            if year_str:
-                year = int(year_str)
-                if year < 100:
-                    year += 2000
-            else:
-                year = datetime.now().year
-                candidate = datetime(year, month, day)
-                if candidate < datetime.now() - timedelta(days=7):
-                    year += 1
-            return datetime(year, month, day).strftime('%m/%d/%Y')
-        except (ValueError, OverflowError):
-            return raw
-
-    mn_m = MONTH_NAME_PATTERN.match(raw)
-    if mn_m:
-        month_name = mn_m.group(1).lower()
-        day = int(mn_m.group(2))
-        month = MONTH_MAP.get(month_name)
-        if month:
-            year = datetime.now().year
-            try:
-                candidate = datetime(year, month, day)
-                if candidate < datetime.now() - timedelta(days=7):
-                    year += 1
-                return datetime(year, month, day).strftime('%m/%d/%Y')
-            except ValueError:
-                pass
+    try:
+        return normalize_expiry_iso(raw)
+    except ValueError:
         return raw
-
-    return raw
 
 
 def _parse_price(text: str) -> Optional[float]:

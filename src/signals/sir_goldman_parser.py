@@ -33,8 +33,9 @@ class SirGoldmanSignalType(Enum):
 
 
 def get_today_expiry() -> str:
-    """Get today's date in MM/DD format for 0DTE options."""
-    return datetime.now().strftime('%m/%d')
+    """Get today's date in YYYY-MM-DD format for 0DTE options."""
+    from src.core.expiry import normalize_expiry_iso
+    return normalize_expiry_iso("daily")
 
 
 @dataclass

@@ -1242,6 +1242,36 @@ class SchwabBroker(BrokerInterface):
             else:
                 duration = "DAY"
             
+            is_entry = instruction in ("BUY", "SELL_SHORT")
+            if is_entry and price and price > 0:
+                try:
+                    acct = await self.get_account_info()
+                    if acct:
+                        bp = float(acct.get('buying_power', 0))
+                        settled = float(acct.get('settled_cash', 0))
+                        order_cost = quantity * price
+                        effective_bp = min(bp, settled) if settled > 0 else bp
+                        print(f"[{self.name}] [FUNDS] BP=${bp:.2f}, Settled=${settled:.2f}, Order cost=${order_cost:.2f}")
+                        if effective_bp <= 0:
+                            return OrderResult(
+                                success=False,
+                                message=f"No buying power available: BP=${bp:.2f}, Settled=${settled:.2f}",
+                                symbol=symbol, action=action
+                            )
+                        if order_cost > effective_bp:
+                            max_qty = int(effective_bp / price)
+                            if max_qty > 0:
+                                print(f"[{self.name}] [FUNDS] Insufficient funds for {quantity} shares — adjusting to {max_qty}")
+                                quantity = max_qty
+                            else:
+                                return OrderResult(
+                                    success=False,
+                                    message=f"Insufficient buying power: have ${effective_bp:.2f}, need ${order_cost:.2f}",
+                                    symbol=symbol, action=action
+                                )
+                except Exception as bp_err:
+                    print(f"[{self.name}] [FUNDS] Warning: Could not check buying power: {bp_err}")
+
             print(f"[{self.name}] 📋 Stock order: {instruction} {quantity} {symbol} | type={order_type} | session={session} | duration={duration}" + (f" | price=${price:.4f}" if price else ""))
 
             order_payload = {
@@ -1427,20 +1457,10 @@ class SchwabBroker(BrokerInterface):
                     action=action
                 )
             
-            if "/" in expiry:
-                parts = expiry.split("/")
-                if len(parts) == 2:
-                    m, d = parts
-                    y = datetime.now().year
-                    expiry_formatted = f"{y:04d}-{int(m):02d}-{int(d):02d}"
-                elif len(parts) == 3:
-                    m, d, y = parts
-                    if len(y) == 2:
-                        y = f"20{y}"
-                    expiry_formatted = f"{y}-{int(m):02d}-{int(d):02d}"
-                else:
-                    expiry_formatted = expiry
-            else:
+            from src.core.expiry import normalize_expiry_iso
+            try:
+                expiry_formatted = normalize_expiry_iso(expiry)
+            except ValueError:
                 expiry_formatted = expiry
             
             call_put = "C" if option_type.upper().startswith("C") else "P"
@@ -1576,6 +1596,35 @@ class SchwabBroker(BrokerInterface):
             else:
                 duration = "DAY"
             
+            if instruction == "BUY_TO_OPEN" and price and price > 0:
+                try:
+                    acct = await self.get_account_info()
+                    if acct:
+                        opt_bp = float(acct.get('options_buying_power', 0))
+                        settled = float(acct.get('settled_cash', 0))
+                        order_cost = quantity * price * 100
+                        effective_bp = min(opt_bp, settled) if settled > 0 else opt_bp
+                        print(f"[{self.name}] [FUNDS] Options BP=${opt_bp:.2f}, Settled=${settled:.2f}, Order cost=${order_cost:.2f} ({quantity}x${price:.2f}x100)")
+                        if effective_bp <= 0:
+                            return OrderResult(
+                                success=False,
+                                message=f"No options buying power available: BP=${opt_bp:.2f}, Settled=${settled:.2f}",
+                                symbol=symbol, action=action
+                            )
+                        if order_cost > effective_bp:
+                            max_qty = int(effective_bp / (price * 100))
+                            if max_qty > 0:
+                                print(f"[{self.name}] [FUNDS] Insufficient funds for {quantity} contracts — adjusting to {max_qty}")
+                                quantity = max_qty
+                            else:
+                                return OrderResult(
+                                    success=False,
+                                    message=f"Insufficient options buying power: have ${effective_bp:.2f}, need ${order_cost:.2f}",
+                                    symbol=symbol, action=action
+                                )
+                except Exception as bp_err:
+                    print(f"[{self.name}] [FUNDS] Warning: Could not check options buying power: {bp_err}")
+
             order_payload = {
                 "orderStrategyType": "SINGLE",
                 "orderType": order_type,

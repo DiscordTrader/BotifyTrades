@@ -1615,27 +1615,26 @@ def _parse_bullwinkle_expiry(expiry_text: str) -> str:
     from datetime import datetime, timedelta
     import calendar
     
+    from src.core.expiry import normalize_expiry_iso
+
     if not expiry_text:
-        # Default to today for 0DTE scalps
-        return datetime.now().strftime("%m/%d")
-    
+        return normalize_expiry_iso("daily")
+
     expiry_text = expiry_text.strip().upper()
-    
+
     # Direct MM/DD format
     if re.match(r'^\d{1,2}/\d{1,2}$', expiry_text):
-        parts = expiry_text.split('/')
-        return f"{int(parts[0]):02d}/{int(parts[1]):02d}"
-    
+        return normalize_expiry_iso(expiry_text)
+
     # NEXT WEEK - find next Friday
     if 'NEXT' in expiry_text and 'WEEK' in expiry_text:
         today = datetime.now()
         days_until_friday = (4 - today.weekday()) % 7
         if days_until_friday == 0:
-            days_until_friday = 7  # Next Friday, not today
+            days_until_friday = 7
         next_friday = today + timedelta(days=days_until_friday)
-        return next_friday.strftime("%m/%d")
-    
-    # Month name mapping
+        return next_friday.strftime("%Y-%m-%d")
+
     month_map = {
         'JAN': 1, 'JANUARY': 1, 'FEB': 2, 'FEBRUARY': 2,
         'MAR': 3, 'MARCH': 3, 'APR': 4, 'APRIL': 4,
@@ -1644,51 +1643,48 @@ def _parse_bullwinkle_expiry(expiry_text: str) -> str:
         'OCT': 10, 'OCTOBER': 10, 'NOV': 11, 'NOVEMBER': 11,
         'DEC': 12, 'DECEMBER': 12
     }
-    
+
     # JAN/16, JAN / 23 format
     month_day_match = re.match(r'([A-Z]+)\s*/?\s*(\d{1,2})$', expiry_text)
     if month_day_match:
         month_str, day = month_day_match.groups()
         month = month_map.get(month_str)
         if month:
-            return f"{month:02d}/{int(day):02d}"
-    
+            return normalize_expiry_iso(f"{month}/{day}")
+
     # JAN 2ND, DEC 15TH, MAR 3RD format (ordinal dates)
     ordinal_match = re.match(r'([A-Z]+)\s*(\d{1,2})(?:ST|ND|RD|TH)?$', expiry_text)
     if ordinal_match:
         month_str, day = ordinal_match.groups()
         month = month_map.get(month_str)
         if month:
-            return f"{month:02d}/{int(day):02d}"
-    
+            return normalize_expiry_iso(f"{month}/{day}")
+
     # JAN 2027, MARCH 2026, JAN / 2027 format - use 3rd Friday of month
     month_year_match = re.match(r'([A-Z]+)\s*/?\s*(\d{4})$', expiry_text)
     if month_year_match:
         month_str, year = month_year_match.groups()
         month = month_map.get(month_str)
         if month:
-            # Find 3rd Friday of that month
             year_int = int(year)
             first_day = datetime(year_int, month, 1)
             first_friday = first_day + timedelta(days=(4 - first_day.weekday()) % 7)
             third_friday = first_friday + timedelta(weeks=2)
-            return third_friday.strftime("%m/%d")
-    
+            return third_friday.strftime("%Y-%m-%d")
+
     # Just month name (JAN, MARCH) - assume current/next occurrence, 3rd Friday
     for month_name, month_num in month_map.items():
         if month_name in expiry_text:
             today = datetime.now()
             year = today.year
-            # If month already passed, use next year
             if month_num < today.month:
                 year += 1
             first_day = datetime(year, month_num, 1)
             first_friday = first_day + timedelta(days=(4 - first_day.weekday()) % 7)
             third_friday = first_friday + timedelta(weeks=2)
-            return third_friday.strftime("%m/%d")
-    
-    # Fallback to today
-    return datetime.now().strftime("%m/%d")
+            return third_friday.strftime("%Y-%m-%d")
+
+    return normalize_expiry_iso("daily")
 
 
 def is_bullwinkle_signal(text: str) -> bool:
@@ -2023,35 +2019,25 @@ def parse_bullwinkle_signal(text: str) -> Optional[Dict[str, Any]]:
 
 
 def _parse_jake_expiry(expiry_text: str) -> str:
-    """
-    Parse Jake's expiry format into MM/DD format.
-    
-    Formats:
-    - 19DEC2025 -> 12/19
-    - 12DEC -> 12/12
-    - 27JUN -> 6/27
-    - 17OCT -> 10/17
-    """
+    """Parse Jake's expiry format into YYYY-MM-DD."""
+    from src.core.expiry import normalize_expiry_iso
+
     if not expiry_text:
         return ''
-    
+
     month_map = {
-        'JAN': '1', 'FEB': '2', 'MAR': '3', 'APR': '4', 'MAY': '5', 'JUN': '6',
-        'JUL': '7', 'AUG': '8', 'SEP': '9', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+        'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
+        'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
     }
-    
-    # Pattern: 19DEC2025 or 12DEC
+
     match = re.match(r'^(\d{1,2})([A-Z]{3})(\d{2,4})?$', expiry_text.upper())
     if match:
         day, month, year = match.groups()
-        month_num = month_map.get(month, '1')
-        return f"{month_num}/{day}"
-    
-    # Already in MM/DD format
-    if '/' in expiry_text:
-        return expiry_text
-    
-    return expiry_text
+        month_num = month_map.get(month, 1)
+        year_hint = year if year else None
+        return normalize_expiry_iso(f"{month_num}/{day}", year_hint=year_hint)
+
+    return normalize_expiry_iso(expiry_text)
 
 
 def is_jake_signal(text: str) -> bool:
@@ -2262,54 +2248,41 @@ def parse_order_executed_signal(text: str) -> Optional[Dict[str, Any]]:
     if not text:
         return None
     
+    from src.core.expiry import normalize_expiry_iso
+
     # Try buy pattern first
     match = ORDER_EXECUTED_BUY_PATTERN.search(text)
     if match:
         qty, symbol, expiry, strike, opt_type, price = match.groups()
-        
-        # Convert expiry 1/9/2026 to MM/DD format
-        expiry_parts = expiry.split('/')
-        if len(expiry_parts) >= 2:
-            expiry_formatted = f"{expiry_parts[0]}/{expiry_parts[1]}"
-        else:
-            expiry_formatted = expiry
-        
+
         return {
             'asset': 'option',
             'action': 'BTO',
             'symbol': symbol.upper(),
             'strike': float(strike),
             'opt_type': 'C' if opt_type.upper() == 'CALL' else 'P',
-            'expiry': expiry_formatted,
+            'expiry': normalize_expiry_iso(expiry),
             'price': float(price),
             'qty': int(qty),
             '_qty_from_signal': True,
             '_order_executed': True,
             'is_exit': False,
         }
-    
+
     # Try sell pattern
     match = ORDER_EXECUTED_SELL_PATTERN.search(text)
     if match:
         qty, symbol, expiry, strike, opt_type, price = match.groups()
-        
-        # Convert expiry
-        expiry_parts = expiry.split('/')
-        if len(expiry_parts) >= 2:
-            expiry_formatted = f"{expiry_parts[0]}/{expiry_parts[1]}"
-        else:
-            expiry_formatted = expiry
-        
-        # Handle negative qty (e.g., "-1")
+
         qty_val = abs(int(qty))
-        
+
         return {
             'asset': 'option',
             'action': 'STC',
             'symbol': symbol.upper(),
             'strike': float(strike),
             'opt_type': 'C' if opt_type.upper() == 'CALL' else 'P',
-            'expiry': expiry_formatted,
+            'expiry': normalize_expiry_iso(expiry),
             'price': float(price),
             'qty': qty_val,
             '_qty_from_signal': True,
@@ -2359,23 +2332,24 @@ def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
     if not text:
         return None
     
+    from src.core.expiry import normalize_expiry_iso
+
     # Try entry pattern: **Option:** SYMBOL STRIKE C/P EXPIRY ... **Entry:** PRICE or PRICE-PRICE
     match = BISHOP_ENTRY_PATTERN.search(text)
     if match:
         groups = match.groups()
         symbol, strike, opt_type, expiry, price_low = groups[:5]
         price_high = groups[5] if len(groups) > 5 else None
-        
-        # Use HIGHER price from range for better fill (Entry: 1.58-1.60 → use 1.60)
+
         execution_price = float(price_high) if price_high else float(price_low)
-        
+
         result = {
             'asset': 'option',
             'action': 'BTO',
             'symbol': symbol.upper(),
             'strike': float(strike),
             'opt_type': opt_type.upper(),
-            'expiry': expiry,
+            'expiry': normalize_expiry_iso(expiry),
             'price': execution_price,  # Use higher price for execution
             'price_low': float(price_low),  # Original low price
             'qty': None,
@@ -2401,7 +2375,7 @@ def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
             'symbol': symbol.upper(),
             'strike': float(strike),
             'opt_type': opt_type.upper(),
-            'expiry': expiry,
+            'expiry': normalize_expiry_iso(expiry),
             'price': 0.0,
             'pct_gain': float(pct_value),
             'trim_percent': float(pct_value),
@@ -2416,17 +2390,16 @@ def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
     match = BISHOP_TRIMMING_PATTERN.search(text)
     if match:
         symbol, strike, opt_type, expiry, price = match.groups()
-        # Try to extract percentage from notes (e.g., "350% profit")
         pct_match = re.search(r'([+-]?\d+(?:\.\d+)?)\s*%', text)
         pct = float(pct_match.group(1)) if pct_match else None
-        
+
         return {
             'asset': 'option',
             'action': 'STC',
             'symbol': symbol.upper(),
             'strike': float(strike),
             'opt_type': opt_type.upper(),
-            'expiry': expiry,
+            'expiry': normalize_expiry_iso(expiry),
             'price': float(price),
             'pct_gain': pct,
             'qty': None,
@@ -2489,24 +2462,18 @@ def parse_evapanda_signal(text: str) -> Optional[Dict[str, Any]]:
     
     match = EVAPANDA_PATTERN.search(text)
     if match:
+        from src.core.expiry import normalize_expiry_iso
         action, symbol, expiry_raw, strike, opt_type, price = match.groups()
-        
-        # Convert expiry MM/DD/YY to MM/DD format
-        expiry_parts = expiry_raw.split('/')
-        if len(expiry_parts) >= 2:
-            expiry = f"{expiry_parts[0]}/{expiry_parts[1]}"
-        else:
-            expiry = expiry_raw
-        
+
         is_exit = action.upper() == 'STC'
-        
+
         return {
             'asset': 'option',
             'action': action.upper(),
             'symbol': symbol.upper(),
             'strike': float(strike),
             'opt_type': opt_type.upper(),
-            'expiry': expiry,
+            'expiry': normalize_expiry_iso(expiry_raw),
             'price': float(price),
             'qty': None,
             '_qty_from_signal': False,
@@ -2549,18 +2516,20 @@ def parse_toon_signal(text: str) -> Optional[Dict[str, Any]]:
     if not text:
         return None
     
+    from src.core.expiry import normalize_expiry_iso
+
     # Try entry pattern first
     match = TOON_ENTRY_PATTERN.search(text)
     if match:
         action, symbol, expiry, strike, opt_type = match.groups()
-        
+
         return {
             'asset': 'option',
             'action': action.upper(),
             'symbol': symbol.upper(),
             'strike': float(strike),
             'opt_type': opt_type.upper(),
-            'expiry': expiry,
+            'expiry': normalize_expiry_iso(expiry),
             'price': None,
             'is_market_order': True,
             'qty': None,
@@ -2568,21 +2537,21 @@ def parse_toon_signal(text: str) -> Optional[Dict[str, Any]]:
             '_toon': True,
             'is_exit': False,
         }
-    
+
     # Try exit pattern
     match = TOON_EXIT_PATTERN.search(text)
     if match:
         action, symbol, expiry, strike, opt_type, partial_flag = match.groups()
-        
+
         is_partial = partial_flag is not None and partial_flag.lower() == 'partial'
-        
+
         return {
             'asset': 'option',
             'action': action.upper(),
             'symbol': symbol.upper(),
             'strike': float(strike),
             'opt_type': opt_type.upper(),
-            'expiry': expiry,
+            'expiry': normalize_expiry_iso(expiry),
             'price': None,
             'is_market_order': True,
             'qty': None,
@@ -2701,10 +2670,8 @@ def normalize_bullwinkle_format(text: str) -> str:
     if entry_match:
         symbol, strike, opt_type, price = entry_match.groups()
         # Get current expiry (assume 0DTE or next trading day)
-        from datetime import datetime, timedelta
-        now = datetime.now()
-        # Default to today's date for 0DTE scalps
-        expiry = now.strftime("%m/%d")
+        from src.core.expiry import normalize_expiry_iso
+        expiry = normalize_expiry_iso("daily")
         
         normalized = f"BTO {symbol.upper()} {strike} {opt_type.upper()} {expiry} @ {price}"
         print(f"[BULLWINKLE] Converted entry: '{text[:60]}' → '{normalized}'")
@@ -2981,20 +2948,20 @@ def _get_next_nse_expiry(symbol: str) -> str:
             days_ahead = 7
         
         next_tuesday = now + timedelta(days=days_ahead)
-        return next_tuesday.strftime("%m/%d")
+        return next_tuesday.strftime("%Y-%m-%d")
     else:
         year = now.year
         month = now.month
-        
+
         last_day = (datetime(year, month % 12 + 1, 1) - timedelta(days=1)).day if month < 12 else 31
         last_tuesday = None
-        
+
         for day in range(last_day, 0, -1):
             test_date = datetime(year, month, day)
             if test_date.weekday() == 1:
                 last_tuesday = test_date
                 break
-        
+
         if last_tuesday and last_tuesday <= now:
             if month == 12:
                 month = 1
@@ -3007,8 +2974,8 @@ def _get_next_nse_expiry(symbol: str) -> str:
                 if test_date.weekday() == 1:
                     last_tuesday = test_date
                     break
-        
-        return last_tuesday.strftime("%m/%d") if last_tuesday else now.strftime("%m/%d")
+
+        return last_tuesday.strftime("%Y-%m-%d") if last_tuesday else now.strftime("%Y-%m-%d")
 
 
 def is_india_signal(text: str) -> bool:

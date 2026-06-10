@@ -7747,12 +7747,6 @@ class RiskManager:
 
             if asset_type == 'option':
                 _exit_expiry = stc_signal.get('expiry', '')
-                _exit_expiry_year = stc_signal.get('expiry_year')
-                if 'IBKR' in broker_upper or 'TASTYTRADE' in broker_upper:
-                    if _exit_expiry_year and '/' in _exit_expiry and '-' not in _exit_expiry:
-                        _parts = _exit_expiry.split('/')
-                        if len(_parts) == 2:
-                            _exit_expiry = f"{_exit_expiry_year}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
                 option_kwargs = {
                     'symbol': stc_signal['symbol'],
                     'strike': stc_signal.get('strike'),
@@ -7974,17 +7968,7 @@ class RiskManager:
         
         if position.asset == 'option':
             expiry_iso = position.expiry or ''
-            expiry_year = None
-            if expiry_iso and '-' in expiry_iso:
-                parts = expiry_iso.split('-')
-                if len(parts) == 3:
-                    expiry_year = parts[0]
-                    expiry_mmdd = f"{parts[1]}/{parts[2]}"
-                else:
-                    expiry_mmdd = expiry_iso
-            else:
-                expiry_mmdd = expiry_iso
-            
+
             direction = (position.direction or '').upper()
             if direction == 'CALL':
                 opt_type = 'C'
@@ -8006,14 +7990,55 @@ class RiskManager:
                                 print(f"[RISK] ✓ Inferred opt_type={opt_type} from DB trade #{trade_id} for {position.position_key}")
                 except Exception:
                     pass
+                if not opt_type and hasattr(self, '_webull_enrichment_cache'):
+                    _lk_keys = []
+                    if position.option_id:
+                        _lk_keys.append(f"oid_{position.option_id}")
+                    for _lk in _lk_keys:
+                        _cached = self._webull_enrichment_cache.get(_lk)
+                        if _cached and _cached.get('direction'):
+                            _d = _cached['direction'].upper()
+                            if _d in ('C', 'P'):
+                                opt_type = _d
+                            elif _d == 'CALL':
+                                opt_type = 'C'
+                            elif _d == 'PUT':
+                                opt_type = 'P'
+                            if opt_type:
+                                if _cached.get('strike') and (not position.strike or position.strike == 0.0):
+                                    position.strike = float(_cached['strike'])
+                                    stc_signal['symbol'] = position.symbol
+                                print(f"[RISK] ✓ Inferred opt_type={opt_type} from enrichment cache for {position.position_key}")
+                                break
+                if not opt_type:
+                    try:
+                        from gui_app.database import get_connection as _get_dir_conn
+                        _dc = _get_dir_conn()
+                        _dcur = _dc.cursor()
+                        _dcur.execute('''
+                            SELECT id, call_put, strike, expiry FROM trades
+                            WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                              AND status IN ('OPEN', 'PENDING', 'PARTIAL')
+                              AND asset_type = 'option'
+                            ORDER BY id DESC LIMIT 1
+                        ''', (position.symbol, position.db_broker))
+                        _dir_row = _dcur.fetchone()
+                        if _dir_row:
+                            _db_cp = (_dir_row['call_put'] or '').upper()
+                            if _db_cp in ('C', 'P', 'CALL', 'PUT'):
+                                opt_type = 'C' if _db_cp in ('C', 'CALL') else 'P'
+                                if _dir_row['strike'] and (not position.strike or position.strike == 0.0):
+                                    position.strike = float(_dir_row['strike'])
+                                print(f"[RISK] ✓ Inferred opt_type={opt_type} from open trade #{_dir_row['id']} (symbol match) for {position.position_key}")
+                    except Exception:
+                        pass
                 if not opt_type:
                     print(f"[RISK] ⚠️ UNKNOWN direction for {position.position_key} — cannot construct STC (strike={position.strike}, expiry={expiry_iso})")
                     return None
             
             stc_signal['strike'] = position.strike or 0
             stc_signal['opt_type'] = opt_type
-            stc_signal['expiry'] = expiry_mmdd
-            stc_signal['expiry_year'] = expiry_year
+            stc_signal['expiry'] = expiry_iso
             stc_signal['option_id'] = position.option_id or 0
         
         return stc_signal
@@ -8750,26 +8775,11 @@ class RiskManager:
     def _normalize_expiry_yyyymmdd(expiry):
         if not expiry:
             return ''
-        e = str(expiry).strip()
-        clean = e.replace('-', '')
-        if len(clean) == 8 and clean.isdigit():
-            return clean
-        if '/' in e:
-            parts = e.split('/')
-            if len(parts) == 3:
-                m, d, y = parts
-                if len(y) == 2:
-                    y = '20' + y
-                return f"{y}{m.zfill(2)}{d.zfill(2)}"
-            elif len(parts) == 2:
-                import datetime
-                m, d = parts
-                today = datetime.date.today()
-                candidate = datetime.date(today.year, int(m), int(d))
-                if candidate < today:
-                    candidate = datetime.date(today.year + 1, int(m), int(d))
-                return candidate.strftime('%Y%m%d')
-        return clean
+        from src.core.expiry import expiry_to_yyyymmdd
+        try:
+            return expiry_to_yyyymmdd(str(expiry))
+        except ValueError:
+            return str(expiry).replace('-', '')
 
     _INDEX_TO_CANONICAL = {
         'SPX': 'SPX', 'SPXW': 'SPX',
@@ -9559,6 +9569,32 @@ class RiskManager:
                         if not expiry:
                             expiry = cached['expiry']
                         break
+            if not strike or float(strike or 0) == 0.0 or not direction:
+                try:
+                    import re as _re_snap
+                    _db_broker = _re_snap.sub(r'_(LIVE|PAPER)$', '', broker, flags=_re_snap.IGNORECASE)
+                    _snap_sym = pos.get('symbol', '').upper()
+                    from gui_app.database import get_connection as _get_snap_conn
+                    _sc = _get_snap_conn()
+                    _scur = _sc.cursor()
+                    _scur.execute('''
+                        SELECT strike, expiry, call_put FROM trades
+                        WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                          AND status IN ('OPEN', 'PENDING', 'PARTIAL')
+                          AND asset_type = 'option'
+                        ORDER BY id DESC LIMIT 1
+                    ''', (_snap_sym, _db_broker))
+                    _snap_row = _scur.fetchone()
+                    if _snap_row:
+                        if _snap_row['strike'] and (not strike or float(strike or 0) == 0.0):
+                            strike = float(_snap_row['strike'])
+                        if _snap_row['call_put'] and not direction:
+                            _cp = _snap_row['call_put'].upper()
+                            direction = 'C' if _cp in ('C', 'CALL') else ('P' if _cp in ('P', 'PUT') else _cp)
+                        if _snap_row['expiry'] and not expiry:
+                            expiry = _snap_row['expiry']
+                except Exception:
+                    pass
 
         raw_sym = pos.get('symbol', '')
         pos_symbol = normalize_index_symbol(raw_sym) if asset == 'option' else raw_sym

@@ -25,10 +25,30 @@ import re
 from datetime import datetime
 from typing import Optional, Dict, Any
 
+from src.core.expiry import normalize_expiry_iso
+
+
+_0DTE_SYMBOLS = {'SPY', 'QQQ', 'SPX', 'SPXW', 'XSP', 'NDX', 'NDXP', 'VIX', 'VIXW', 'RUT', 'RUTW', 'DJX', 'DJXW', 'IWM'}
+
 
 def _default_expiry_today() -> str:
-    """Return today's date as MM/DD for 0DTE fallback."""
-    return datetime.now().strftime("%m/%d")
+    """Return today's date as YYYY-MM-DD for 0DTE fallback."""
+    return normalize_expiry_iso("daily")
+
+
+def _default_expiry_for_symbol(symbol: str) -> str:
+    """0DTE for index options (SPY/QQQ/SPX), this Friday for everything else."""
+    if symbol.upper() in _0DTE_SYMBOLS:
+        return normalize_expiry_iso("daily")
+    from datetime import date, timedelta
+    today = date.today()
+    days_until_friday = (4 - today.weekday()) % 7
+    if days_until_friday == 0 and today.weekday() == 4:
+        return today.strftime('%Y-%m-%d')
+    if days_until_friday == 0:
+        days_until_friday = 7
+    friday = today + timedelta(days=days_until_friday)
+    return friday.strftime('%Y-%m-%d')
 
 
 # =============================================================================
@@ -545,9 +565,18 @@ def parse_temple_zz_breakout_reverse(match: re.Match, text: str) -> Optional[Dic
 
 
 def parse_temple_zz_ticker_price_now(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
-    """Parse '$EZGO 3.28 now' — too ambiguous (could be update or entry). Skip."""
-    return None
-
+    """Parse '$EZGO 3.28 now' — 'now' keyword signals active entry."""
+    symbol = match.group(1).upper()
+    price = float(match.group(2))
+    _NON_SIGNAL_WORDS = {
+        'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL',
+        'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'OUT', 'DAY', 'GET',
+        'HAS', 'HIM', 'HIS', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW',
+        'OLD', 'SEE', 'WAY', 'WHO', 'DID', 'LET', 'SAY', 'SHE',
+        'TOO', 'USE', 'THAT', 'THIS', 'JUST', 'SOME', 'WILL',
+    }
+    if symbol in _NON_SIGNAL_WORDS:
+        return None
     result = {
         "asset": "stock",
         "action": "BTO",
@@ -559,7 +588,7 @@ def parse_temple_zz_ticker_price_now(match: re.Match, text: str) -> Optional[Dic
         "expiry": None,
         "price": price,
         "is_market_order": False,
-        "confidence": 0.95,
+        "confidence": 0.85,
         "_temple_entry": True,
     }
     sl_match = TEMPLE_ZZ_SL_LEVEL.search(text)
@@ -667,7 +696,7 @@ def parse_temple_rf_options(match: re.Match, text: str) -> Optional[Dict[str, An
     strike = float(groups[1])
     opt_type = groups[2].upper()
     price = float(groups[3])
-    expiry = groups[4]
+    expiry = normalize_expiry_iso(groups[4])
 
     result = {
         "asset": "option",
@@ -714,7 +743,7 @@ def parse_temple_options_standard(match: re.Match, text: str) -> Optional[Dict[s
         "symbol": symbol,
         "strike": strike,
         "opt_type": opt_type,
-        "expiry": _default_expiry_today(),
+        "expiry": _default_expiry_for_symbol(symbol),
         "price": price,
         "is_market_order": False,
         "confidence": 0.95,
@@ -732,10 +761,10 @@ def parse_temple_zz_options_a(match: re.Match, text: str) -> Optional[Dict[str, 
     expiry_raw = groups[3].lower()
 
     if expiry_raw in ('daily', 'weekly'):
-        expiry = _default_expiry_today()
+        expiry = normalize_expiry_iso(expiry_raw)
         expiry_defaulted = True
     else:
-        expiry = groups[3]
+        expiry = normalize_expiry_iso(groups[3])
         expiry_defaulted = False
 
     return {
@@ -766,7 +795,7 @@ def parse_temple_zz_options_exp(match: re.Match, text: str) -> Optional[Dict[str
     month = groups[4]
     price_low = float(groups[5])
 
-    expiry = f"{month}/{day}"
+    expiry = normalize_expiry_iso(f"{day}.{month}")
 
     sl = None
     sl_match = re.search(r'SL\s+(\.?\d+(?:\.\d+)?)', text, re.IGNORECASE)
@@ -814,7 +843,7 @@ def parse_temple_tc_options_range(match: re.Match, text: str) -> Optional[Dict[s
         "symbol": symbol,
         "strike": strike,
         "opt_type": opt_type,
-        "expiry": _default_expiry_today(),
+        "expiry": _default_expiry_for_symbol(symbol),
         "price": price,
         "is_market_order": False,
         "confidence": 0.95,
@@ -849,7 +878,7 @@ def parse_temple_zz_options_b(match: re.Match, text: str) -> Optional[Dict[str, 
         "symbol": symbol,
         "strike": strike,
         "opt_type": opt_type,
-        "expiry": _default_expiry_today(),
+        "expiry": _default_expiry_for_symbol(symbol),
         "price": price,
         "is_market_order": False,
         "confidence": 0.95,
@@ -881,7 +910,7 @@ def parse_temple_ts_options(match: re.Match, text: str) -> Optional[Dict[str, An
         "symbol": symbol,
         "strike": strike,
         "opt_type": opt_type,
-        "expiry": _default_expiry_today(),
+        "expiry": _default_expiry_for_symbol(symbol),
         "price": cost,
         "is_market_order": False,
         "confidence": 0.95,
@@ -908,7 +937,7 @@ def parse_temple_options_exit(match: re.Match, text: str) -> Optional[Dict[str, 
         "symbol": symbol,
         "strike": strike,
         "opt_type": opt_type,
-        "expiry": _default_expiry_today(),
+        "expiry": _default_expiry_for_symbol(symbol),
         "price": None,
         "is_market_order": True,
         "is_full_exit": True,
@@ -1244,8 +1273,16 @@ def parse_temple_zz_will_enter_break(match: re.Match, text: str) -> Optional[Dic
 def parse_temple_zz_will_enter_if_breaks(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
     """Parse 'SYMBOL will enter [only] if [it] breaks [and holds] PRICE for TARGETS'."""
     symbol = match.group(1).upper()
-    trigger_price = float(match.group(2))
-    raw_targets = match.group(3) if match.lastindex >= 3 and match.group(3) else ''
+    groups = [g for g in match.groups()[1:] if g]
+    trigger_price = None
+    raw_targets = ''
+    for g in groups:
+        try:
+            trigger_price = float(g)
+        except ValueError:
+            raw_targets = g
+    if trigger_price is None:
+        return None
     targets = _parse_zz_targets(raw_targets, entry_price=trigger_price) if raw_targets else []
     if not targets and raw_targets:
         targets = _extract_prices_from_text(raw_targets, min_price=trigger_price)
@@ -1329,7 +1366,8 @@ def parse_temple_zz_breakout_shorthand(match: re.Match, text: str) -> Optional[D
 def parse_temple_zz_scalp(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
     """Parse 'Scalping SYMBOL [here] [at] PRICE'."""
     symbol = match.group(1).upper()
-    price = float(match.group(2)) if match.group(2) else None
+    price_raw = match.group(2) or (match.group(3) if match.lastindex >= 3 else None)
+    price = float(price_raw) if price_raw else None
 
     return {
         'asset': 'stock',

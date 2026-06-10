@@ -762,21 +762,8 @@ class TastytradeBroker(BrokerInterface):
                     action=action
                 )
             
-            if "/" in expiry:
-                parts = expiry.split("/")
-                if len(parts) == 2:
-                    m, d = parts
-                    y = datetime.now().year
-                    expiry_date = datetime(y, int(m), int(d)).date()
-                elif len(parts) == 3:
-                    m, d, y = parts
-                    if len(y) == 2:
-                        y = f"20{y}"
-                    expiry_date = datetime(int(y), int(m), int(d)).date()
-                else:
-                    expiry_date = datetime.strptime(expiry, "%Y-%m-%d").date()
-            else:
-                expiry_date = datetime.strptime(expiry, "%Y-%m-%d").date()
+            from src.core.expiry import expiry_to_date
+            expiry_date = expiry_to_date(expiry)
             
             print(f"[{self.name}] Looking up option chain for {symbol} expiry {expiry_date}")
             

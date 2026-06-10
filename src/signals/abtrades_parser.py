@@ -48,15 +48,9 @@ _PT_RE = re.compile(r'PT[:\s]+\$?([\d.,\s]+)', re.IGNORECASE)
 
 
 def _normalize_expiry(raw: str) -> tuple:
-    parts = raw.split('/')
-    mm = parts[0].zfill(2)
-    dd = parts[1].zfill(2)
-    if len(parts) == 3:
-        yy = parts[2]
-        full_year = yy if len(yy) == 4 else '20' + yy
-        short_yy = yy[2:] if len(yy) == 4 else yy
-        return f"{mm}/{dd}/{short_yy}", full_year
-    return f"{mm}/{dd}", None
+    from src.core.expiry import normalize_expiry_iso, expiry_year
+    iso = normalize_expiry_iso(raw)
+    return iso, expiry_year(iso)
 
 
 def _extract_sl_pt(text: str) -> tuple:

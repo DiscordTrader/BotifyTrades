@@ -72,7 +72,7 @@ class TestEntryParser:
         assert result["asset"] == "option"
         assert result["strike"] == 420.0
         assert result["opt_type"] == "C"
-        assert result["expiry"] == "06/18"
+        assert result["expiry"].endswith("-06-18")
         assert result["price"] == 8.1
         assert result["_format_name"] == "abtrades_entry"
 
@@ -117,14 +117,14 @@ Chart is in updates"""
         text = "**$MTCH 1/15/2027 40c 3.2**"
         m = ABTRADES_ENTRY_RE.search(text)
         result = parse_abtrades_entry(m, text)
-        assert result["expiry"] == "01/15/27"
+        assert result["expiry"] == "2027-01-15"
         assert result["expiry_year"] == "2027"
 
     def test_single_digit_month(self):
         text = "**$QQQ 4/17 615c 3.25**"
         m = ABTRADES_ENTRY_RE.search(text)
         result = parse_abtrades_entry(m, text)
-        assert result["expiry"] == "04/17"
+        assert result["expiry"].endswith("-04-17")
 
 
 # ── Trim pattern tests ──────────────────────────────────────────────
@@ -226,7 +226,7 @@ class TestExitParser:
         result = parse_abtrades_exit(m, text)
         assert result["action"] == "STC"
         assert result["symbol"] == "IREN"
-        assert result["expiry"] == "05/29"
+        assert result["expiry"].endswith("-05-29")
         assert result["strike"] == 50.0
         assert result["opt_type"] == "C"
         assert result["is_full_exit"] is True
@@ -238,7 +238,7 @@ class TestExitParser:
         result = parse_abtrades_exit(m, text)
         assert result["symbol"] == "FSLR"
         assert result["strike"] == 280.0
-        assert result["expiry"] == "09/18"
+        assert result["expiry"].endswith("-09-18")
 
 
 # ── Expiry normalization ────────────────────────────────────────────
@@ -246,22 +246,23 @@ class TestExitParser:
 class TestNormalizeExpiry:
     def test_mm_dd(self):
         exp, yr = _normalize_expiry("6/18")
-        assert exp == "06/18"
-        assert yr is None
+        assert exp.endswith("-06-18")
+        assert len(exp) == 10
+        assert yr is not None
 
     def test_already_padded(self):
         exp, yr = _normalize_expiry("12/05")
-        assert exp == "12/05"
-        assert yr is None
+        assert exp.endswith("-12-05")
+        assert len(exp) == 10
 
     def test_full_year(self):
         exp, yr = _normalize_expiry("1/15/2027")
-        assert exp == "01/15/27"
+        assert exp == "2027-01-15"
         assert yr == "2027"
 
     def test_short_year(self):
         exp, yr = _normalize_expiry("4/10/27")
-        assert exp == "04/10/27"
+        assert exp == "2027-04-10"
         assert yr == "2027"
 
 
