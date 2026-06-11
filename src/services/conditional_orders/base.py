@@ -407,19 +407,26 @@ class StreamingPriceMonitor(PriceMonitor):
                     await asyncio.sleep(self.HUB_POLL_INTERVAL)
                 else:
                     self._hub_miss_count += 1
-                    
+
                     if self._hub_miss_count >= 4 and not self._using_rest_fallback:
                         self._using_rest_fallback = True
                         self._update_ds_label(is_stream=False)
                         sys.stderr.write(f"[STREAM_MON] Hub miss for {self.symbol} x{self._hub_miss_count}, falling back to REST\n")
                         sys.stderr.flush()
-                    
+                        # Retry streaming subscription — symbol may not have been
+                        # subscribed yet (e.g. Schwab pending drain takes up to 10s)
+                        self._try_subscribe_streaming()
+
                     if self._using_rest_fallback:
                         rest_price = await self._fetch_rest_price()
                         if rest_price:
                             self._update_price_timestamp(rest_price)
                             self.last_price = rest_price
                             await self.callback(self.symbol, rest_price)
+                        # Periodically retry streaming subscription in case a hub
+                        # connected or subscribed the symbol while we were in REST mode
+                        if self._hub_miss_count % 30 == 0:
+                            self._try_subscribe_streaming()
                         await asyncio.sleep(self.REST_FALLBACK_INTERVAL)
                     else:
                         await asyncio.sleep(self.HUB_POLL_INTERVAL)

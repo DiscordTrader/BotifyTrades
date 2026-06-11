@@ -9529,15 +9529,16 @@ def register_routes(app):
                     'age': None,
                 }
 
-                # Priority 1: UPH — event-driven, freshest price from all streaming hubs
+                # Priority 1: UPH — event-driven from all streaming hubs, only if fresh (<30s)
                 if _uph:
                     try:
                         uph_quote = _uph.get_quote(symbol)
                         if uph_quote and uph_quote.last > 0:
-                            age = round(_now - uph_quote.timestamp, 2) if uph_quote.timestamp > 0 else None
-                            price_info['price'] = uph_quote.last
-                            price_info['source'] = 'streaming'
-                            price_info['age'] = age
+                            age = round(_now - uph_quote.timestamp, 2) if uph_quote.timestamp > 0 else 999
+                            if age < 30:  # reject stale cached prices
+                                price_info['price'] = uph_quote.last
+                                price_info['source'] = 'streaming'
+                                price_info['age'] = age
                     except Exception:
                         pass
 
