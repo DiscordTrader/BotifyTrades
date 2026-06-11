@@ -220,46 +220,24 @@ class StreamingPriceMonitor(PriceMonitor):
                         sys.stderr.write(f"[STREAM_MON] ✓ IBKR (via UPH): subscribed {self.symbol} to reqMktData\n")
                         sys.stderr.flush()
                         return True
-                    # IBKR not streaming — queue for when it reconnects (pending_subscriptions)
+                    # IBKR not streaming — queue in pending (picked up on reconnect)
                     if _ibkr_hub:
                         _ibkr_hub.subscribe_symbol(self.symbol)
-                    sys.stderr.write(f"[STREAM_MON] IBKR hub not streaming for {self.symbol} — queued for reconnect, trying cross-broker fallback\n")
-                    sys.stderr.flush()
                 except Exception as e:
                     sys.stderr.write(f"[STREAM_MON] IBKR (via UPH) subscribe error for {self.symbol}: {e}\n")
                     sys.stderr.flush()
-                # Cross-broker fallback: subscribe symbol to Schwab streaming (thread-safe queue)
-                # so UPH receives price ticks even when IBKR is disconnected.
+                # Use UPH.subscribe_symbol() to push to ALL connected broker hubs at once
+                # (Schwab, Webull, Tastytrade, IBKR) — single call covers all streaming sources
                 try:
-                    from src.services.schwab_data_hub import get_schwab_data_hub
-                    _schwab_hub = get_schwab_data_hub()
-                    if _schwab_hub and _schwab_hub.is_streaming() and hasattr(_schwab_hub, 'request_subscribe_equities'):
-                        _schwab_hub.request_subscribe_equities({self.symbol})
-                        sys.stderr.write(f"[STREAM_MON] ✓ Cross-broker fallback: queued {self.symbol} to Schwab streaming\n")
+                    if hasattr(self.data_hub, 'subscribe_symbol'):
+                        self.data_hub.subscribe_symbol(self.symbol)
+                        sys.stderr.write(f"[STREAM_MON] ✓ UPH.subscribe_symbol({self.symbol}) — pushed to all connected hubs\n")
                         sys.stderr.flush()
                         return True
-                except Exception:
-                    pass
-                # Try alt_broker_instances for any broker with a _streaming_client
-                for _alt_name, _alt_broker in self.alt_broker_instances.items():
-                    if not _alt_broker or not hasattr(_alt_broker, '_streaming_client'):
-                        continue
-                    _sc = _alt_broker._streaming_client
-                    if _sc is None:
-                        continue
-                    if hasattr(_sc, 'subscribe_equities'):
-                        try:
-                            import asyncio as _asyncio
-                            _loop = _asyncio.get_event_loop()
-                            if _loop and _loop.is_running():
-                                _loop.create_task(_sc.subscribe_equities([self.symbol]))
-                                sys.stderr.write(f"[STREAM_MON] ✓ Cross-broker fallback: subscribed {self.symbol} to {_alt_name} stream\n")
-                                sys.stderr.flush()
-                                return True
-                        except Exception as _xe:
-                            sys.stderr.write(f"[STREAM_MON] {_alt_name} fallback sub failed for {self.symbol}: {_xe}\n")
-                            sys.stderr.flush()
-                sys.stderr.write(f"[STREAM_MON] No streaming fallback available for {self.symbol} — REST only\n")
+                except Exception as _xe:
+                    sys.stderr.write(f"[STREAM_MON] UPH subscribe_symbol failed for {self.symbol}: {_xe}\n")
+                    sys.stderr.flush()
+                sys.stderr.write(f"[STREAM_MON] No streaming fallback for {self.symbol} — REST only\n")
                 sys.stderr.flush()
                 return False
 

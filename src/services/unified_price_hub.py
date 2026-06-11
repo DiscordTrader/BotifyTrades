@@ -128,6 +128,8 @@ class UnifiedPriceHub:
         self._subscribed_hubs: Dict[str, Callable] = {}
         self._subscribe_lock = threading.Lock()
 
+        self._auto_sub_ts: Dict[str, float] = {}  # canonical → last subscribe_symbol() call time
+
         self._stats = {
             'hits': 0, 'misses': 0, 'cross_hub_fills': 0,
             'stale_detections': 0, 'total_updates': 0,
@@ -431,6 +433,16 @@ class UnifiedPriceHub:
                         return copy.copy(cached) if cached else None
             except Exception:
                 pass
+
+        # All hubs missed — subscribe the symbol so future ticks flow in automatically.
+        # Rate-limited to once per 30s per symbol to avoid log spam.
+        # Only for plain equity symbols (no '_' option key, no spaces).
+        if '_' not in symbol and ' ' not in symbol:
+            now = time.time()
+            last_sub = self._auto_sub_ts.get(canonical, 0)
+            if now - last_sub >= 30.0:
+                self._auto_sub_ts[canonical] = now
+                self.subscribe_symbol(symbol)
         return None
 
     def poll_all_hubs(self):
@@ -707,6 +719,40 @@ class UnifiedPriceHub:
     def is_streaming(self) -> bool:
         """Alias for is_active() — allows UPH to be used as a drop-in hub in StreamingPriceMonitor."""
         return self.is_active()
+
+    def subscribe_symbol(self, symbol: str):
+        """Push a symbol subscription to all connected broker hubs so UPH receives live ticks.
+
+        Called by conditional order monitors, position monitor, or any consumer that
+        needs live prices for a symbol not yet in any broker's stream (e.g. pre-trade
+        conditional orders where no position exists yet).
+        """
+        sym = symbol.upper().strip()
+        hubs = self._get_hubs()
+        subscribed_to = []
+
+        for hub_key, hub in hubs.items():
+            try:
+                # Schwab: thread-safe pending queue, drained every 10s by streaming loop
+                if hasattr(hub, 'request_subscribe_equities'):
+                    if hasattr(hub, 'is_streaming') and hub.is_streaming():
+                        hub.request_subscribe_equities({sym})
+                        subscribed_to.append(hub_key)
+                # IBKR: queues in pending_subscriptions even when not streaming (picked up on reconnect)
+                elif hasattr(hub, 'subscribe_symbol') and hasattr(hub, '_ib'):
+                    hub.subscribe_symbol(sym)
+                    subscribed_to.append(hub_key)
+                # Tastytrade: DXLink subscription queue
+                elif hasattr(hub, 'subscribe_symbol') and hasattr(hub, '_streamer'):
+                    hub.subscribe_symbol(sym)
+                    subscribed_to.append(hub_key)
+            except Exception:
+                pass
+
+        if subscribed_to:
+            print(f"[UPH] subscribe_symbol({sym}) → pushed to: {subscribed_to}", flush=True)
+        else:
+            print(f"[UPH] subscribe_symbol({sym}) → no streaming hubs available", flush=True)
 
 
 _uph_instance: Optional[UnifiedPriceHub] = None
