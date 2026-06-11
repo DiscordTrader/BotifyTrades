@@ -719,16 +719,19 @@ class IBKRDataHub:
             return
         try:
             con_id = contract.conId if contract else 0
-            if con_id in self._subscribed_conids:
-                return
+            # Atomically check-and-register the conId so concurrent callers (two qualify
+            # coroutines both resuming at nearly the same time) can't both slip past the
+            # duplicate check before either has added to _subscribed_conids.
+            with self._contract_lock:
+                if con_id in self._subscribed_conids:
+                    return
+                self._subscribed_symbols.add(symbol)
+                self._subscribed_conids.add(con_id)
+                self._conid_to_symbol[con_id] = symbol
+                self._symbol_to_contract[symbol] = contract
             # Generic tick 233 = mark price, 426 = last yield — useful for illiquid options
             _gtl = '233,426' if getattr(contract, 'secType', '') == 'OPT' else ''
             self._ib.reqMktData(contract, _gtl, False, False)
-            self._subscribed_symbols.add(symbol)
-            self._subscribed_conids.add(con_id)
-            with self._contract_lock:
-                self._conid_to_symbol[con_id] = symbol
-                self._symbol_to_contract[symbol] = contract
         except Exception as e:
             self._subscribed_symbols.discard(symbol)
             print(f"[IBKR_HUB] Failed to subscribe {symbol}: {e}")
