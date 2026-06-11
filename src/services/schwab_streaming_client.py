@@ -400,7 +400,7 @@ class SchwabStreamingClient:
                             print("[SCHWAB_STREAM] ⚠️ No heartbeat for 60s, reconnecting...")
                             break
 
-                        if now - self._last_pending_drain >= 10:
+                        if now - self._last_pending_drain >= 1:
                             self._last_pending_drain = now
                             pending = set()
                             pending_opts = set()

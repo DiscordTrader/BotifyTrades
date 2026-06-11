@@ -321,9 +321,25 @@ class StreamingPriceMonitor(PriceMonitor):
         self.is_running = True
         sys.stderr.write(f"[STREAM_MON] Starting streaming price monitor for {self.symbol} via {self.broker_name} hub\n")
         sys.stderr.flush()
-        
+
         self._try_subscribe_streaming()
-        
+
+        # Immediate REST seed — get a baseline price right away while waiting for
+        # the first streaming tick (Schwab drain fires within ~1s after subscribe_symbol).
+        # This ensures the dashboard shows a price within 1s of the signal arriving.
+        _seed = self._query_hub()
+        if not _seed:
+            try:
+                _seed = await self._fetch_rest_price()
+                if _seed:
+                    self._update_price_timestamp(_seed)
+                    self.last_price = _seed
+                    await self.callback(self.symbol, _seed)
+                    sys.stderr.write(f"[STREAM_MON] {self.symbol}: seed price ${_seed:.2f} from REST (streaming pending)\n")
+                    sys.stderr.flush()
+            except Exception:
+                pass
+
         poll_count = 0
         while self.is_running:
             try:
