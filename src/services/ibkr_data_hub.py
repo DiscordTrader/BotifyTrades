@@ -157,6 +157,7 @@ class IBKRDataHub:
                 old_ib.orderStatusEvent -= self._on_order_status
                 old_ib.errorEvent -= self._on_error_event
                 old_ib.disconnectedEvent -= self._on_disconnected
+                old_ib.timeoutEvent -= self._on_timeout
             except Exception:
                 pass
         self._ib = None
@@ -169,6 +170,17 @@ class IBKRDataHub:
     def _attach_events(self):
         if not self._ib:
             return
+        # Detach first — prevents duplicate handlers if attach_broker() is called
+        # multiple times on the same IB object (e.g., after broker reconnect re-calls attach_broker).
+        try:
+            self._ib.pendingTickersEvent -= self._on_pending_tickers
+            self._ib.positionEvent -= self._on_position_event
+            self._ib.orderStatusEvent -= self._on_order_status
+            self._ib.errorEvent -= self._on_error_event
+            self._ib.disconnectedEvent -= self._on_disconnected
+            self._ib.timeoutEvent -= self._on_timeout
+        except Exception:
+            pass
         self._ib.pendingTickersEvent += self._on_pending_tickers
         self._ib.positionEvent += self._on_position_event
         self._ib.orderStatusEvent += self._on_order_status
@@ -259,6 +271,22 @@ class IBKRDataHub:
                 print("[IBKR_HUB] Cannot reconnect — no broker reference")
                 return False
 
+            # If broker already reconnected with a new IB object, just re-attach to it.
+            # Check self._ib is broker.ib — if broker reconnected it set self.ib = new IB().
+            # self._ib still points to the OLD disconnected object until attach_broker() updates it.
+            _broker_ib = getattr(self._broker, 'ib', None)
+            if _broker_ib and _broker_ib is not self._ib and _broker_ib.isConnected():
+                print("[IBKR_HUB] ✓ Broker already reconnected — re-attaching to new IB object")
+                self._ib = _broker_ib
+                self._attach_events()
+                self._streaming_active = True
+                return True
+
+            # Defer to broker if it's mid-reconnect — avoid two IB() objects racing
+            if getattr(self._broker, '_reconnect_in_progress', False):
+                print("[IBKR_HUB] Broker reconnect in progress — deferring hub reconnect")
+                return False
+
             print("[IBKR_HUB] 🔄 Attempting auto-reconnect to TWS/Gateway...")
 
             old_ib = self._ib
@@ -282,10 +310,34 @@ class IBKRDataHub:
             host = getattr(self._broker, 'host', '127.0.0.1')
             port = getattr(self._broker, 'port', 7497)
             client_id = getattr(self._broker, 'client_id', 1)
+            paper = getattr(self._broker, 'paper_trade', False)
 
-            await new_ib.connectAsync(host=host, port=port, clientId=client_id, timeout=15)
+            # Try primary port, then alternate (TWS↔Gateway) so reconnect survives
+            # user switching between TWS and IB Gateway without restarting the bot.
+            _GW = {True: 4002, False: 4001}
+            _TWS = {True: 7497, False: 7496}
+            _alt_port = _TWS[paper] if port in _GW.values() else _GW[paper]
+            _ports = [port] if _alt_port == port else [port, _alt_port]
 
-            if not new_ib.isConnected():
+            connected_port = None
+            for _p in _ports:
+                try:
+                    _label = "Gateway" if _p in _GW.values() else "TWS"
+                    await new_ib.connectAsync(host=host, port=_p, clientId=client_id, timeout=15)
+                    if new_ib.isConnected():
+                        connected_port = _p
+                        if _p != port:
+                            self._broker.port = _p
+                            print(f"[IBKR_HUB] 🔄 Reconnected via alternate {_label} port {_p}")
+                        break
+                except Exception as _ce:
+                    _refused = 'refused' in str(_ce).lower() or '10061' in str(_ce) or '111' in str(_ce)
+                    if _refused and _p != _ports[-1]:
+                        print(f"[IBKR_HUB] Port {_p} refused — trying alternate port {_ports[1]}")
+                        continue
+                    raise
+
+            if not connected_port or not new_ib.isConnected():
                 print("[IBKR_HUB] ❌ Auto-reconnect failed — TWS/Gateway not responding")
                 return False
 
@@ -311,7 +363,8 @@ class IBKRDataHub:
                     contract = self._symbol_to_contract.get(sym)
                 if contract:
                     try:
-                        self._ib.reqMktData(contract, '', False, False)
+                        _gtl = '233,426' if getattr(contract, 'secType', '') == 'OPT' else ''
+                        self._ib.reqMktData(contract, _gtl, False, False)
                         self._subscribed_symbols.add(sym)
                         con_id = contract.conId if contract else 0
                         if con_id:
@@ -384,6 +437,15 @@ class IBKRDataHub:
                     q.high = float(ticker.high)
                 if ticker.low is not None and ticker.low > 0:
                     q.low = float(ticker.low)
+                # Mark price via modelGreeks (tick 233) — fills bid/ask gap for illiquid options
+                if not has_real_data and q.last == 0:
+                    try:
+                        _mg = getattr(ticker, 'modelGreeks', None)
+                        if _mg and getattr(_mg, 'optPrice', None) and _mg.optPrice > 0:
+                            q.last = float(_mg.optPrice)
+                            has_real_data = True
+                    except Exception:
+                        pass
                 if has_real_data or is_new:
                     q.timestamp = now
                     updated_symbols.append(symbol)
@@ -476,6 +538,16 @@ class IBKRDataHub:
                 return q.ask
             return None
 
+    def get_all_quotes(self) -> Dict[str, 'IBKRQuoteData']:
+        """Return a snapshot of all fresh cached quotes — used by UPH poll_all_hubs."""
+        now = time.time()
+        with self._quotes_lock:
+            return {
+                sym: q for sym, q in self._quotes.items()
+                if (q.last > 0 or q.bid > 0)
+                and (now - q.timestamp) < self.QUOTE_STALE_THRESHOLD
+            }
+
     def get_quote_detailed(self, symbol: str, max_age: Optional[float] = None) -> Optional[Dict[str, Any]]:
         with self._quotes_lock:
             q = self._quotes.get(symbol)
@@ -567,6 +639,11 @@ class IBKRDataHub:
     def subscribe_symbol(self, symbol: str, contract=None):
         if symbol in self._subscribed_symbols:
             return
+        # Option keys (e.g. "AAPL_20240120_150_C") must not be auto-queued for qualification —
+        # their contract arrives via _refresh_positions_from_ib. If no contract is provided,
+        # we must not mark them as subscribed since reqMktData will never fire for them.
+        if '_' in symbol and contract is None:
+            return
         if not self._ib or not self._streaming_active:
             self._pending_subscriptions.add(symbol)
             return
@@ -590,6 +667,12 @@ class IBKRDataHub:
 
     async def _qualify_and_subscribe(self, symbol: str):
         import time as _time
+        # Option keys contain '_' — they must have their contract registered by
+        # _refresh_positions_from_ib before subscription. Auto-qualify only for plain tickers.
+        if '_' in symbol:
+            self._subscribed_symbols.discard(symbol)
+            logger.debug(f"[IBKR_HUB] Skipping auto-qualify for option key '{symbol}' — contract must come from positions")
+            return
         with self._mktdata_denied_lock:
             if symbol in self._mktdata_denied_symbols:
                 self._subscribed_symbols.discard(symbol)
@@ -622,7 +705,9 @@ class IBKRDataHub:
             con_id = contract.conId if contract else 0
             if con_id in self._subscribed_conids:
                 return
-            self._ib.reqMktData(contract, '', False, False)
+            # Generic tick 233 = mark price, 426 = last yield — useful for illiquid options
+            _gtl = '233,426' if getattr(contract, 'secType', '') == 'OPT' else ''
+            self._ib.reqMktData(contract, _gtl, False, False)
             self._subscribed_symbols.add(symbol)
             self._subscribed_conids.add(con_id)
             with self._contract_lock:
@@ -794,7 +879,9 @@ class IBKRDataHub:
                         if contract:
                             self._start_market_data(sym, contract)
                             self._pending_subscriptions.discard(sym)
-                        elif sym not in self._subscribed_symbols:
+                        elif sym not in self._subscribed_symbols and '_' not in sym:
+                            # Option keys contain '_' (e.g. "AAPL_20240120_150_C") — skip them here.
+                            # Their contract arrives via _refresh_positions_from_ib.
                             try:
                                 from ib_insync import Stock
                                 auto_contract = Stock(sym, 'SMART', 'USD')

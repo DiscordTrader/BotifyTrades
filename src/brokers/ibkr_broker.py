@@ -33,14 +33,22 @@ class IBKRBroker(BrokerInterface):
 
     MAX_ORDER_SIZE = 70000
 
+    # TWS ports: 7497 (paper), 7496 (live)
+    # IB Gateway ports: 4002 (paper), 4001 (live)
+    _TWS_PORTS  = {True: 7497, False: 7496}
+    _GW_PORTS   = {True: 4002, False: 4001}
+
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.name = "IBKR"
         self.ib = IB()
         self.paper_trade = config.get('paper_trade', True)
         self.host = config.get('host', '127.0.0.1')
-        # Paper trading: 7497, Live trading: 7496
-        self.port = config.get('port', 7497 if self.paper_trade else 7496)
+        # use_gateway=True → IB Gateway (4001/4002); False → TWS (7496/7497)
+        # Explicit 'port' in config overrides both.
+        self._use_gateway = config.get('use_gateway', False)
+        _default_port = self._GW_PORTS[self.paper_trade] if self._use_gateway else self._TWS_PORTS[self.paper_trade]
+        self.port = config.get('port', _default_port)
         self.client_id = config.get('client_id', 1)
         self._quote_fail_cache = {}
         self._event_loop_broken = False
@@ -57,27 +65,50 @@ class IBKRBroker(BrokerInterface):
         return expiry_to_yyyymmdd(expiry)
 
     async def connect(self) -> bool:
-        """Connect to Interactive Brokers TWS/Gateway"""
+        """Connect to Interactive Brokers TWS/Gateway.
+
+        Tries configured port first; if refused, auto-retries the alternate port
+        (TWS↔Gateway) so the bot works regardless of which is running.
+        """
         try:
+            self._event_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._event_loop = asyncio.get_event_loop()
+
+        # Build port attempt list: primary first, then alternate TWS↔Gateway
+        _alt_port = (
+            self._TWS_PORTS[self.paper_trade]
+            if self._use_gateway
+            else self._GW_PORTS[self.paper_trade]
+        )
+        _ports_to_try = [self.port]
+        if _alt_port != self.port:
+            _ports_to_try.append(_alt_port)
+
+        for attempt_port in _ports_to_try:
+            _label = "Gateway" if attempt_port in self._GW_PORTS.values() else "TWS"
             try:
-                self._event_loop = asyncio.get_running_loop()
-            except RuntimeError:
-                self._event_loop = asyncio.get_event_loop()
-            await self.ib.connectAsync(
-                host=self.host,
-                port=self.port,
-                clientId=self.client_id,
-                timeout=20
-            )
-            
+                await self.ib.connectAsync(
+                    host=self.host,
+                    port=attempt_port,
+                    clientId=self.client_id,
+                    timeout=20
+                )
+            except Exception as e:
+                _conn_refused = 'refused' in str(e).lower() or '10061' in str(e) or '111' in str(e)
+                if _conn_refused and attempt_port != _ports_to_try[-1]:
+                    print(f"[{self.name}] ⚠️ {_label} port {attempt_port} refused — trying alternate port {_ports_to_try[1]}")
+                    continue
+                print(f"[{self.name}] ❌ Connection error ({_label} port {attempt_port}): {e}")
+                return False
+
             if self.ib.isConnected():
                 self.connected = True
+                self.port = attempt_port  # update so reconnect reuses the working port
                 self._consecutive_reconnect_failures = 0
                 mode = "PAPER" if self.paper_trade else "LIVE"
-                print(f"[{self.name}] ✓ Connected successfully ({mode} trading)")
-
+                print(f"[{self.name}] ✓ Connected via {_label} on port {attempt_port} ({mode} trading)")
                 self.ib.disconnectedEvent += self._on_disconnected
-
                 try:
                     account_values = self.ib.accountValues()
                     for av in account_values:
@@ -86,16 +117,13 @@ class IBKRBroker(BrokerInterface):
                             break
                 except Exception as e_summary:
                     print(f"[{self.name}] ⚠️ Connected but could not read account values: {e_summary}")
-
                 return True
-            
-            print(f"[{self.name}] ❌ Failed to connect to TWS/Gateway")
-            return False
-            
-        except Exception as e:
-            print(f"[{self.name}] ❌ Connection error: {e}")
-            print(f"[{self.name}] Make sure TWS or IB Gateway is running on {self.host}:{self.port}")
-            return False
+
+            print(f"[{self.name}] ❌ Failed to connect ({_label} port {attempt_port})")
+            if attempt_port != _ports_to_try[-1]:
+                print(f"[{self.name}] Trying alternate port {_ports_to_try[1]}...")
+
+        return False
     
     async def disconnect(self):
         """Disconnect from Interactive Brokers"""
@@ -131,6 +159,12 @@ class IBKRBroker(BrokerInterface):
                 print(f"[{self.name}] Waiting {wait:.0f}s before reconnect attempt...")
                 await asyncio.sleep(wait)
 
+            # Build port list: primary then alternate (TWS↔Gateway)
+            _GW = {True: 4002, False: 4001}
+            _TWS = {True: 7497, False: 7496}
+            _alt = _TWS[self.paper_trade] if self.port in _GW.values() else _GW[self.paper_trade]
+            _ports = [self.port] if _alt == self.port else [self.port, _alt]
+
             for attempt in range(1, 4):
                 self._last_reconnect_ts = time.time()
                 print(f"[{self.name}] 🔄 Reconnect attempt {attempt}/3...")
@@ -144,11 +178,30 @@ class IBKRBroker(BrokerInterface):
                         await asyncio.sleep(2)
 
                     self.ib = IB()
-                    await self.ib.connectAsync(
-                        host=self.host, port=self.port,
-                        clientId=self.client_id, timeout=20
-                    )
-                    if self.ib.isConnected():
+                    connected = False
+                    _connect_ex = None
+                    for _p in _ports:
+                        try:
+                            await self.ib.connectAsync(
+                                host=self.host, port=_p,
+                                clientId=self.client_id, timeout=20
+                            )
+                            if self.ib.isConnected():
+                                if _p != self.port:
+                                    _lbl = "Gateway" if _p in _GW.values() else "TWS"
+                                    print(f"[{self.name}] 🔄 Reconnected via alternate {_lbl} port {_p}")
+                                    self.port = _p
+                                connected = True
+                                break
+                        except Exception as _pe:
+                            _refused = 'refused' in str(_pe).lower() or '10061' in str(_pe) or '111' in str(_pe)
+                            if _refused and _p != _ports[-1]:
+                                continue
+                            _connect_ex = _pe
+                            break
+                    if _connect_ex:
+                        raise _connect_ex
+                    if connected:
                         self.connected = True
                         self._consecutive_reconnect_failures = 0
                         self.ib.disconnectedEvent += self._on_disconnected
@@ -400,7 +453,15 @@ class IBKRBroker(BrokerInterface):
                     try:
                         from src.services.ibkr_data_hub import get_ibkr_data_hub
                         hub = get_ibkr_data_hub()
-                        hub_price = hub.get_quote_price(contract.symbol)
+                        # For options use the full key (symbol_exp_strike_right); stock uses plain symbol.
+                        expiry_raw = contract.lastTradeDateOrContractMonth or ''
+                        _hub_key = (
+                            f"{contract.symbol}_{expiry_raw}_{contract.strike}_{contract.right}"
+                            if is_option else contract.symbol
+                        )
+                        hub_price = hub.get_quote_price(_hub_key)
+                        if not hub_price or hub_price <= 0:
+                            hub_price = hub.get_quote_price(contract.symbol)
                         if hub_price and hub_price > 0:
                             current_price = hub_price
                     except Exception:
@@ -471,7 +532,10 @@ class IBKRBroker(BrokerInterface):
 
             order.outsideRth = self._get_extended_hours_enabled()
 
-            trade = await asyncio.to_thread(self.ib.placeOrder, contract, order)
+            # placeOrder is synchronous — do NOT wrap in asyncio.to_thread.
+            # asyncio.to_thread runs in a threadpool thread with no event loop, causing
+            # ib_insync to raise "There is no current event loop in thread '...'".
+            trade = self.ib.placeOrder(contract, order)
 
             filled_price = await self._wait_for_fill(trade, symbol, timeout=10)
 
@@ -556,8 +620,9 @@ class IBKRBroker(BrokerInterface):
             
             # Enable extended hours trading if configured
             order.outsideRth = self._get_extended_hours_enabled()
-            
-            trade = await asyncio.to_thread(self.ib.placeOrder, contract, order)
+
+            # placeOrder is synchronous — do NOT wrap in asyncio.to_thread (same reason as stock orders above).
+            trade = self.ib.placeOrder(contract, order)
 
             filled_price = await self._wait_for_fill(trade, symbol, timeout=10)
 

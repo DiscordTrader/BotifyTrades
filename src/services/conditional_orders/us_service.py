@@ -2,7 +2,7 @@
 US Market Conditional Order Service
 
 Handles conditional orders for US markets (NYSE, NASDAQ, etc.)
-Price monitoring fallback chain: Streaming Hub → Cross-Broker Hub → Broker REST API
+Price monitoring chain: UPH (all hubs) → Streaming Hub → Cross-Broker Hub → Broker REST API
 """
 
 import sys
@@ -41,7 +41,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
     
     def get_supported_brokers(self) -> List[str]:
         """Return list of US market brokers."""
-        return ['webull', 'alpaca', 'tastytrade', 'ibkr', 'robinhood', 'schwab', 'trading212']
+        return ['webull', 'webull_official', 'alpaca', 'tastytrade', 'ibkr', 'robinhood', 'schwab', 'trading212']
     
     async def build_price_monitor(self, order: Dict, broker_instance: Any, broker_name: str) -> Optional[PriceMonitor]:
         """
@@ -56,16 +56,56 @@ class USConditionalOrderService(BaseConditionalOrderService):
         6. Any connected broker REST API (last resort)
         """
         symbol = order['symbol']
-        
+
         broker_lower = broker_name.lower() if broker_name else ''
         broker_key = broker_lower.replace('_paper', '').replace('_live', '')
-        
+
         data_source = None
         monitor = None
-        
+
         async def price_callback(sym: str, price: float):
             await self._on_price_update(order['id'], sym, price)
-        
+
+        # P0: UPH — unified hub aggregating ALL broker streaming sources (MQTT, WebSocket, DXLink)
+        # Uses whichever broker hub is streaming; tag reflects the actual source hub inside UPH.
+        try:
+            from src.services.unified_price_hub import get_unified_price_hub
+            _uph = get_unified_price_hub()
+            if _uph and _uph._poll_running and _uph.is_streaming():
+                data_source = 'uph_stream'
+                self._log(f"[P0] UPH for {symbol} (unified — all streaming hubs)")
+                # _try_subscribe_streaming() needs a broker_instance to subscribe the symbol
+                # so ticks flow into UPH. Prefer the order's own broker.
+                # Fallback order: MQTT/WebSocket client (Webull/Schwab), then IBKR (ib_insync).
+                _sub_broker = broker_instance
+                if _sub_broker is None:
+                    for _bn, _bi in self.broker_instances.items():
+                        if _bi and hasattr(_bi, '_streaming_client') and _bi._streaming_client is not None:
+                            _sub_broker = _bi
+                            self._log(f"[P0] Using {_bn} streaming client for {symbol} subscription")
+                            break
+                    if _sub_broker is None:
+                        # IBKR has no _streaming_client — uses ib_insync directly via IBKRDataHub
+                        for _bn, _bi in self.broker_instances.items():
+                            if _bi and hasattr(_bi, 'ib') and getattr(_bi, 'connected', False):
+                                _sub_broker = _bi
+                                self._log(f"[P0] Using {_bn} IBKR hub for {symbol} subscription")
+                                break
+                monitor = StreamingPriceMonitor(
+                    symbol, price_callback, _uph, 'uph',
+                    broker_instance=_sub_broker,
+                    alt_broker_instances=self.broker_instances,
+                )
+        except Exception as _uph_ex:
+            self._log(f"[P0] UPH unavailable for {symbol}: {_uph_ex}")
+
+        if monitor:
+            if hasattr(monitor, 'order_id'):
+                monitor.order_id = order['id']
+            from gui_app.database import update_conditional_order_status
+            update_conditional_order_status(order['id'], 'ACTIVE_MONITORING', data_source_active=data_source)
+            return monitor
+
         hub = self.get_data_hub(broker_name) if broker_name else None
         hub_is_streaming = self.is_hub_streaming(broker_name) if broker_name else False
         
@@ -74,11 +114,11 @@ class USConditionalOrderService(BaseConditionalOrderService):
         alt_hub_streaming = False
         alt_hub_broker = None
         alt_hub_can_stream = False
-        for alt_key in ['webull', 'schwab', 'ibkr', 'tastytrade', 'trading212']:
+        for alt_key in ['webull', 'webull_official', 'schwab', 'ibkr', 'tastytrade', 'trading212']:
             if alt_key == broker_key:
                 continue
             alt = self.get_data_hub(alt_key)
-            if alt:
+            if alt and alt is not hub:
                 alt_streaming = self.is_hub_streaming(alt_key)
                 alt_has_streaming = hasattr(alt, 'is_streaming')
                 if alt_hub is None or (alt_streaming and not alt_hub_streaming) or (alt_has_streaming and not alt_hub_can_stream and not alt_hub_streaming):

@@ -195,15 +195,22 @@ def save_ibkr_credentials(
     port_live: int = 7496,
     port_paper: int = 7497,
     client_id: int = 1,
-    paper_mode: bool = True
+    paper_mode: bool = True,
+    use_gateway: bool = False,
 ):
-    """Save Interactive Brokers credentials"""
+    """Save Interactive Brokers credentials.
+
+    use_gateway=True  → IB Gateway (ports 4001/4002 by default)
+    use_gateway=False → TWS (ports 7496/7497 by default)
+    Port values can still be overridden explicitly.
+    """
     save_config('ibkr_credentials', {
         'host': host,
         'port_live': port_live,
         'port_paper': port_paper,
         'client_id': client_id,
-        'paper_mode': paper_mode
+        'paper_mode': paper_mode,
+        'use_gateway': use_gateway,
     })
 
 
@@ -214,7 +221,8 @@ def get_ibkr_credentials() -> Dict[str, Any]:
         'port_live': 7496,
         'port_paper': 7497,
         'client_id': 1,
-        'paper_mode': True
+        'paper_mode': True,
+        'use_gateway': False,
     }
 
 

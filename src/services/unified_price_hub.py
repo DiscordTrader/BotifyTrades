@@ -138,7 +138,7 @@ class UnifiedPriceHub:
         for alias, canonical in _INDEX_TO_CANONICAL.items():
             self._register_alias(alias, canonical)
 
-        print("[UPH] Unified Price Hub initialized (shadow mode)")
+        print("[UPH] Unified Price Hub initialized (active)", flush=True)
 
     def _register_alias(self, alias: str, canonical: str):
         with self._alias_lock:
@@ -163,12 +163,14 @@ class UnifiedPriceHub:
                 return dict(self._hub_cache)
 
         hubs = {}
+        seen_ids: set = set()
         for key, mod_path, func_name in _HUB_REGISTRY:
             try:
                 mod = importlib.import_module(mod_path)
                 hub = getattr(mod, func_name)()
-                if hub:
+                if hub and id(hub) not in seen_ids:
                     hubs[key] = hub
+                    seen_ids.add(id(hub))
             except Exception:
                 pass
 
@@ -701,6 +703,10 @@ class UnifiedPriceHub:
             except Exception:
                 pass
         return False
+
+    def is_streaming(self) -> bool:
+        """Alias for is_active() — allows UPH to be used as a drop-in hub in StreamingPriceMonitor."""
+        return self.is_active()
 
 
 _uph_instance: Optional[UnifiedPriceHub] = None

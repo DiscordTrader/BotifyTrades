@@ -2,6 +2,7 @@ import asyncio
 import logging
 import sys
 import os
+from pathlib import Path
 from typing import Optional
 
 from .client import WebullClient
@@ -16,6 +17,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from broker_interface import OrderResult
 
 log = logging.getLogger("webull_official")
+
+
+def _token_file_path() -> Path:
+    """Token stored next to bot_data.db so it survives restarts."""
+    base = Path(__file__).parent.parent.parent.parent
+    return base / "webull_official_token.json"
 
 
 class WebullOfficialBroker:
@@ -40,6 +47,10 @@ class WebullOfficialBroker:
         self._cached_balance: Optional[WebullBalance] = None
         self._cached_positions: list[WebullPosition] = []
         self._accounts_list: list = []
+        self._positions_cache: list = []
+        self._positions_cache_ts: float = 0.0
+        self._account_info_cache: dict = {}
+        self._account_info_cache_ts: float = 0.0
 
     async def connect(self, app_key: str = None, app_secret: str = None,
                       account_id: str = "", environment: str = "production",
@@ -60,8 +71,11 @@ class WebullOfficialBroker:
                 account_id=account_id,
                 environment="test" if self.paper_trade else environment,
             )
-            self._client = WebullClient(self._config)
+            self._client = WebullClient(self._config, token_file=_token_file_path())
             await self._client.start()
+
+            # Acquire x-access-token (requires Webull app approval on first use)
+            await self._client.init_token()
 
             self._accounts = AccountsAPI(self._client)
             self._orders = OrdersAPI(self._client)
@@ -69,8 +83,8 @@ class WebullOfficialBroker:
 
             accounts = await self._accounts.list_accounts()
             if not accounts:
-                print(f"[{self.name}] ❌ No accounts found")
-                return False
+                print(f"[{self.name}] ❌ No accounts found — verify app_key/app_secret are from developer.webull.com")
+                raise RuntimeError("No accounts found. Verify your App Key and App Secret at developer.webull.com")
 
             self._accounts_list = accounts
             for a in accounts:
@@ -119,7 +133,7 @@ class WebullOfficialBroker:
         except Exception as e:
             print(f"[{self.name}] ❌ Connection failed: {e}")
             self.connected = False
-            return False
+            raise
 
     async def disconnect(self):
         if self._event_poller:
@@ -131,13 +145,17 @@ class WebullOfficialBroker:
         self.connected = False
         print(f"[{self.name}] Disconnected")
 
-    async def get_account_info(self) -> dict:
+    async def get_account_info(self, max_age_seconds: float = 30.0) -> dict:
+        import time as _time
         if not self.connected:
-            return {}
+            return self._account_info_cache or {}
+        now = _time.monotonic()
+        if self._account_info_cache_ts > 0 and (now - self._account_info_cache_ts) < max_age_seconds:
+            return self._account_info_cache
         try:
             balance = await self._accounts.get_balance(self.account_id)
             self._cached_balance = balance
-            return {
+            result = {
                 "account_id": self.account_id,
                 "account_number": self.account_number,
                 "account_type": self.account_type,
@@ -152,17 +170,24 @@ class WebullOfficialBroker:
                 "day_trades_left": balance.day_trades_left,
                 "option_buying_power": balance.option_buying_power,
             }
+            self._account_info_cache = result
+            self._account_info_cache_ts = now
+            return result
         except Exception as e:
             log.error(f"[{self.name}] get_account_info error: {e}")
-            return {}
+            return self._account_info_cache or {}
 
-    async def get_positions(self) -> list:
+    async def get_positions(self, max_age_seconds: float = 30.0) -> list:
+        import time as _time
         if not self.connected:
             return []
+        now = _time.monotonic()
+        if self._positions_cache_ts > 0 and (now - self._positions_cache_ts) < max_age_seconds:
+            return self._positions_cache
         try:
             positions = await self._positions.get_positions(self.account_id)
             self._cached_positions = positions
-            return [
+            result = [
                 {
                     "symbol": p.symbol,
                     "quantity": p.quantity,
@@ -177,9 +202,12 @@ class WebullOfficialBroker:
                 }
                 for p in positions
             ]
+            self._positions_cache = result
+            self._positions_cache_ts = now
+            return result
         except Exception as e:
             log.error(f"[{self.name}] get_positions error: {e}")
-            return []
+            return self._positions_cache  # return stale cache on error
 
     async def get_positions_detailed(self) -> list:
         return await self.get_positions()

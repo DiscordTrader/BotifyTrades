@@ -195,6 +195,7 @@ class StreamingPriceMonitor(PriceMonitor):
     
     def _try_subscribe_streaming(self):
         try:
+            # Direct IBKR hub as data_hub (P1 path)
             if hasattr(self.data_hub, 'subscribe_symbol') and hasattr(self.data_hub, '_ib'):
                 try:
                     self.data_hub.subscribe_symbol(self.symbol)
@@ -203,6 +204,27 @@ class StreamingPriceMonitor(PriceMonitor):
                     return True
                 except Exception as e:
                     sys.stderr.write(f"[STREAM_MON] IBKR subscribe error for {self.symbol}: {e}\n")
+                    sys.stderr.flush()
+                return False
+
+            # UPH as data_hub + IBKR broker_instance (P0 path with IBKR order)
+            # IBKR uses ib_insync (broker.ib), not _streaming_client — must go through IBKRDataHub.
+            if (self.broker_instance is not None
+                    and hasattr(self.broker_instance, 'ib')
+                    and hasattr(self.broker_instance, 'client_id')):
+                try:
+                    from src.services.ibkr_data_hub import get_ibkr_data_hub
+                    _ibkr_hub = get_ibkr_data_hub()
+                    if _ibkr_hub and _ibkr_hub.is_streaming():
+                        _ibkr_hub.subscribe_symbol(self.symbol)
+                        sys.stderr.write(f"[STREAM_MON] ✓ IBKR (via UPH): subscribed {self.symbol} to reqMktData\n")
+                        sys.stderr.flush()
+                        return True
+                    sys.stderr.write(f"[STREAM_MON] IBKR broker present but hub not streaming for {self.symbol} — will rely on UPH REST fallback\n")
+                    sys.stderr.flush()
+                    return False
+                except Exception as e:
+                    sys.stderr.write(f"[STREAM_MON] IBKR (via UPH) subscribe error for {self.symbol}: {e}\n")
                     sys.stderr.flush()
                 return False
 
@@ -269,8 +291,9 @@ class StreamingPriceMonitor(PriceMonitor):
                 return False
 
             if ticker_id and str(ticker_id) != '0':
-                client.subscribe_symbol(self.symbol, str(ticker_id))
-                sys.stderr.write(f"[STREAM_MON] ✓ Subscribed {self.symbol} to streaming (tid={ticker_id})\n")
+                _is_opt = len(self.symbol) > 10 or ' ' in self.symbol
+                client.subscribe_symbol(self.symbol, str(ticker_id), is_option=_is_opt)
+                sys.stderr.write(f"[STREAM_MON] ✓ Subscribed {self.symbol} to streaming (tid={ticker_id}, option={_is_opt})\n")
                 sys.stderr.flush()
                 return True
             else:

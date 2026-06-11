@@ -1,5 +1,75 @@
 # BotifyTrades Progress Log
 
+## Session: June 10, 2026 — 5-Agent Full Pipeline Review & Fix
+
+Multi-agent review of all changes (UPH, IBKR hub, broker, conditional orders, risk engine, GUI). 5 parallel agents reviewed different pipeline segments. 9 issues fixed.
+
+### CRITICAL FIXES
+- **C1: Duplicate event handlers on reconnect** — `_attach_events()` now detaches before re-attaching. Previously calling `attach_broker()` twice on the same IB object doubled every event handler. File: ibkr_data_hub.py
+- **C2: Race condition — hub creates orphaned IB() while broker reconnects** — Guard now checks `broker.ib is not self._ib and broker.ib.isConnected()` (broker already reconnected with new IB object) instead of checking stale `self._ib.isConnected()`. File: ibkr_data_hub.py
+- **C3: `UnifiedPriceHub.get_instance()` doesn't exist** — routes.py called non-existent class method; changed to `get_unified_price_hub()` factory function. File: gui_app/routes.py
+- **C4: Double-firing in risk engine** — UPH subscription was added ON TOP of all direct hub subscriptions (Webull/Schwab/IBKR/Tastytrade), firing `_on_quote_update` twice per tick. Restructured to UPH-primary with direct-hub-fallback — direct subs only activate when UPH is unavailable. File: position_monitor.py
+
+### HIGH FIXES
+- **H1: Option keys leaking into `_subscribed_symbols`** — `subscribe_symbol("AAPL_20240120_150_C")` with no contract would add the key to `_subscribed_symbols` then return early in `_qualify_and_subscribe`, leaving it "subscribed" with no actual reqMktData. Fixed: early exit at entry if `'_' in symbol and contract is None`. File: ibkr_data_hub.py
+- **H2: `get_all_quotes()` returned stale quotes** — computed `now = time.time()` but never used it; no freshness filter. Added `(now - q.timestamp) < QUOTE_STALE_THRESHOLD`. File: ibkr_data_hub.py
+- **H3: Unconnected IB object after broker reconnect exception** — on non-refused exception in port loop, `raise` propagated to outer handler but left `self.ib` as fresh unconnected `IB()`. Fixed with `_connect_ex` capture pattern. File: ibkr_broker.py
+- **H4: Gateway toggle didn't update port fields visually** — No JS change listener on `#ibkr-use-gateway`. Added listener that auto-updates ports to 4001/4002 or 7496/7497 when toggle changes (only if current value is a known default). File: settings.html
+
+### MEDIUM (Acknowledged, no fix needed now)
+- `_poll_running` private attribute access in us_service.py / position_monitor.py — silent failure risk on refactor; no public method exists
+- `is_option` detection fragility (`len > 10 or ' ' in symbol`) — mostly correct for all real symbols
+- `_account_info` vs `_last_account_info` attribute mismatch in dashboard — mitigated by broker-level fallback
+- Port override for existing users with saved TWS ports who toggle Gateway — auto-fallback handles this at connect time
+
+### PIPELINE CONFIRMED WORKING
+- Conditional orders correctly watch UNDERLYING price for entry trigger; risk engine watches POSITION (option key) for PT/SL — no mismatch
+- UPH event format: `{'symbol', 'price', 'bid', 'ask'}` vs direct hub `{'symbol', 'quote': QuoteData}` — `_on_quote_update` handles both via fallback on lines 1904-1907
+- Option symbol subscriptions for positions: contract stored in `_symbol_to_contract` by `_refresh_positions_from_ib`, `_start_market_data` uses actual OPT contract directly
+
+
+
+## Session: June 10, 2026 — IBKR API Gap Analysis & Reconnect Fix
+
+### ANALYSIS: IBKR API vs Codebase Gap Review
+Reviewed IBKR official API docs (tick types, reqMktData, bracket orders, ib_insync) against current codebase.
+
+**Gaps found and resolved:**
+
+**1. `_attempt_reconnect` didn't try alternate port (TWS↔Gateway) — FIXED**
+- `ibkr_broker.connect()` has Gateway auto-fallback but `_attempt_reconnect` only tried `self._broker.port`
+- If user switched TWS→Gateway (or vice versa) while bot was running, reconnect would loop forever on the wrong port
+- Fix: added TWS↔Gateway fallback in `_attempt_reconnect` — tries primary port, then alternate on ConnectionRefused, updates `self._broker.port` when alternate works
+- File: `src/services/ibkr_data_hub.py`
+
+**2. Options mark price subscription missing — FIXED**
+- `_start_market_data` used empty genericTickList for all contracts — no mark price for options
+- Added `genericTickList='233,426'` for OPT contracts in `_start_market_data` and reconnect resubscription
+- Added `modelGreeks.optPrice` fallback in `_on_pending_tickers` for illiquid options with no last trade
+- File: `src/services/ibkr_data_hub.py`
+
+**Gaps confirmed working correctly (no fix needed):**
+- Bid/ask/last pricing via `pendingTickersEvent` — working
+- `(bid+ask)/2` fallback when no last trade — already in code (line 376-378)
+- `_wait_for_fill` Submitted/Filled handling — correct behavior
+- STC/STO/BTC→SELL action mapping — correct
+- `placeOrder` without `asyncio.to_thread` — already fixed last session
+
+**Additional bugs found and fixed (June 10, 2026 — follow-up review):**
+
+- **Bug: `detach_broker` missing `timeoutEvent` removal** — phantom timeout callbacks fired after detach. Added `timeoutEvent -= _on_timeout` to match `_attach_events`. File: ibkr_data_hub.py
+- **Bug: `get_positions_detailed` wrong price key for options** — used `contract.symbol` (e.g. "AAPL") to look up option price in hub; hub stores options under full key ("AAPL_20240120_150_C"). Showed underlying stock price as option current price → wrong P&L. Fixed to use `_hub_key` with full option notation. File: ibkr_broker.py
+- **Bug: `_auto_reconnect` in broker only tried `self.port`** — no TWS↔Gateway fallback. If user switched from Gateway to TWS while bot ran, reconnect would loop forever. Added same port fallback logic as `connect()` and hub `_attempt_reconnect`. File: ibkr_broker.py
+- **Bug: Dual reconnect race condition** — broker `_auto_reconnect` and hub `_attempt_reconnect` both fired on disconnect, both creating new `IB()` objects and calling `_attach_events`, leading to duplicate event handlers. Hub now checks `broker._reconnect_in_progress` and whether `self._ib.isConnected()` before proceeding. File: ibkr_data_hub.py
+- **Bug: Reconciliation loop and `_qualify_and_subscribe` tried `Stock()` for option key symbols** — option keys contain `_` (e.g. "AAPL_20240120_150_C"); creating `Stock(sym, 'SMART', 'USD')` would fail or qualify wrong contract. Both paths now skip any symbol containing `_`. File: ibkr_data_hub.py
+
+**Known architectural gaps (by design, no fix):**
+- No native IBKR bracket orders — risk engine manages PT/SL via conditional orders
+- Options greeks (delta/gamma/theta/vega) not flowing — not needed for price-based exits; dashboard analytics gap only
+- `reqTickByTickData` not used — 200-300ms batching acceptable for risk cycle
+
+
+
 ## Session: June 9, 2026 — Centralized Expiry Architecture (v11.2.0)
 
 ### FEATURE: Centralized Expiry Normalization (`src/core/expiry.py`)
@@ -888,3 +958,37 @@ Verified live with OSRH Trade #36 on IBKR_PAPER:
 - `broker_sync_service.py`: Added `order_id` dedup check across ALL trade statuses (not just OPEN/PENDING) via direct DB query before the symbol+broker fuzzy check
 - `trade_monitor.py`: Added `order_id` and symbol+broker dedup checks in `_add_bto_to_trades_table()` before inserting
 - Cleaned up existing duplicates: HOTH #152, #157 (hidden), GNS webhook_position #4 (closed), stale SPY webhook_position #3 (closed)
+
+---
+
+## 2026-06-10: Trailing Stop Failure Analysis — QQQ 0DTE Post-Mortem
+
+### Log: C:\VSCode\logs\bot.20260610_095213.log
+Position: `Webull_QQQ_718.0_2026-06-10_C` — entry $0.85, Trail 20%@20%, PT1=50%, SL=25%
+
+### Timeline
+- 09:45:34 — Position entered, $0.86 (+1.8%)
+- 09:46:33 — Price peaked at $1.01 (+19.41%), activation threshold $1.02 — missed by $0.01
+- 09:47:29 — Price recovered to $1.04 (+22.94%), trailing **correctly activated**
+- 09:48:05–09:49:15 — `highest_price` tracked: $1.04 → $1.12 → $1.14 → $1.31
+- 09:49:16 — **PT1 EXIT TRIGGERED** (54.71% >= 50%), selling 3 of 4 contracts (partial, `_is_partial=True`)
+- 09:50:45+ — Trailing stop triggered: price $0.97 < stop $1.05 (20% below high $1.31)
+  - **BLOCKED**: Exit lease `owner=worker, age=89-111s` prevents trailing stop exit
+  - **BLOCKED**: Staleness gate (6-15s stale, no streaming ticks)
+
+### Root Cause 1: Partial Exit Creates Worker Lease (CRITICAL BUG)
+`exit_lease_manager.transfer()` lines 60-62: when no lease exists and `expected_owner=OWNER_RISK_ENGINE` is passed, creates a new `OWNER_WORKER` lease instead of returning False. Partial PT1 exit (is_partial=True, skips risk engine lease acquisition) still calls `transfer()` in the worker, which creates an unintended 180-second worker lease on the full position key. This blocks ALL subsequent exits including trailing stop.
+
+**Fix**: `selfbot_webull.py:19263` — skip lease check for `_is_partial=True` signals. Partial exits use `_partial_exit_in_flight` dedup (30s/tier) in the risk engine; no worker lease needed.
+
+### Root Cause 2: Trailing Stop Staleness Gate Has No Breach Bypass
+`position_monitor.py` lines 4766-4776: Staleness gate unconditionally blocks trailing stop when price is "stale" (unchanged > 5s). Stop loss has a 1% breach bypass (price clearly below SL level → allow exit), but trailing stop had no equivalent. With `StreamTicks=0` (REST-only mode, 1-2s cycles), options prices appear "stuck" between REST fetches, triggering staleness repeatedly.
+
+**Fix**: `position_monitor.py:4767` — added breach bypass for trailing stop: if price is 1%+ below trailing stop level, allow exit despite staleness.
+
+### Fixes Applied
+- `src/selfbot_webull.py:19263`: Skip worker lease for `_is_partial=True` signals
+- `src/risk/position_monitor.py:4767`: Add trailing stop staleness breach bypass (1% threshold)
+
+### Contributing Factor (No Fix): UPH StreamTicks=0
+UPH shows `StreamTicks: 0, Cache: 0 symbols` throughout session. All risk cycles show `ticks=0`. Risk engine running on REST-only (1-2s cycles). This means fast 0DTE moves can be missed between REST cycles (e.g., the $1.01 peak was captured once then price dropped to $0.95 in the next REST fetch 2s later). Root cause likely Webull re-auth needed (known issue: 1094ms cycles, `Position refresh failed` errors).

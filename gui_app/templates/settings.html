@@ -1156,6 +1156,16 @@ input:checked + .slider:before {
                 </label>
             </label>
         </div>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Use IB Gateway</span>
+                <label class="switch">
+                    <input type="checkbox" id="ibkr-use-gateway">
+                    <span class="slider"></span>
+                </label>
+            </label>
+            <p class="help-text">IB Gateway: live=4001 / paper=4002 &nbsp;|&nbsp; TWS: live=7496 / paper=7497. Auto-fallback tries both regardless of this setting.</p>
+        </div>
         <div class="btn-group">
             <button id="save-ibkr-creds" class="btn btn-success">💾 Save</button>
             <button id="connect-ibkr" class="btn btn-connect">🔌 Connect</button>
@@ -1403,6 +1413,15 @@ input:checked + .slider:before {
                     <span>0%</span>
                     <span>25%</span>
                     <span>50%</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Trailing Activation: <span class="slider-value" id="trailing-activation-value">15.0</span>% <small style="opacity:0.6">(gain needed to start trailing)</small></label>
+                <input type="range" id="trailing-activation" min="0" max="100" step="1" value="15">
+                <div class="slider-labels">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
                 </div>
             </div>
         </div>
@@ -2328,6 +2347,10 @@ document.getElementById('stop-loss').addEventListener('input', (e) => {
 
 document.getElementById('trailing-stop').addEventListener('input', (e) => {
     document.getElementById('trailing-stop-value').textContent = e.target.value;
+});
+
+document.getElementById('trailing-activation').addEventListener('input', (e) => {
+    document.getElementById('trailing-activation-value').textContent = e.target.value;
 });
 
 document.getElementById('max-position-size').addEventListener('input', (e) => {
@@ -3450,6 +3473,9 @@ async function loadRiskSettings() {
         document.getElementById('stop-loss-value').textContent = settings.stop_loss_percent;
         document.getElementById('trailing-stop').value = settings.trailing_stop_percent;
         document.getElementById('trailing-stop-value').textContent = settings.trailing_stop_percent;
+        const activationPct = settings.trailing_activation_pct ?? 15;
+        document.getElementById('trailing-activation').value = activationPct;
+        document.getElementById('trailing-activation-value').textContent = activationPct;
     } catch (error) {
         console.error('Error loading risk settings:', error);
     }
@@ -3460,7 +3486,8 @@ document.getElementById('save-risk').addEventListener('click', async () => {
         enabled: document.getElementById('risk-enabled').checked,
         profit_target_percent: parseFloat(document.getElementById('profit-target').value),
         stop_loss_percent: parseFloat(document.getElementById('stop-loss').value),
-        trailing_stop_percent: parseFloat(document.getElementById('trailing-stop').value)
+        trailing_stop_percent: parseFloat(document.getElementById('trailing-stop').value),
+        trailing_activation_pct: parseFloat(document.getElementById('trailing-activation').value)
     };
     
     try {
@@ -4830,19 +4857,36 @@ async function loadIBKRCredentials() {
             document.getElementById('ibkr-port-live').value = data.port_live || 7496;
             document.getElementById('ibkr-client-id').value = data.client_id || 1;
             document.getElementById('ibkr-paper').checked = data.paper_mode;
+            document.getElementById('ibkr-use-gateway').checked = data.use_gateway || false;
         }
     } catch (error) {
         console.error('Error loading IBKR credentials:', error);
     }
 }
 
+// Update port fields when gateway toggle changes so user sees the defaults before saving
+document.getElementById('ibkr-use-gateway').addEventListener('change', function() {
+    const useGw = this.checked;
+    const paperEl = document.getElementById('ibkr-port-paper');
+    const liveEl  = document.getElementById('ibkr-port-live');
+    const defaultPaper = useGw ? 4002 : 7497;
+    const defaultLive  = useGw ? 4001 : 7496;
+    // Only auto-update if the current value is a known default (don't clobber custom ports)
+    const knownPapers = [7497, 4002];
+    const knownLives  = [7496, 4001];
+    if (knownPapers.includes(parseInt(paperEl.value))) paperEl.value = defaultPaper;
+    if (knownLives.includes(parseInt(liveEl.value)))   liveEl.value  = defaultLive;
+});
+
 document.getElementById('save-ibkr-creds').addEventListener('click', async () => {
+    const useGw = document.getElementById('ibkr-use-gateway').checked;
     const data = {
         host: document.getElementById('ibkr-host').value.trim(),
-        port_paper: parseInt(document.getElementById('ibkr-port-paper').value),
-        port_live: parseInt(document.getElementById('ibkr-port-live').value),
+        port_paper: parseInt(document.getElementById('ibkr-port-paper').value) || (useGw ? 4002 : 7497),
+        port_live: parseInt(document.getElementById('ibkr-port-live').value) || (useGw ? 4001 : 7496),
         client_id: parseInt(document.getElementById('ibkr-client-id').value),
-        paper_mode: document.getElementById('ibkr-paper').checked
+        paper_mode: document.getElementById('ibkr-paper').checked,
+        use_gateway: useGw,
     };
     
     try {

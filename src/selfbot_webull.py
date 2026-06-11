@@ -1691,21 +1691,24 @@ def get_risk_management_settings():
     if DATABASE_MODULE_AVAILABLE:
         try:
             settings = db.get_risk_management_settings()
+            _trail_act = float(db.get_setting('global_trailing_activation_pct', '15.0') or 15.0)
             return {
                 'enabled': settings['enabled'],
                 'profit_target_percent': settings['profit_target_percent'],
                 'stop_loss_percent': settings['stop_loss_percent'],
-                'trailing_stop_percent': settings['trailing_stop_percent']
+                'trailing_stop_percent': settings['trailing_stop_percent'],
+                'trailing_activation_pct': _trail_act
             }
         except Exception as e:
             print(f"[CONFIG] Warning: Could not load risk management settings from database: {e}")
-    
+
     # Fallback to config.ini
     return {
         'enabled': cfg.getboolean('risk_management', 'enable_risk_management', fallback=False),
         'profit_target_percent': cfg.getfloat('risk_management', 'profit_target_percent', fallback=0.0),
         'stop_loss_percent': cfg.getfloat('risk_management', 'stop_loss_percent', fallback=0.0),
-        'trailing_stop_percent': cfg.getfloat('risk_management', 'trailing_stop_percent', fallback=0.0)
+        'trailing_stop_percent': cfg.getfloat('risk_management', 'trailing_stop_percent', fallback=0.0),
+        'trailing_activation_pct': cfg.getfloat('risk_management', 'trailing_stop_activation_percent', fallback=15.0)
     }
 
 _risk_settings = get_risk_management_settings()
@@ -1714,7 +1717,7 @@ PROFIT_TARGET_PCT = _risk_settings['profit_target_percent']
 STOP_LOSS_PCT = _risk_settings['stop_loss_percent']
 TRAILING_STOP_PCT = _risk_settings['trailing_stop_percent']
 MONITORING_INTERVAL = cfg.getint('risk_management', 'monitoring_interval', fallback=30)
-TRAILING_ACTIVATION_PCT = cfg.getfloat('risk_management', 'trailing_stop_activation_percent', fallback=0.0)
+TRAILING_ACTIVATION_PCT = _risk_settings.get('trailing_activation_pct') or cfg.getfloat('risk_management', 'trailing_stop_activation_percent', fallback=15.0)
 
 if ENABLE_RISK_MGMT:
     print(f"[CONFIG] ✓ Risk management ENABLED")
@@ -8123,6 +8126,10 @@ class SelfClient(discord.Client):
                         _original_print("[WEBULL_OFFICIAL] ⚠️ Connection timeout (30s) - broker skipped", flush=True)
                         self.webull_official_broker = None
                         connected = False
+                    except Exception as _wo_err:
+                        _original_print(f"[WEBULL_OFFICIAL] ❌ Connection error: {_wo_err}", flush=True)
+                        self.webull_official_broker = None
+                        connected = False
                     if connected:
                         _original_print(f"[WEBULL_OFFICIAL] ✓ Connected successfully ({mode_str})", flush=True)
                         try:
@@ -8286,23 +8293,31 @@ class SelfClient(discord.Client):
                     
                     ibkr_creds = get_ibkr_credentials()
                     ibkr_host = ibkr_creds.get('host', '127.0.0.1')
-                    ibkr_port_live = ibkr_creds.get('port_live', 7496)
-                    ibkr_port_paper = ibkr_creds.get('port_paper', 7497)
-                    ibkr_client_id = ibkr_creds.get('client_id', 1)
+                    ibkr_use_gateway = ibkr_creds.get('use_gateway', False)
+                    # IB Gateway ports: 4001 live / 4002 paper; TWS ports: 7496 live / 7497 paper
+                    _gw_defaults = {True: 4002, False: 4001}
+                    _tws_defaults = {True: 7497, False: 7496}
                     ibkr_paper_mode = ibkr_creds.get('paper_mode', True)
-                    
+                    _port_default_live  = _gw_defaults[False] if ibkr_use_gateway else _tws_defaults[False]
+                    _port_default_paper = _gw_defaults[True]  if ibkr_use_gateway else _tws_defaults[True]
+                    ibkr_port_live  = ibkr_creds.get('port_live',  _port_default_live)
+                    ibkr_port_paper = ibkr_creds.get('port_paper', _port_default_paper)
+                    ibkr_client_id = ibkr_creds.get('client_id', 1)
+
                     ibkr_port = ibkr_port_paper if ibkr_paper_mode else ibkr_port_live
-                    
+                    _conn_type = "IB Gateway" if ibkr_use_gateway else "TWS"
+
                     _original_print(f"[IBKR] ✓ Loaded credentials from DATABASE", flush=True)
-                    _original_print(f"[IBKR]   Host: {ibkr_host}:{ibkr_port} (Client ID: {ibkr_client_id})", flush=True)
+                    _original_print(f"[IBKR]   Host: {ibkr_host}:{ibkr_port} via {_conn_type} (Client ID: {ibkr_client_id})", flush=True)
                     _original_print(f"[IBKR]   Mode: {'PAPER' if ibkr_paper_mode else 'LIVE'}", flush=True)
                     _original_print(f"[IBKR] Creating IBKRBroker instance...", flush=True)
-                    
+
                     self.ibkr_broker = IBKRBroker({
                         'host': ibkr_host,
                         'port': ibkr_port,
                         'client_id': ibkr_client_id,
-                        'paper_trade': ibkr_paper_mode
+                        'paper_trade': ibkr_paper_mode,
+                        'use_gateway': ibkr_use_gateway,
                     })
                     
                     ibkr_broker_id = 'ibkr_paper' if ibkr_paper_mode else 'ibkr_live'
@@ -8329,7 +8344,8 @@ class SelfClient(discord.Client):
                                 'host': ibkr_host,
                                 'port': ibkr_port,
                                 'client_id': ibkr_client_id,
-                                'paper_trade': ibkr_paper_mode
+                                'paper_trade': ibkr_paper_mode,
+                                'use_gateway': ibkr_use_gateway,
                             })
                     if connected:
                         mode = "PAPER" if ibkr_paper_mode else "LIVE"
@@ -9044,7 +9060,8 @@ class SelfClient(discord.Client):
                     pass
             if webull_hub:
                 conditional_order_router.set_data_hub('webull', webull_hub)
-                _cond_print("[CONDITIONAL] ✓ Webull streaming data hub registered (sub-100ms pricing)", flush=True)
+                conditional_order_router.set_data_hub('webull_official', webull_hub)
+                _cond_print("[CONDITIONAL] ✓ Webull streaming data hub registered (sub-100ms pricing, shared with webull_official)", flush=True)
             try:
                 from src.services.schwab_data_hub import get_schwab_data_hub
                 schwab_hub = get_schwab_data_hub()
@@ -9067,7 +9084,7 @@ class SelfClient(discord.Client):
                 ibkr_hub = get_ibkr_data_hub()
                 if ibkr_hub and getattr(ibkr_hub, '_broker', None):
                     conditional_order_router.set_data_hub('ibkr', ibkr_hub)
-                    _cond_print(f"[CONDITIONAL] ✓ IBKR data hub registered (TWS streaming)", flush=True)
+                    _cond_print(f"[CONDITIONAL] ✓ IBKR data hub registered (TWS/Gateway streaming)", flush=True)
             except Exception:
                 pass
             try:
@@ -11347,9 +11364,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     _wb_hub = get_webull_data_hub()
                     if _wb_hub:
                         conditional_order_router.set_data_hub('webull', _wb_hub)
+                        conditional_order_router.set_data_hub('webull_official', _wb_hub)
                 except Exception:
                     pass
-                
+
                 if _early_reg > 0:
                     print(f"[STARTUP] ✓ Early-registered {_early_reg} broker(s) with conditional router", flush=True)
                 
@@ -19245,7 +19263,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if is_risk_order and not self.sync_ready.is_set():
                     _original_print(f"[WORKER] ⚡ Processing risk exit {signal.get('symbol')} IMMEDIATELY (bypassing sync gate)", flush=True)
                 
-                if is_risk_order and signal.get('_exit_marker_key'):
+                if is_risk_order and signal.get('_exit_marker_key') and not signal.get('_is_partial', False):
                     _marker_key = signal['_exit_marker_key']
                     try:
                         from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_WORKER, OWNER_BACKUP, OWNER_RISK_ENGINE, LEASE_EXECUTING

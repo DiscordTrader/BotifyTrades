@@ -9627,6 +9627,7 @@ def register_routes(app):
         """Get risk management settings"""
         try:
             settings = db.get_risk_management_settings()
+            settings['trailing_activation_pct'] = float(db.get_setting('global_trailing_activation_pct', '15.0') or 15.0)
             return jsonify(settings)
         except Exception as e:
             print(f"[API] Error fetching risk management settings: {e}")
@@ -9641,7 +9642,8 @@ def register_routes(app):
             profit_target = data.get('profit_target_percent', 20.0)
             stop_loss = data.get('stop_loss_percent', 10.0)
             trailing_stop = data.get('trailing_stop_percent', 5.0)
-            
+            trailing_activation = data.get('trailing_activation_pct', 15.0)
+
             # Validate percentages
             if not (0 <= profit_target <= 100):
                 return jsonify({'error': 'Profit target must be between 0 and 100'}), 400
@@ -9649,9 +9651,13 @@ def register_routes(app):
                 return jsonify({'error': 'Stop loss must be between 0 and 100'}), 400
             if not (0 <= trailing_stop <= 100):
                 return jsonify({'error': 'Trailing stop must be between 0 and 100'}), 400
-            
+            if not (0 <= trailing_activation <= 100):
+                return jsonify({'error': 'Trailing activation must be between 0 and 100'}), 400
+
             success = db.update_risk_management_settings(enabled, profit_target, stop_loss, trailing_stop)
-            
+            if success:
+                db.save_setting('global_trailing_activation_pct', str(trailing_activation))
+
             if success:
                 return jsonify({
                     'success': True,
@@ -9660,7 +9666,8 @@ def register_routes(app):
                         'enabled': enabled,
                         'profit_target_percent': profit_target,
                         'stop_loss_percent': stop_loss,
-                        'trailing_stop_percent': trailing_stop
+                        'trailing_stop_percent': trailing_stop,
+                        'trailing_activation_pct': trailing_activation
                     }
                 })
             else:
@@ -16514,6 +16521,7 @@ def register_routes(app):
                 'port_paper': creds.get('port_paper', 7497),
                 'client_id': creds.get('client_id', 1),
                 'paper_mode': creds.get('paper_mode', True),
+                'use_gateway': creds.get('use_gateway', False),
                 'live_status': live_status,
                 'paper_status': paper_status
             })
@@ -16534,7 +16542,8 @@ def register_routes(app):
                 port_live=int(data.get('port_live', 7496)),
                 port_paper=int(data.get('port_paper', 7497)),
                 client_id=int(data.get('client_id', 1)),
-                paper_mode=data.get('paper_mode', True)
+                paper_mode=data.get('paper_mode', True),
+                use_gateway=bool(data.get('use_gateway', False)),
             )
             
             return jsonify({
@@ -16643,6 +16652,18 @@ def register_routes(app):
                         accounts_list = broker.get_accounts_list()
 
                         set_broker_status(broker_id, True, 'connected', account_info=account_info)
+
+                        # Inject live broker into running bot so dashboard shows connected
+                        if _bot_instance is not None:
+                            _bot_instance.webull_official_broker = broker
+                            try:
+                                from src.services.unified_price_hub import get_unified_price_hub
+                                uph = get_unified_price_hub()
+                                if uph and hasattr(uph, '_hub_status'):
+                                    uph._hub_status['webull_official'] = True
+                            except Exception:
+                                pass
+
                         return jsonify({
                             'success': True,
                             'message': f'Webull Official API connected ({env})',
@@ -16654,9 +16675,15 @@ def register_routes(app):
                         set_broker_status(broker_id, False, 'error', 'Connection failed')
                         return jsonify({'success': False, 'error': 'Failed to connect to Webull Official API. Check your App Key and App Secret.'}), 400
                 except Exception as e:
-                    error_msg = f'Connection error: {str(e)}'
+                    err_str = str(e)
+                    if '401' in err_str or 'auth' in err_str.lower() or 'signature' in err_str.lower():
+                        error_msg = 'Authentication failed (401): Invalid App Key or App Secret — get credentials from developer.webull.com'
+                    elif 'No accounts found' in err_str:
+                        error_msg = err_str
+                    else:
+                        error_msg = f'Connection error: {err_str}'
                     set_broker_status(broker_id, False, 'error', error_msg)
-                    return jsonify({'success': False, 'error': error_msg}), 500
+                    return jsonify({'success': False, 'error': error_msg}), 400
 
             elif broker_id.startswith('webull'):
                 creds = get_webull_credentials()
@@ -21800,7 +21827,7 @@ def register_routes(app):
                 from src.services.broker_health_monitor import get_health_monitor
                 health_monitor = get_health_monitor()  # Use singleton instance
                 # Use uppercase keys to match health monitor's normalization
-                for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE', 'TRADING212']:
+                for broker_key in ['WEBULL', 'WEBULL_OFFICIAL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE', 'TRADING212']:
                     state = health_monitor.get_broker_state(broker_key)
                     if state and state.get('status') != 'unknown':
                         health_states[broker_key.upper()] = state
@@ -21815,6 +21842,7 @@ def register_routes(app):
                 
                 broker_mappings = [
                     ('WEBULL', 'broker', 'USA', 'USD', False),
+                    ('WEBULL_OFFICIAL', 'webull_official_broker', 'USA', 'USD', False),
                     ('ALPACA_PAPER', 'paper_broker', 'USA', 'USD', True),
                     ('ROBINHOOD', 'robinhood_broker', 'USA', 'USD', False),
                     ('SCHWAB', 'schwab_broker', 'USA', 'USD', False),
@@ -21823,9 +21851,10 @@ def register_routes(app):
                     ('QUESTRADE', 'questrade_broker', 'Canada', 'CAD', False),
                     ('TRADING212', 'trading212_broker', 'UK_EU', 'GBP', False),
                 ]
-                
+
                 creds_check_map = {
                     'WEBULL': 'webull_credentials',
+                    'WEBULL_OFFICIAL': 'webull_official_credentials',
                     'ALPACA_PAPER': 'alpaca_credentials',
                     'IBKR': 'ibkr_credentials',
                     'SCHWAB': 'schwab_credentials',
@@ -21856,6 +21885,7 @@ def register_routes(app):
                                         'IBKR': 'Broker configured but not connected — check gateway/TWS is running',
                                         'ROBINHOOD': 'Broker configured but not connected — check login credentials',
                                         'WEBULL': 'Broker configured but not connected — check credentials or tokens',
+                                        'WEBULL_OFFICIAL': 'Broker configured but not connected — click Connect in Settings → Brokers',
                                         'SCHWAB': 'Broker configured but not connected — check OAuth tokens',
                                         'ALPACA_PAPER': 'Broker configured but not connected — check API keys',
                                         'TASTYTRADE': 'Broker configured but not connected — check login credentials',
@@ -21933,7 +21963,7 @@ def register_routes(app):
                             except Exception:
                                 pass
                     if is_connected and buying_power == 0 and balance == 0 and broker_instance:
-                        broker_cache = getattr(broker_instance, '_account_cache', None)
+                        broker_cache = getattr(broker_instance, '_account_cache', None) or getattr(broker_instance, '_account_info_cache', None)
                         if broker_cache:
                             buying_power = float(broker_cache.get('buying_power', 0) or 0)
                             balance = float(broker_cache.get('portfolio_value', broker_cache.get('balance', 0)) or 0)

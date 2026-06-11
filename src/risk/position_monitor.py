@@ -1922,49 +1922,66 @@ class RiskManager:
 
         self._quote_handler = _on_quote_update
 
+        # UPH is the preferred single subscription — it aggregates all broker hubs in one callback,
+        # preventing the double-firing that occurs when both UPH and direct hub subscriptions are active.
+        # If UPH is unavailable or not yet polling, fall back to direct per-hub subscriptions.
+        _uph_subscribed = False
         try:
-            from src.services.webull_data_hub import get_webull_data_hub
-            hub = get_webull_data_hub()
-            hub.on('quote_updated', _on_quote_update)
-            _any_subscribed = True
-            print("[RISK] ✓ Subscribed to Webull streaming prices (event-driven risk)")
-        except ImportError:
-            pass
-        except Exception as e:
-            print(f"[RISK] ⚠️ Webull hub subscription error: {e}")
+            from src.services.unified_price_hub import get_unified_price_hub
+            _uph = get_unified_price_hub()
+            if _uph and _uph._poll_running:
+                _uph.on('quote_updated', _on_quote_update)
+                _any_subscribed = True
+                _uph_subscribed = True
+                print("[RISK] ✓ Subscribed to UPH (unified source — all broker hubs, no double-firing)", flush=True)
+        except Exception as _uph_e:
+            print(f"[RISK] ⚠️ UPH subscription failed ({_uph_e}) — falling back to direct hub subscriptions", flush=True)
 
-        try:
-            from src.services.schwab_data_hub import get_schwab_data_hub
-            schwab_hub = get_schwab_data_hub()
-            schwab_hub.on('quote_updated', _on_quote_update)
-            _any_subscribed = True
-            print("[RISK] ✓ Subscribed to Schwab streaming prices (event-driven risk)")
-        except ImportError:
-            pass
-        except Exception as e:
-            print(f"[RISK] ⚠️ Schwab hub subscription error: {e}")
+        if not _uph_subscribed:
+            # Direct hub fallback — only used when UPH is unavailable
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                hub.on('quote_updated', _on_quote_update)
+                _any_subscribed = True
+                print("[RISK] ✓ Subscribed to Webull streaming prices (direct fallback)")
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f"[RISK] ⚠️ Webull hub subscription error: {e}")
 
-        try:
-            from src.services.ibkr_data_hub import get_ibkr_data_hub
-            ibkr_hub = get_ibkr_data_hub()
-            ibkr_hub.on('quote_updated', _on_quote_update)
-            _any_subscribed = True
-            print("[RISK] ✓ Subscribed to IBKR streaming prices (event-driven risk)")
-        except ImportError:
-            pass
-        except Exception as e:
-            print(f"[RISK] ⚠️ IBKR hub subscription error: {e}")
+            try:
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                schwab_hub = get_schwab_data_hub()
+                schwab_hub.on('quote_updated', _on_quote_update)
+                _any_subscribed = True
+                print("[RISK] ✓ Subscribed to Schwab streaming prices (direct fallback)")
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f"[RISK] ⚠️ Schwab hub subscription error: {e}")
 
-        try:
-            from src.services.tastytrade_data_hub import get_tastytrade_data_hub
-            tt_hub = get_tastytrade_data_hub()
-            tt_hub.on('quote_updated', _on_quote_update)
-            _any_subscribed = True
-            print("[RISK] ✓ Subscribed to Tastytrade streaming prices (event-driven risk)")
-        except ImportError:
-            pass
-        except Exception as e:
-            print(f"[RISK] ⚠️ Tastytrade hub subscription error: {e}")
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                ibkr_hub = get_ibkr_data_hub()
+                ibkr_hub.on('quote_updated', _on_quote_update)
+                _any_subscribed = True
+                print("[RISK] ✓ Subscribed to IBKR streaming prices (direct fallback)")
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f"[RISK] ⚠️ IBKR hub subscription error: {e}")
+
+            try:
+                from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                tt_hub = get_tastytrade_data_hub()
+                tt_hub.on('quote_updated', _on_quote_update)
+                _any_subscribed = True
+                print("[RISK] ✓ Subscribed to Tastytrade streaming prices (direct fallback)")
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f"[RISK] ⚠️ Tastytrade hub subscription error: {e}")
 
         self._hub_subscribed = _any_subscribed
 
@@ -4745,9 +4762,21 @@ class RiskManager:
             leave_runner_pct=leave_runner_pct
         )
         if should_activate:
-            self.cache.activate_trailing_stop(position.position_key)
+            self.cache.activate_trailing_stop(position.position_key, trade_id=trade_id)
         if decision.should_exit:
             if _staleness_is_blocking:
+                _trail_stop = cache.highest_price * (1 - trailing_pct / 100) if cache is not None and cache.highest_price > 0 else 0
+                _trail_breach_pct = ((_trail_stop - position.current_price) / _trail_stop * 100) if _trail_stop > 0 else 0
+                if _trail_breach_pct >= 1.0:
+                    if not hasattr(self, '_staleness_breach_bypass_logged'):
+                        self._staleness_breach_bypass_logged = {}
+                    _sbr_key = f"{_repair_key}_trail_{int(_staleness_change_age)//60}"
+                    if _sbr_key not in self._staleness_breach_bypass_logged:
+                        self._staleness_breach_bypass_logged[_sbr_key] = True
+                        print(f"[RISK] ⚠️ STALENESS BREACH BYPASS: {position.symbol} price ${position.current_price:.2f} "
+                              f"is {_trail_breach_pct:.1f}% below trailing stop ${_trail_stop:.2f} — allowing exit despite "
+                              f"{_staleness_change_age:.0f}s stale price")
+                    return decision
                 if not hasattr(self, '_staleness_block_logged'):
                     self._staleness_block_logged = {}
                 _sbl_key = f"{_repair_key}_trail_{int(_staleness_change_age)//30}"
@@ -7699,8 +7728,9 @@ class RiskManager:
                     import traceback
                     traceback.print_exc()
             
-            _exit_thread = threading.Thread(target=_thread_exit_executor, daemon=True, name=f"risk-exit-{pos_key}")
-            _exit_thread.start()
+            if not decision.is_partial:
+                _exit_thread = threading.Thread(target=_thread_exit_executor, daemon=True, name=f"risk-exit-{pos_key}")
+                _exit_thread.start()
             
         except Exception as e:
             self.cache.reset_closing(pos_key)
