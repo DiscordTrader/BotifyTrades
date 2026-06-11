@@ -97,6 +97,7 @@ class IBKRDataHub:
         self._mktdata_denied_symbols: Set[str] = set()
         self._mktdata_denied_lock = threading.Lock()
         self._subscribe_fail_cache: Dict[str, float] = {}
+        self._qualify_in_progress: Set[str] = set()
         self._using_delayed_data = False
 
         self._reconnect_in_progress = False
@@ -391,6 +392,12 @@ class IBKRDataHub:
             return symbol.upper() in self._mktdata_denied_symbols
 
     def _on_pending_tickers(self, tickers):
+        try:
+            self._process_pending_tickers(tickers)
+        except Exception as e:
+            print(f"[IBKR_HUB] ⚠️ _on_pending_tickers error (ticks may be lost): {e}")
+
+    def _process_pending_tickers(self, tickers):
         now = time.time()
         updated_symbols = []
         try:
@@ -674,29 +681,37 @@ class IBKRDataHub:
             self._subscribed_symbols.discard(symbol)
             logger.debug(f"[IBKR_HUB] Skipping auto-qualify for option key '{symbol}' — contract must come from positions")
             return
-        with self._mktdata_denied_lock:
-            if symbol in self._mktdata_denied_symbols:
+        # Prevent concurrent qualifications of the same symbol — two callers racing through
+        # subscribe_symbol before either conId is registered causes duplicate reqMktData.
+        if symbol in self._qualify_in_progress:
+            return
+        self._qualify_in_progress.add(symbol)
+        try:
+            with self._mktdata_denied_lock:
+                if symbol in self._mktdata_denied_symbols:
+                    self._subscribed_symbols.discard(symbol)
+                    return
+            fail_ts = self._subscribe_fail_cache.get(symbol, 0)
+            if fail_ts and _time.time() - fail_ts < self._SUBSCRIBE_FAIL_BACKOFF:
                 self._subscribed_symbols.discard(symbol)
                 return
-        fail_ts = self._subscribe_fail_cache.get(symbol, 0)
-        if fail_ts and _time.time() - fail_ts < self._SUBSCRIBE_FAIL_BACKOFF:
-            self._subscribed_symbols.discard(symbol)
-            return
-        try:
-            from ib_insync import Stock
-            auto_contract = Stock(symbol, 'SMART', 'USD')
-            await self._ib.qualifyContractsAsync(auto_contract)
-            self._start_market_data(symbol, auto_contract)
-            self._subscribe_fail_cache.pop(symbol, None)
-            logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} (conId={auto_contract.conId})")
-        except Exception as e:
-            self._subscribe_fail_cache[symbol] = _time.time()
-            self._subscribed_symbols.discard(symbol)
-            if 'event loop' in str(e).lower():
-                pass
-            else:
-                logger.warning(f"[IBKR_HUB] Could not auto-create contract for {symbol}: {e}")
-                self._pending_subscriptions.add(symbol)
+            try:
+                from ib_insync import Stock
+                auto_contract = Stock(symbol, 'SMART', 'USD')
+                await self._ib.qualifyContractsAsync(auto_contract)
+                self._start_market_data(symbol, auto_contract)
+                self._subscribe_fail_cache.pop(symbol, None)
+                logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} (conId={auto_contract.conId})")
+            except Exception as e:
+                self._subscribe_fail_cache[symbol] = _time.time()
+                self._subscribed_symbols.discard(symbol)
+                if 'event loop' in str(e).lower():
+                    pass
+                else:
+                    logger.warning(f"[IBKR_HUB] Could not auto-create contract for {symbol}: {e}")
+                    self._pending_subscriptions.add(symbol)
+        finally:
+            self._qualify_in_progress.discard(symbol)
 
     def _start_market_data(self, symbol: str, contract):
         if not self._ib:
