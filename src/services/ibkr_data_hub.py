@@ -403,6 +403,8 @@ class IBKRDataHub:
                 return
             con_id = ticker.contract.conId if ticker.contract else 0
             symbol = self._conid_to_symbol.get(con_id)
+            if not symbol and ticker.contract:
+                symbol = self._build_symbol_key(ticker.contract)
             if not symbol:
                 return
             self.update_quote(symbol, {'last': float(price)}, source='tick_by_tick')

@@ -2457,7 +2457,11 @@ class BaseConditionalOrderService(ABC):
             triggered = True
         elif trigger_type == 'under' and price <= adjusted_trigger:
             triggered = True
-        
+
+        if not triggered:
+            if hasattr(self, '_trigger_first_seen'):
+                self._trigger_first_seen.pop(order_id, None)
+
         if triggered:
             if order_id in self._executing_orders:
                 return
@@ -2467,6 +2471,19 @@ class BaseConditionalOrderService(ABC):
             cooldown_until = self._block_cooldowns.get(order_id, 0)
             if _time.monotonic() < cooldown_until:
                 return
+            # 150ms confirmation window — requires price to hold above/below trigger
+            # across at least 2 tick arrivals before executing. Filters single-tick spikes
+            # from low-liquidity prints without delaying genuine breakouts.
+            if not hasattr(self, '_trigger_first_seen'):
+                self._trigger_first_seen = {}
+            first_seen = self._trigger_first_seen.get(order_id)
+            now_mono = _time.monotonic()
+            if first_seen is None:
+                self._trigger_first_seen[order_id] = now_mono
+                return
+            if now_mono - first_seen < 0.15:
+                return
+            self._trigger_first_seen.pop(order_id, None)
             self._executing_orders.add(order_id)
             self._log(f"TRIGGERED #{order_id} {symbol}")
             print(f"[CONDITIONAL] 🎯 TRIGGERED #{order_id} {symbol} @ ${price:.4f} (trigger: {trigger_type} ${adjusted_trigger})", flush=True)
