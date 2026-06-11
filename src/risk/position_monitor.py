@@ -3794,27 +3794,30 @@ class RiskManager:
                 return positions
             
             broker_label = 'IBKR_LIVE' if not getattr(self.ibkr_broker, 'paper_trade', True) else 'IBKR_PAPER'
-            raw_positions = await asyncio.to_thread(ib.positions)
-            
+            _IB_SENTINEL = 1.7976931348623157e+308
+            raw_positions = await asyncio.to_thread(ib.portfolio)
+
             for pos in raw_positions:
                 contract = pos.contract
                 symbol = contract.symbol
                 quantity = abs(int(pos.position))
-                avg_cost = float(pos.avgCost) if pos.avgCost else 0
-                
+                avg_cost = float(getattr(pos, 'averageCost', None) or getattr(pos, 'avgCost', None) or 0)
+                mkt_price = float(getattr(pos, 'marketPrice', 0) or 0)
+                current_price = mkt_price if 0 < mkt_price < _IB_SENTINEL else 0
+
                 if contract.secType == 'OPT':
                     expiry_raw = contract.lastTradeDateOrContractMonth
                     if len(expiry_raw) == 8:
                         expiry = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}"
                     else:
                         expiry = expiry_raw
-                    
+
                     raw_sym = f"{symbol}_{expiry_raw}_{contract.strike}_{contract.right}"
                     positions.append(PositionSnapshot(
                         symbol=normalize_index_symbol(symbol),
                         quantity=quantity,
                         avg_cost=avg_cost / 100 if avg_cost > 0 else 0,
-                        current_price=0,
+                        current_price=current_price / 100 if current_price > 0 else 0,
                         asset='option',
                         broker=broker_label,
                         strike=contract.strike,
@@ -3827,7 +3830,7 @@ class RiskManager:
                         symbol=symbol,
                         quantity=quantity,
                         avg_cost=avg_cost,
-                        current_price=0,
+                        current_price=current_price,
                         asset='stock',
                         broker=broker_label,
                         raw_symbol=symbol

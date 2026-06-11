@@ -96,6 +96,7 @@ class IBKRDataHub:
 
         self._mktdata_denied_symbols: Set[str] = set()
         self._mktdata_denied_lock = threading.Lock()
+        self._subscribe_fail_cache: Dict[str, float] = {}
         self._using_delayed_data = False
 
         self._reconnect_in_progress = False
@@ -774,11 +775,12 @@ class IBKRDataHub:
         if not self._ib or not self._ib.isConnected():
             return
         try:
-            if from_event_callback:
-                raw_positions = await asyncio.to_thread(self._ib.portfolio)
-            else:
-                raw_positions = await asyncio.to_thread(self._ib.positions)
+            # Always use portfolio() — it includes marketPrice (IB's mark price) in addition to
+            # position/avgCost data. This ensures prices are available even for illiquid symbols
+            # that don't receive frequent reqMktData ticks (e.g. low-volume penny stocks).
+            raw_positions = await asyncio.to_thread(self._ib.portfolio)
             parsed = []
+            _IB_SENTINEL = 1.7976931348623157e+308  # IB uses max float when price unavailable
             for pos in raw_positions:
                 contract = pos.contract
                 symbol = contract.symbol
@@ -811,6 +813,12 @@ class IBKRDataHub:
                 else:
                     entry['asset'] = 'stock'
                 parsed.append(entry)
+
+                # Seed IB's mark price into quotes so risk engine has a valid price even
+                # when reqMktData ticks are sparse (illiquid symbols like low-volume stocks).
+                mkt_price = float(getattr(pos, 'marketPrice', 0) or 0)
+                if 0 < mkt_price < _IB_SENTINEL:
+                    self.update_quote(sym_key, {'last': mkt_price}, source='portfolio')
 
             self.update_positions(parsed)
 
