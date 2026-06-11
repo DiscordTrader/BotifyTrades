@@ -3002,6 +3002,37 @@ class BrokerSyncService:
                 if hasattr(broker_instance, 'ib') and broker_instance.ib.isConnected():
                     try:
                         ib = broker_instance.ib
+                        # ib.trades() only has orders placed since last reqOpenOrders / session start.
+                        # reqExecutionsAsync() fetches actual execution records from IB Gateway
+                        # history and survives bot restarts — use both sources merged by order_id.
+                        seen_order_ids = set()
+
+                        def _ibkr_add_entry(order_id, action, contract, filled_qty, avg_price, filled_time):
+                            if order_id in seen_order_ids or filled_qty <= 0 or avg_price <= 0:
+                                return
+                            seen_order_ids.add(order_id)
+                            side = 'BTO' if action == 'BUY' else 'STC'
+                            asset_type = 'option' if contract.secType == 'OPT' else 'stock'
+                            entry = {
+                                'order_id': str(order_id),
+                                'symbol': contract.symbol,
+                                'quantity': filled_qty,
+                                'filled_price': avg_price,
+                                'action': side,
+                                'filled_time': filled_time or datetime.now().isoformat(),
+                                'asset_type': asset_type,
+                            }
+                            if asset_type == 'option':
+                                expiry_raw = contract.lastTradeDateOrContractMonth or ''
+                                if len(expiry_raw) == 8:
+                                    entry['expiry'] = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}"
+                                else:
+                                    entry['expiry'] = expiry_raw
+                                entry['strike'] = contract.strike
+                                entry['direction'] = contract.right
+                            filled_orders.append(entry)
+
+                        # Primary: ib.trades() — in-memory, fast, covers current session
                         for trade in await asyncio.to_thread(ib.trades):
                             if not trade.orderStatus or trade.orderStatus.status != 'Filled':
                                 continue
@@ -3011,34 +3042,28 @@ class BrokerSyncService:
                                 continue
                             filled_qty = int(trade.orderStatus.filled) if trade.orderStatus.filled else 0
                             avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus.avgFillPrice else 0
-                            if filled_qty <= 0 or avg_price <= 0:
-                                continue
-                            action = order.action if hasattr(order, 'action') else ''
-                            side = 'BTO' if action == 'BUY' else 'STC'
-                            asset_type = 'option' if contract.secType == 'OPT' else 'stock'
-                            filled_time = None
-                            if trade.fills:
-                                filled_time = trade.fills[-1].time.isoformat() if trade.fills[-1].time else None
-                            if not filled_time:
-                                filled_time = datetime.now().isoformat()
-                            order_entry = {
-                                'order_id': str(order.orderId),
-                                'symbol': contract.symbol,
-                                'quantity': filled_qty,
-                                'filled_price': avg_price,
-                                'action': side,
-                                'filled_time': filled_time,
-                                'asset_type': asset_type,
-                            }
-                            if asset_type == 'option':
-                                expiry_raw = contract.lastTradeDateOrContractMonth or ''
-                                if len(expiry_raw) == 8:
-                                    order_entry['expiry'] = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}"
-                                else:
-                                    order_entry['expiry'] = expiry_raw
-                                order_entry['strike'] = contract.strike
-                                order_entry['direction'] = contract.right
-                            filled_orders.append(order_entry)
+                            action = order.action if hasattr(order, 'action') else 'BUY'
+                            ft = trade.fills[-1].time.isoformat() if trade.fills else None
+                            _ibkr_add_entry(order.orderId, action, contract, filled_qty, avg_price, ft)
+
+                        # Secondary: reqExecutionsAsync() — IB Gateway execution history,
+                        # catches fills placed before this session started (e.g. after bot restart)
+                        try:
+                            execs = await ib.reqExecutionsAsync()
+                            for exec_fill in execs:
+                                ex = exec_fill.execution
+                                contract = exec_fill.contract
+                                if not contract or not ex:
+                                    continue
+                                action = ex.side.upper() if hasattr(ex, 'side') else 'BOT'
+                                mapped_action = 'BUY' if action in ('BOT', 'BUY') else 'SELL'
+                                filled_qty = int(ex.shares) if ex.shares else 0
+                                avg_price = float(ex.price) if ex.price else 0
+                                ft = ex.time if hasattr(ex, 'time') else None
+                                _ibkr_add_entry(ex.orderId, mapped_action, contract, filled_qty, avg_price, str(ft) if ft else None)
+                        except Exception as _exec_e:
+                            print(f"[SYNC] IBKR reqExecutionsAsync warning: {_exec_e}")
+
                     except Exception as e:
                         print(f"[SYNC] IBKR filled orders error: {e}")
 
