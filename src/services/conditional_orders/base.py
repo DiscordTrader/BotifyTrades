@@ -151,7 +151,7 @@ class StreamingPriceMonitor(PriceMonitor):
     """
     
     HUB_POLL_INTERVAL = 0.25
-    REST_FALLBACK_INTERVAL = 3
+    REST_FALLBACK_INTERVAL = 1
     HUB_STALE_THRESHOLD = 10
     
     @staticmethod

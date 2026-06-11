@@ -9495,18 +9495,29 @@ def register_routes(app):
         """Get live streaming prices for all active conditional orders."""
         try:
             from src.services.conditional_orders.router import conditional_order_router
-            
+
+            # Pre-fetch UPH once — event-driven from all streaming hubs, freshest source
+            _uph = None
+            try:
+                from src.services.unified_price_hub import UnifiedPriceHub
+                _uph = UnifiedPriceHub.instance()
+                if _uph and not _uph._poll_running:
+                    _uph = None
+            except Exception:
+                pass
+
             active_orders = db.get_active_conditional_orders()
             prices = {}
-            
+            _now = time.time()
+
             for order in active_orders:
                 symbol = order.get('symbol', '')
                 order_id = order.get('id')
                 broker = order.get('broker', '')
-                
+
                 if not symbol:
                     continue
-                
+
                 price_info = {
                     'symbol': symbol,
                     'price': None,
@@ -9515,47 +9526,73 @@ def register_routes(app):
                     'direction': order.get('direction', 'ABOVE'),
                     'status': order.get('status'),
                     'data_source': order.get('data_source_active', ''),
+                    'age': None,
                 }
-                
+
+                # Priority 1: UPH — event-driven, freshest price from all streaming hubs
+                if _uph:
+                    try:
+                        uph_quote = _uph.get_quote(symbol)
+                        if uph_quote and uph_quote.last > 0:
+                            age = round(_now - uph_quote.timestamp, 2) if uph_quote.timestamp > 0 else None
+                            price_info['price'] = uph_quote.last
+                            price_info['source'] = 'streaming'
+                            price_info['age'] = age
+                    except Exception:
+                        pass
+
                 broker_normalized = broker.lower().replace('_paper', '').replace('_live', '') if broker else ''
-                for market, service in conditional_order_router._services.items():
-                    if broker_normalized:
-                        hub = service.get_data_hub(broker_normalized)
-                        if hub:
-                            hub_price = hub.get_quote_price(symbol)
-                            if hub_price and hub_price > 0:
-                                price_info['price'] = hub_price
-                                price_info['source'] = 'streaming'
-                                if hasattr(hub, 'is_delayed') and hub.is_delayed():
-                                    price_info['delayed'] = True
-                                quote = hub.get_quote(symbol)
-                                if quote:
-                                    price_info['age'] = round(time.time() - quote.timestamp, 1) if hasattr(quote, 'timestamp') else 0
-                                break
-                    if not price_info['price'] and hasattr(service, 'data_hubs'):
-                        for hub_key, hub_obj in service.data_hubs.items():
-                            if hub_obj and hub_key != broker_normalized:
-                                try:
-                                    hp = hub_obj.get_quote_price(symbol)
-                                    if hp and hp > 0:
-                                        price_info['price'] = hp
-                                        price_info['source'] = 'streaming'
-                                        break
-                                except Exception:
-                                    pass
-                    if price_info['price']:
-                        break
-                
+
+                # Priority 2: broker-specific hub (e.g. ibkr hub if connected)
+                if not price_info['price']:
+                    for market, service in conditional_order_router._services.items():
+                        if broker_normalized:
+                            hub = service.get_data_hub(broker_normalized)
+                            if hub:
+                                hub_price = hub.get_quote_price(symbol)
+                                if hub_price and hub_price > 0:
+                                    price_info['price'] = hub_price
+                                    price_info['source'] = 'streaming'
+                                    if hasattr(hub, 'is_delayed') and hub.is_delayed():
+                                        price_info['delayed'] = True
+                                    quote = hub.get_quote(symbol) if hasattr(hub, 'get_quote') else None
+                                    if quote:
+                                        price_info['age'] = round(_now - quote.timestamp, 2) if hasattr(quote, 'timestamp') else None
+                                    break
+                        if price_info['price']:
+                            break
+
+                # Priority 3: any other registered data hub (cross-broker)
+                if not price_info['price']:
+                    for market, service in conditional_order_router._services.items():
+                        if hasattr(service, 'data_hubs'):
+                            for hub_key, hub_obj in service.data_hubs.items():
+                                if hub_obj and hub_key != broker_normalized:
+                                    try:
+                                        hp = hub_obj.get_quote_price(symbol)
+                                        if hp and hp > 0:
+                                            price_info['price'] = hp
+                                            price_info['source'] = 'streaming'
+                                            break
+                                    except Exception:
+                                        pass
+                        if price_info['price']:
+                            break
+
+                # Priority 4: monitor.last_price (may be up to REST_FALLBACK_INTERVAL=3s stale)
                 if not price_info['price']:
                     for market, service in conditional_order_router._services.items():
                         monitor = service.monitors.get(order_id)
                         if monitor and hasattr(monitor, 'last_price') and monitor.last_price:
                             price_info['price'] = monitor.last_price
                             price_info['source'] = 'monitor'
+                            lp_ts = getattr(monitor, '_last_price_update_time', 0)
+                            if lp_ts > 0:
+                                price_info['age'] = round(_now - lp_ts, 2)
                             break
-                
+
                 prices[str(order_id)] = price_info
-            
+
             return jsonify({'success': True, 'prices': prices})
         except Exception as e:
             import traceback
