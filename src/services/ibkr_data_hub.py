@@ -100,6 +100,11 @@ class IBKRDataHub:
         self._qualify_in_progress: Set[str] = set()
         self._using_delayed_data = False
 
+        # reqTickByTickData — bypasses IB internal aggregation for sub-ms delivery
+        self._tick_by_tick_tickers: Dict[int, Any] = {}  # conId -> ib_insync Ticker
+        self._tick_by_tick_count: int = 0
+        self._TICK_BY_TICK_LIMIT = 10
+
         self._reconnect_in_progress = False
         self._reconnect_lock = threading.Lock()
         self._last_reconnect_ts: float = 0
@@ -390,6 +395,19 @@ class IBKRDataHub:
     def is_symbol_denied(self, symbol: str) -> bool:
         with self._mktdata_denied_lock:
             return symbol.upper() in self._mktdata_denied_symbols
+
+    def _on_tick_by_tick(self, ticker, tick):
+        try:
+            price = getattr(tick, 'price', None)
+            if not price or price <= 0:
+                return
+            con_id = ticker.contract.conId if ticker.contract else 0
+            symbol = self._conid_to_symbol.get(con_id)
+            if not symbol:
+                return
+            self.update_quote(symbol, {'last': float(price)}, source='tick_by_tick')
+        except Exception as e:
+            print(f"[IBKR_HUB] ⚠️ _on_tick_by_tick error: {e}")
 
     def _on_pending_tickers(self, tickers):
         try:
@@ -732,6 +750,18 @@ class IBKRDataHub:
             # Generic tick 233 = mark price, 426 = last yield — useful for illiquid options
             _gtl = '233,426' if getattr(contract, 'secType', '') == 'OPT' else ''
             self._ib.reqMktData(contract, _gtl, False, False)
+            # reqTickByTickData bypasses IB internal aggregation — each exchange tick
+            # arrives in ~100-300µs vs ~200-300ms from reqMktData batching.
+            # AllLast includes OTC/grey-market prints important for illiquid small-caps.
+            if self._tick_by_tick_count < self._TICK_BY_TICK_LIMIT:
+                try:
+                    tbt_ticker = self._ib.reqTickByTickData(contract, 'AllLast', 0, True)
+                    tbt_ticker.tickByTickEvent += self._on_tick_by_tick
+                    self._tick_by_tick_tickers[con_id] = tbt_ticker
+                    self._tick_by_tick_count += 1
+                    print(f"[IBKR_HUB] ✓ reqTickByTickData ({self._tick_by_tick_count}/{self._TICK_BY_TICK_LIMIT}) for {symbol}")
+                except Exception as _tbt_e:
+                    print(f"[IBKR_HUB] ⚠️ reqTickByTickData failed for {symbol}: {_tbt_e}")
         except Exception as e:
             self._subscribed_symbols.discard(symbol)
             print(f"[IBKR_HUB] Failed to subscribe {symbol}: {e}")
@@ -747,6 +777,9 @@ class IBKRDataHub:
         with self._contract_lock:
             self._conid_to_symbol.pop(con_id, None)
         self._subscribed_symbols.discard(symbol)
+        tbt_ticker = self._tick_by_tick_tickers.pop(con_id, None)
+        if tbt_ticker is not None:
+            self._tick_by_tick_count = max(0, self._tick_by_tick_count - 1)
         if self._ib and self._loop and not self._loop.is_closed():
             try:
                 self._loop.call_soon_threadsafe(
@@ -754,6 +787,13 @@ class IBKRDataHub:
                 )
             except Exception:
                 pass
+            if tbt_ticker is not None:
+                try:
+                    self._loop.call_soon_threadsafe(
+                        lambda t=tbt_ticker: self._ib.cancelTickByTickData(t) if self._ib else None
+                    )
+                except Exception:
+                    pass
 
     def _cancel_all_subscriptions(self):
         with self._contract_lock:
@@ -762,15 +802,24 @@ class IBKRDataHub:
             self._conid_to_symbol.clear()
         self._subscribed_symbols.clear()
         self._subscribed_conids.clear()
-        if self._ib and contracts:
-            if self._loop and not self._loop.is_closed():
-                for contract in contracts:
-                    try:
-                        self._loop.call_soon_threadsafe(
-                            lambda c=contract: self._ib.cancelMktData(c) if self._ib else None
-                        )
-                    except Exception:
-                        pass
+        tbt_tickers = list(self._tick_by_tick_tickers.values())
+        self._tick_by_tick_tickers.clear()
+        self._tick_by_tick_count = 0
+        if self._ib and self._loop and not self._loop.is_closed():
+            for contract in contracts:
+                try:
+                    self._loop.call_soon_threadsafe(
+                        lambda c=contract: self._ib.cancelMktData(c) if self._ib else None
+                    )
+                except Exception:
+                    pass
+            for tbt in tbt_tickers:
+                try:
+                    self._loop.call_soon_threadsafe(
+                        lambda t=tbt: self._ib.cancelTickByTickData(t) if self._ib else None
+                    )
+                except Exception:
+                    pass
 
     def _sync_subscriptions(self, current_symbols: Set[str]):
         if not self._ib or not self._streaming_active:
@@ -850,16 +899,16 @@ class IBKRDataHub:
             print(f"[IBKR_HUB] Position refresh error: {e}")
 
     async def _tick_pump_loop(self):
-        """Yield to the event loop frequently so ib_insync's socket reader
-        and pendingTickersEvent can fire promptly. Without this, ticks queue up
-        when the main event loop is busy with risk engine or sync service work."""
+        """Yield to the event loop so ib_insync's socket reader fires promptly.
+        10ms yield keeps reqTickByTickData latency near the IB Gateway TCP delivery
+        time (~100-300µs). Without any yield, ticks queue while risk/sync tasks run."""
         logged = False
         while True:
             try:
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.01)
                 if not logged and self._ib and self._ib.isConnected():
                     logged = True
-                    print("[IBKR_HUB] ✓ Tick pump active — event loop yields every 200ms for ib_insync")
+                    print("[IBKR_HUB] ✓ Tick pump active — event loop yields every 10ms (reqTickByTickData enabled)")
             except Exception:
                 await asyncio.sleep(1)
 

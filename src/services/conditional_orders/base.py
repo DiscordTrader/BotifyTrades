@@ -192,6 +192,8 @@ class StreamingPriceMonitor(PriceMonitor):
         self.FROZEN_THRESHOLD = 3.0
         self.FROZEN_PROBE_COOLDOWN = 3.0
         self._rate_limiter: Optional[RateLimitTracker] = None
+        self._price_event: Optional[asyncio.Event] = None
+        self._ibkr_hub_handler = None
     
     def _try_subscribe_streaming(self):
         try:
@@ -324,6 +326,26 @@ class StreamingPriceMonitor(PriceMonitor):
 
         self._try_subscribe_streaming()
 
+        # Wire up event-driven wakeup from IBKR hub — eliminates the 250ms poll gap
+        self._price_event = asyncio.Event()
+        _loop = asyncio.get_event_loop()
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            _ibkr_hub = get_ibkr_data_hub()
+            if _ibkr_hub:
+                def _hub_quote_handler(data):
+                    if data and data.get('symbol') == self.symbol:
+                        try:
+                            _loop.call_soon_threadsafe(self._price_event.set)
+                        except Exception:
+                            pass
+                self._ibkr_hub_handler = _hub_quote_handler
+                _ibkr_hub.on('quote_updated', _hub_quote_handler)
+                sys.stderr.write(f"[STREAM_MON] ✓ Event-driven wakeup wired for {self.symbol} via IBKR hub\n")
+                sys.stderr.flush()
+        except Exception:
+            pass
+
         # Immediate REST seed — get a baseline price right away while waiting for
         # the first streaming tick (Schwab drain fires within ~1s after subscribe_symbol).
         # This ensures the dashboard shows a price within 1s of the signal arriving.
@@ -397,8 +419,16 @@ class StreamingPriceMonitor(PriceMonitor):
                     elif now - last_cb >= 3.0:
                         self._last_callback_time = now
                         await self.callback(self.symbol, price)
-                    
-                    await asyncio.sleep(self.HUB_POLL_INTERVAL)
+
+                    # Wait for next tick event (event-driven) or fall through after HUB_POLL_INTERVAL
+                    if self._price_event is not None:
+                        try:
+                            await asyncio.wait_for(self._price_event.wait(), timeout=self.HUB_POLL_INTERVAL)
+                            self._price_event.clear()
+                        except asyncio.TimeoutError:
+                            pass
+                    else:
+                        await asyncio.sleep(self.HUB_POLL_INTERVAL)
                 else:
                     self._hub_miss_count += 1
 
@@ -423,7 +453,14 @@ class StreamingPriceMonitor(PriceMonitor):
                             self._try_subscribe_streaming()
                         await asyncio.sleep(self.REST_FALLBACK_INTERVAL)
                     else:
-                        await asyncio.sleep(self.HUB_POLL_INTERVAL)
+                        if self._price_event is not None:
+                            try:
+                                await asyncio.wait_for(self._price_event.wait(), timeout=self.HUB_POLL_INTERVAL)
+                                self._price_event.clear()
+                            except asyncio.TimeoutError:
+                                pass
+                        else:
+                            await asyncio.sleep(self.HUB_POLL_INTERVAL)
                         
             except Exception as e:
                 sys.stderr.write(f"[STREAM_MON] Error for {self.symbol}: {e}\n")
@@ -696,6 +733,15 @@ class StreamingPriceMonitor(PriceMonitor):
     async def stop(self):
         self.is_running = False
         self._try_unsubscribe_streaming()
+        if self._ibkr_hub_handler is not None:
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                _hub = get_ibkr_data_hub()
+                if _hub:
+                    _hub.off('quote_updated', self._ibkr_hub_handler)
+            except Exception:
+                pass
+            self._ibkr_hub_handler = None
         if self._rest_session and not self._rest_session.closed:
             try:
                 await self._rest_session.close()
