@@ -902,18 +902,13 @@ class IBKRDataHub:
                         if contract:
                             self._start_market_data(sym, contract)
                             self._pending_subscriptions.discard(sym)
-                        elif sym not in self._subscribed_symbols and '_' not in sym:
-                            # Option keys contain '_' (e.g. "AAPL_20240120_150_C") — skip them here.
-                            # Their contract arrives via _refresh_positions_from_ib.
-                            try:
-                                from ib_insync import Stock
-                                auto_contract = Stock(sym, 'SMART', 'USD')
-                                await self._ib.qualifyContractsAsync(auto_contract)
-                                if auto_contract.conId:
-                                    self._start_market_data(sym, auto_contract)
-                                    self._pending_subscriptions.discard(sym)
-                            except Exception:
-                                pass
+                        elif '_' not in sym:
+                            # Route through _qualify_and_subscribe so the _qualify_in_progress
+                            # guard prevents a duplicate reqMktData from running concurrently
+                            # with subscribe_symbol's own _qualify_and_subscribe call.
+                            self._pending_subscriptions.discard(sym)
+                            self._subscribed_symbols.add(sym)
+                            await self._qualify_and_subscribe(sym)
             except asyncio.CancelledError:
                 break
             except Exception as e:
