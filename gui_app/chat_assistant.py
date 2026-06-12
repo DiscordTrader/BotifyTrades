@@ -3115,22 +3115,12 @@ def handle_format_teaching(query: str) -> Dict:
 AI is currently disabled in your settings. To teach new signal formats:
 
 1. Go to **Settings** > **AI & Market Data APIs**
-2. Select **Auto (Replit AI)** or **OpenAI** from the dropdown
-3. Click **Save API Keys**
+2. Select Claude, Gemini, or OpenAI from the dropdown
+3. Enter your API key and click **Save API Keys**
 
 Then try again!"""
-            elif provider == 'replit_ai':
-                msg = """**Replit AI Not Available**
-
-Replit AI Integration is selected but not available. You can:
-
-1. Go to **Settings** > **AI & Market Data APIs**
-2. Select **OpenAI** and enter your API key
-3. Click **Save API Keys**
-
-Or wait and try again later."""
             else:
-                msg = """**OpenAI API Key Required**
+                msg = """**AI API Key Required**
 
 To teach new signal formats, configure your OpenAI API key:
 
@@ -3990,6 +3980,24 @@ def _generate_trade_summary(trades: List[Dict], positions: List[Dict]) -> str:
 
 _chat_ai_cache = {'client': None, 'provider': None, 'is_anthropic': False, 'is_gemini': False, 'model': None}
 
+_PROVIDER_DEFAULT_MODELS = {
+    'claude': 'claude-haiku-4-5-20251001',
+    'gemini': 'gemini-3.5-flash',
+    'openai': 'gpt-4o-mini',
+}
+
+def _get_model_for_provider(provider: str) -> str:
+    """Read model from ai_settings DB; fall back to provider default."""
+    try:
+        from . import database as _db
+        settings = _db.get_ai_settings()
+        model = settings.get('model', '')
+        if model:
+            return model
+    except Exception:
+        pass
+    return _PROVIDER_DEFAULT_MODELS.get(provider, 'gpt-4o-mini')
+
 
 def _get_ai_client():
     """Get AI client based on provider preference. Supports OpenAI, Claude, Replit AI.
@@ -4001,7 +4009,9 @@ def _get_ai_client():
         from .config_service import get_ai_provider, load_config
         provider = get_ai_provider()
 
-        if provider == _chat_ai_cache.get('provider') and _chat_ai_cache.get('client'):
+        _cur_model = _get_model_for_provider(provider)
+        if (provider == _chat_ai_cache.get('provider') and _chat_ai_cache.get('client')
+                and _cur_model == _chat_ai_cache.get('model')):
             return _chat_ai_cache['client'], _chat_ai_cache['is_anthropic'], _chat_ai_cache['model']
 
         if provider == 'disabled':
@@ -4032,7 +4042,7 @@ def _get_ai_client():
                 print("[CHAT] Anthropic API key not configured")
                 return None, False, None
             client = Anthropic(api_key=api_key)
-            model = "claude-haiku-4-5-20251001"
+            model = _get_model_for_provider('claude')
             _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': True, 'is_gemini': False, 'model': model})
             print(f"[CHAT] Using Claude (model={model})")
             return client, True, model
@@ -4062,7 +4072,7 @@ def _get_ai_client():
                 print("[CHAT] Gemini API key not configured (checked env, credentials service, config)")
                 return None, False, None
             client = _genai.Client(api_key=api_key)
-            model = "gemini-3.5-flash"
+            model = _get_model_for_provider('gemini')
             _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': False, 'model': model, 'is_gemini': True})
             print(f"[CHAT] Using Gemini (model={model})")
             return client, False, model
@@ -4091,7 +4101,7 @@ def _get_ai_client():
             print("[CHAT] OpenAI API key not configured")
             return None, False, None
         client = OpenAI(api_key=api_key)
-        model = "gpt-4o-mini"
+        model = _get_model_for_provider('openai')
         _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': False, 'is_gemini': False, 'model': model})
         print("[CHAT] Using OpenAI")
         return client, False, model

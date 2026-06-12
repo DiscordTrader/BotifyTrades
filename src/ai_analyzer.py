@@ -10,6 +10,25 @@ from typing import Dict, Optional, List
 from datetime import datetime
 
 
+_PROVIDER_DEFAULT_MODELS = {
+    'claude': 'claude-haiku-4-5-20251001',
+    'gemini': 'gemini-3.5-flash',
+    'openai': 'gpt-4o-mini',
+}
+
+def _resolve_model(provider: str) -> str:
+    """Read model from ai_settings DB; fall back to provider default."""
+    try:
+        from gui_app.database import get_ai_settings
+        settings = get_ai_settings()
+        model = settings.get('model', '')
+        if model:
+            return model
+    except Exception:
+        pass
+    return _PROVIDER_DEFAULT_MODELS.get(provider, 'gpt-4o-mini')
+
+
 def _get_ai_client_and_model():
     """Get AI client based on provider setting. Returns (client, model, provider_name, is_anthropic)."""
     try:
@@ -36,7 +55,7 @@ def _get_ai_client_and_model():
                 pass
         if not api_key:
             raise ValueError("Anthropic API key not configured")
-        return Anthropic(api_key=api_key), "claude-haiku-4-5-20251001", "claude", True
+        return Anthropic(api_key=api_key), _resolve_model('claude'), "claude", True
 
     if provider == 'gemini':
         try:
@@ -53,22 +72,13 @@ def _get_ai_client_and_model():
                 pass
         if not api_key:
             raise ValueError("Gemini API key not configured")
-        return _genai.Client(api_key=api_key), "gemini-3.5-flash", "gemini", False
+        return _genai.Client(api_key=api_key), _resolve_model('gemini'), "gemini", False
 
-    # OpenAI
+    # provider == 'openai'
     try:
         from openai import OpenAI
     except ImportError:
         raise ValueError("OpenAI SDK not installed (pip install openai)")
-
-    if provider == 'replit_ai':
-        api_key = os.getenv("AI_INTEGRATIONS_OPENAI_API_KEY")
-        base_url = os.getenv("AI_INTEGRATIONS_OPENAI_BASE_URL")
-        if not api_key:
-            raise ValueError("Replit AI Integrations not available")
-        return OpenAI(api_key=api_key, base_url=base_url), "gpt-4o-mini", "replit_ai", False
-
-    # provider == 'openai'
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         try:
@@ -79,7 +89,7 @@ def _get_ai_client_and_model():
             pass
     if not api_key:
         raise ValueError("OpenAI API key not configured")
-    return OpenAI(api_key=api_key), "gpt-4o-mini", "openai", False
+    return OpenAI(api_key=api_key), _resolve_model('openai'), "openai", False
 
 
 class TradeAnalyzer:

@@ -9736,12 +9736,22 @@ def register_routes(app):
             enabled = data.get('enabled', True)
             model = data.get('model', 'gpt-4o-mini')
             sentiment_enabled = data.get('sentiment_enabled', False)
-            
+
+            # Sentiment requires master AI to be enabled
+            if not enabled:
+                sentiment_enabled = False
+
             valid_models = ['gpt-4o-mini', 'gpt-4o', 'gpt-5-mini', 'gpt-5', 'claude-haiku-4-5-20251001', 'gemini-3.5-flash']
             if model and model not in valid_models:
                 model = 'gpt-4o-mini'
-            
+
             success = db.update_ai_settings(enabled, model, sentiment_enabled)
+            if success:
+                try:
+                    from .chat_assistant import _chat_ai_cache
+                    _chat_ai_cache.clear()
+                except Exception:
+                    pass
             
             if success:
                 return jsonify({
@@ -10395,7 +10405,7 @@ def register_routes(app):
             existing = get_api_keys_extended()
             
             # Save AI provider preference
-            ai_provider = data.get('ai_provider', 'replit_ai')
+            ai_provider = data.get('ai_provider', 'disabled')
             save_ai_provider(ai_provider)
             print(f"[API] AI provider set to: {ai_provider}")
             
@@ -10426,7 +10436,14 @@ def register_routes(app):
                 anthropic=anthropic or existing.get('anthropic', ''),
                 gemini=gemini or existing.get('gemini', '')
             )
-            
+
+            # Invalidate cached AI client so new key/provider takes effect immediately
+            try:
+                from .chat_assistant import _chat_ai_cache
+                _chat_ai_cache.clear()
+            except Exception:
+                pass
+
             return jsonify({
                 'success': True,
                 'message': 'API keys and AI provider saved successfully'

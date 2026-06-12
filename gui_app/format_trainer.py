@@ -20,12 +20,8 @@ class FormatTrainer:
         self._openai_available = None
     
     def _get_openai_client(self):
-        """Get OpenAI client based on user's provider preference from GUI.
-        
-        Provider options (set in Settings > AI & Market Data APIs):
-        - 'replit_ai': Use Replit AI Integrations (billed to Replit credits)
-        - 'openai': Use user's own OpenAI API key
-        - 'disabled': No AI features
+        """Get AI client based on user's provider preference from GUI.
+        Routes to Claude, Gemini, or OpenAI based on Settings > AI & Market Data APIs.
         """
         try:
             from .config_service import get_ai_provider, load_config
@@ -50,24 +46,6 @@ class FormatTrainer:
                 return None
             
             from openai import OpenAI
-            
-            # Use Replit AI Integrations
-            if provider == 'replit_ai':
-                ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
-                ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
-                
-                if ai_integrations_key and ai_integrations_base:
-                    self._openai_client = OpenAI(
-                        api_key=ai_integrations_key,
-                        base_url=ai_integrations_base
-                    )
-                    self._openai_available = True
-                    print("[FORMAT_TRAINER] Using Replit AI Integrations")
-                    return self._openai_client
-                else:
-                    print("[FORMAT_TRAINER] Replit AI Integrations not available")
-                    self._openai_available = False
-                    return None
             
             # Use user's OpenAI API key
             if provider == 'openai':
@@ -160,6 +138,25 @@ class FormatTrainer:
     def _is_gemini_provider(self) -> bool:
         return getattr(self, '_cached_provider', None) == 'gemini'
 
+    _DEFAULT_MODELS = {
+        'claude': 'claude-haiku-4-5-20251001',
+        'gemini': 'gemini-3.5-flash',
+        'openai': 'gpt-4o-mini',
+    }
+
+    def _get_model(self) -> str:
+        """Read model from ai_settings DB; fall back to provider default."""
+        provider = getattr(self, '_cached_provider', 'openai') or 'openai'
+        try:
+            from . import database as _db
+            settings = _db.get_ai_settings()
+            model = settings.get('model', '')
+            if model:
+                return model
+        except Exception:
+            pass
+        return self._DEFAULT_MODELS.get(provider, 'gpt-4o-mini')
+
     def is_ai_available(self) -> bool:
         """Check if AI is available."""
         return self._get_openai_client() is not None
@@ -182,10 +179,10 @@ class FormatTrainer:
             provider = get_ai_provider()
             if provider == 'disabled':
                 error_msg = 'AI is disabled. Enable it in Settings > AI & Market Data APIs.'
-            elif provider == 'replit_ai':
-                error_msg = 'Replit AI is not available. Try selecting OpenAI or Claude in Settings.'
             elif provider == 'claude':
                 error_msg = 'Anthropic API key not configured. Add it in Settings > AI & Market Data APIs.'
+            elif provider == 'gemini':
+                error_msg = 'Gemini API key not configured. Add it in Settings > AI & Market Data APIs.'
             else:
                 error_msg = 'OpenAI API key not configured. Add it in Settings > AI & Market Data APIs.'
             return {
@@ -238,7 +235,7 @@ Only include fields that are actually present in the signal. Be precise with the
 
             if self._is_gemini_provider():
                 response = client.models.generate_content(
-                    model="gemini-3.5-flash",
+                    model=self._get_model(),
                     contents=f"{system_prompt}\n\n{user_content}\n\nReturn ONLY valid JSON, no markdown."
                 )
                 result_text = response.text.strip()
@@ -252,7 +249,7 @@ Only include fields that are actually present in the signal. Be precise with the
                         result_text = result_text[start:]
             elif self._is_claude_provider():
                 response = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
+                    model=self._get_model(),
                     max_tokens=800,
                     temperature=0.3,
                     system=system_prompt,
@@ -266,7 +263,7 @@ Only include fields that are actually present in the signal. Be precise with the
                     result_text = result_text[:result_text.rfind("```")].strip()
             else:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=self._get_model(),
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content}
@@ -341,7 +338,7 @@ If it's not a trading signal, set is_trading_signal to false and action to null.
 
             if self._is_gemini_provider():
                 response = client.models.generate_content(
-                    model="gemini-3.5-flash",
+                    model=self._get_model(),
                     contents=f"{system_prompt}\n\nParse this message:\n{signal_text}\n\nReturn ONLY valid JSON."
                 )
                 raw = response.text.strip()
@@ -356,7 +353,7 @@ If it's not a trading signal, set is_trading_signal to false and action to null.
                 result = json.loads(raw)
             elif self._is_claude_provider():
                 response = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
+                    model=self._get_model(),
                     max_tokens=400,
                     temperature=0.2,
                     system=system_prompt,
@@ -371,7 +368,7 @@ If it's not a trading signal, set is_trading_signal to false and action to null.
                 result = json.loads(raw)
             else:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=self._get_model(),
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"Parse this message:\n{signal_text}"}
@@ -564,8 +561,10 @@ If it's not a trading signal, set is_trading_signal to false and action to null.
             provider = get_ai_provider()
             if provider == 'disabled':
                 error_msg = 'AI is disabled. Enable it in Settings > AI & Market Data APIs.'
-            elif provider == 'replit_ai':
-                error_msg = 'Replit AI is not available. Try selecting OpenAI in Settings.'
+            elif provider == 'claude':
+                error_msg = 'Anthropic API key not configured. Add it in Settings > AI & Market Data APIs.'
+            elif provider == 'gemini':
+                error_msg = 'Gemini API key not configured. Add it in Settings > AI & Market Data APIs.'
             else:
                 error_msg = 'OpenAI API key not configured. Add it in Settings > AI & Market Data APIs.'
             return {
@@ -628,7 +627,7 @@ Only include UNIQUE formats - do not duplicate similar patterns. Focus on format
 
             if self._is_gemini_provider():
                 response = client.models.generate_content(
-                    model="gemini-3.5-flash",
+                    model=self._get_model(),
                     contents=f"{system_prompt}\n\n{user_content}\n\nReturn ONLY valid JSON."
                 )
                 raw = response.text.strip()
@@ -643,7 +642,7 @@ Only include UNIQUE formats - do not duplicate similar patterns. Focus on format
                 result = json.loads(raw)
             elif self._is_claude_provider():
                 response = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
+                    model=self._get_model(),
                     max_tokens=2000,
                     temperature=0.3,
                     system=system_prompt,
@@ -658,7 +657,7 @@ Only include UNIQUE formats - do not duplicate similar patterns. Focus on format
                 result = json.loads(raw)
             else:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=self._get_model(),
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content}
