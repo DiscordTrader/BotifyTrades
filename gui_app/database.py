@@ -324,6 +324,11 @@ def get_db_path():
     return db_path
 
 
+def get_db():
+    """Alias for get_connection() — used by risk/services modules."""
+    return get_connection()
+
+
 def get_connection():
     """Get thread-safe database connection with WAL mode and timeout"""
     need_new = not hasattr(_local, 'connection') or _local.connection is None
