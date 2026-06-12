@@ -1,5 +1,19 @@
 # BotifyTrades Progress Log
 
+## Session: June 11, 2026 — Webull Official API Audit + Option Pipeline Fixes
+
+Reviewed official Webull API docs (developer.webull.com) against real code. Found 4 API spec violations and a broker_manager regression. All fixed.
+
+### Fixes — Commit 8a733cf4
+
+- **WO1 (CRITICAL): Parameter name mismatch** — `place_option_order()` in broker.py expected `strike_price/expiry_date/limit_price` but caller always passed `strike/expiry/price`. Every WO option order had `strike=None, expiry=None`. Added alias params with resolution logic. File: `src/brokers/webull_official/broker.py:266`
+- **WO2 (CRITICAL): No MARKET order guard** — Webull Official API does not support MARKET orders for options. Added coercion to LIMIT + hard reject if no limit price. File: `src/brokers/webull_official/broker.py:280`
+- **WO3 (MEDIUM): position_intent not in US API** — Removed `position_intent` from order-level API body (kept as optional param for backwards compat). File: `src/brokers/webull_official/orders.py:81`
+- **WO4 (MEDIUM): TIF not enforced for sell-side** — Sell-side options (STC/STO) only accept DAY per API spec. Added `tif = "DAY"` enforcement. File: `src/brokers/webull_official/broker.py:302`
+- **WO5 (REGRESSION): broker_manager positional call crash** — Validation caught that broker_manager.py called place_option_order with positional args which mapped wrongly after signature change. Converted to keyword args. File: `src/broker_manager.py:299`
+
+---
+
 ## Session: June 11, 2026 — Options Format Architect Review + 3 Fixes
 
 Real code audit (multi-agent) confirmed which option format gaps were real vs. assumptions. 3 confirmed gaps fixed.
