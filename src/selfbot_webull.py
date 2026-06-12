@@ -60,7 +60,7 @@ import ssl
 # ADMIN = Full features (Channel Mappings, Debug tools, etc.) - for developer use
 # USER = Limited features - for end-user distribution
 # This line is automatically updated by scripts/release.sh
-BUILD_TYPE = 'ADMIN'  # Set by release.sh
+BUILD_TYPE = 'USER'  # Set by release.sh
 
 def is_admin_build():
     """Check if this is an admin build with full features"""
@@ -8132,6 +8132,11 @@ class SelfClient(discord.Client):
                         connected = False
                     if connected:
                         _original_print(f"[WEBULL_OFFICIAL] ✓ Connected successfully ({mode_str})", flush=True)
+                        try:
+                            await self.webull_official_broker.start_streaming()
+                            _original_print(f"[WEBULL_OFFICIAL] ✓ MQTT streaming started — live quotes active", flush=True)
+                        except Exception as _stream_err:
+                            _original_print(f"[WEBULL_OFFICIAL] ⚠️ Streaming start failed: {_stream_err}", flush=True)
                         try:
                             account_info = await self.webull_official_broker.get_account_info()
                             nlv = account_info.get('portfolio_value', 0)
