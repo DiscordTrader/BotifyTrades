@@ -1,5 +1,20 @@
 # BotifyTrades Progress Log
 
+## Session: June 11, 2026 — Options Format Architect Review + 3 Fixes
+
+Real code audit (multi-agent) confirmed which option format gaps were real vs. assumptions. 3 confirmed gaps fixed.
+
+### Architect Review Findings
+- **CONFIRMED REAL (3 fixed):** Webull legacy option_id injection gap, option_key format mismatch, get_quote hardcoded zeros
+- **UNCONFIRMED (needs live test):** Webull Official may or may not need option_id — its OpenAPI uses strike+expiry which may resolve natively (different from legacy Webull app API)
+- **ARCHITECTURAL (no runtime bug):** No centralized option formatter — each broker translates correctly; inconsistency is maintainability risk only
+
+### Fixes — Commit 4b8382ab
+- **O1: Webull legacy option_id injection (CRITICAL)** — `execute_conditional_order()` now calls `broker_instance.get_cached_option_id()` and injects into signal before execution. Webull legacy previously hard-failed every conditional option order with "option_id required". File: `src/selfbot_webull.py:10953`
+- **O2: option_key format standardization (HIGH)** — `SpySniperSignal.option_key` was `{strike}{type}` (e.g. `691.0P`); now `{strike}_{type}` (e.g. `691.0_P`) matching signal_routing_engine format. Deduplication lookups now match. File: `src/signals/spy_sniper_parser.py:48`
+- **O3: Webhook service parts[] update (HIGH, collateral)** — `trigger_risk_exit()` was parsing the old 3-segment key; updated to read `parts[2]=strike`, `parts[3]=opt_type` for new 4-part key. File: `src/services/spy_sniper_webhook_service.py:457`
+- **O4: get_quote() DataHub (LOW)** — Webull Official `get_quote()` now reads live MQTT prices from `WebullDataHub` instead of returning hardcoded zeros. File: `src/brokers/webull_official/broker.py:313`
+
 ## Session: June 10, 2026 — 5-Agent Full Pipeline Review & Fix
 
 Multi-agent review of all changes (UPH, IBKR hub, broker, conditional orders, risk engine, GUI). 5 parallel agents reviewed different pipeline segments. 9 issues fixed.
@@ -28,6 +43,86 @@ Multi-agent review of all changes (UPH, IBKR hub, broker, conditional orders, ri
 - Option symbol subscriptions for positions: contract stored in `_symbol_to_contract` by `_refresh_positions_from_ib`, `_start_market_data` uses actual OPT contract directly
 
 
+
+## Session: June 11, 2026 — 5-Agent Full Pipeline Validation & Fixes
+
+### Scope
+5 parallel agents audited: Webull Official integration, IBKR conditional order pipeline, Risk Engine per-channel settings, Trading UI / Admin Settings alignment, PNL tracking & fills.
+
+### FIXED (4 commits)
+
+**c5145646** — reqTickByTickData sub-ms IBKR price delivery (see below)
+
+**3edf9284** — Two critical bugs from pipeline audit:
+- `_on_tick_by_tick`: silent tick discard when conId not in `_conid_to_symbol` — added `_build_symbol_key` fallback
+- Conditional order trigger: no debounce → single spike fires immediately. Added 150ms confirmation window + retrace reset
+
+**1b30a6db** — Webull Official + IBKR fill detection:
+- `WebullOfficialBroker` was missing from `BrokerFactory` — registered under `WEBULL_OFFICIAL`
+- IBKR fill detection used `ib.trades()` only (lost on restart); added `reqExecutionsAsync()` as secondary source with `seen_order_ids` dedup
+
+### KNOWN OPEN ISSUES (not yet fixed)
+
+**Webull Official (W-series):**
+- W2: Single DataHub singleton shared between Legacy + Official — potential cross-contamination
+- W3: `_try_subscribe_streaming()` has no path for Webull Official MQTT
+- W4: Webull Official MQTT quotes never reach DataHub
+- W5: `place_option_order()` missing `option_id` parameter
+- W6: `TradeEventPoller` never started — no real-time fill notifications
+- W7: Account selector in settings not populated
+
+**Conditional Orders (I-series):**
+- I3: Breakout reset 10s grace too wide — reduce to 2s
+- I4: `limit_cap` recomputed from triggered_price, not clamped to creation price
+- I6: reqTickByTickData hits 10-sub limit with no LRU eviction
+
+**PNL / Fills (P-series):**
+- P5: `close_reason` not set on STC signal-based trades
+- P7: `origin_trade_id` not set on STC trades from broker_sync — PNL skipped
+
+**UI:**
+- settings.html:1357-1420: legacy global slippage/risk controls — orphaned UI, may not submit to correct endpoint
+
+### CONFIRMED WORKING
+- Per-channel risk settings (channels table): all ~60 fields correctly aligned with DB, Flask routes, JS payloads
+- Risk engine PT hit flags (pt1_hit..pt4_hit): correctly persisted via `save_risk_state()` / `update_enhanced_risk_state()`
+- Daily trade count reset: correctly resets on new `trading_date` (line 216 check)
+- Advanced risk features (early trailing, giveback guard, EMA, dynamic SL): fully wired channel → DB → ChannelRiskSettings → risk_engine.py
+
+---
+
+## Session: June 11, 2026 — reqTickByTickData: Sub-Millisecond IBKR Price Delivery
+
+### FEATURE: Replace reqMktData-only with dual subscription for ~100-300µs tick delivery
+
+**reqTickByTickData implementation — COMPLETE (commit c5145646)**
+- Added `_on_tick_by_tick(ticker, tick)` handler — calls `update_quote()` on every individual exchange tick, bypassing IB's internal ~200-300ms batching aggregation
+- `_start_market_data()` now calls both `reqMktData` (for full quote fields: bid/ask/volume/high/low) AND `reqTickByTickData('AllLast', 0, True)` for real-time last-trade price
+- 'AllLast' chosen over 'Last' — includes OTC/grey-market prints critical for illiquid small-cap positions
+- Respects IB 10-subscription limit: `_tick_by_tick_count < _TICK_BY_TICK_LIMIT` guard; `unsubscribe_symbol` and `_cancel_all_subscriptions` cancel both streams cleanly
+- Reduced `_tick_pump_loop` sleep 200ms → 10ms — keeps event loop yield latency below one tick delivery cycle so IB Gateway TCP socket delivers immediately
+- **StreamingPriceMonitor (conditional orders) now event-driven**: subscribes to IBKR hub `quote_updated` event; `asyncio.wait_for(_price_event.wait(), timeout=0.25)` replaces fixed `asyncio.sleep(0.25)` — reacts to each tick immediately instead of waiting up to 250ms
+- Files: `src/services/ibkr_data_hub.py`, `src/services/conditional_orders/base.py`
+
+**Expected latency improvement**
+- Before: IB batches ticks ~200-300ms → tick_pump yields every 200ms → risk eval debounce 20ms = ~2500ms avg observed
+- After: IB delivers each tick ~100-300µs → tick_pump yields every 10ms → update_quote fires immediately → risk eval debounce 20ms = ~30ms typical path
+
+---
+
+## Session: June 11, 2026 — IBKR Price Sync & Risk Engine Fix (HKIT)
+
+### ROOT CAUSE: IBKR live positions not getting prices / not monitored by risk engine
+
+**Bug: IBKR prices always 0 for illiquid stocks — FIXED**
+- `_refresh_positions_from_ib()` called `ib.positions()` which has NO price data; `_fetch_ibkr_positions()` in risk engine also used `ib.positions()` → `current_price=0` for all IBKR positions
+- `_get_fresh_hub_price()` has a 30s staleness check — for illiquid stocks (HKIT, penny stocks), IB only sends ticks with `close`/`volume` (no live bid/ask/last), so `has_real_data=False` → `q.timestamp` never refreshed → price goes stale after 30s
+- Fix: switched BOTH `_refresh_positions_from_ib()` and `_fetch_ibkr_positions()` from `ib.positions()` to `ib.portfolio()`, which includes IB's official `marketPrice` (mark price). Seed this into `_quotes` on every 5s reconciliation — the 30s stale threshold is never hit, and risk engine gets a valid price immediately even for zero-volume symbols.
+- Also fixed: missing `_subscribe_fail_cache: Dict[str, float] = {}` init — would throw `AttributeError` when error 10089/10168 fired.
+- Files: `src/services/ibkr_data_hub.py`, `src/risk/position_monitor.py`
+- Commit: aa304c94
+
+---
 
 ## Session: June 10, 2026 — IBKR API Gap Analysis & Reconnect Fix
 
