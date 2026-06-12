@@ -10954,7 +10954,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     broker_instance = self.schwab_broker
                                 elif 'ibkr' in broker_lower and hasattr(self, 'ibkr_broker') and self.ibkr_broker:
                                     broker_instance = self.ibkr_broker
-                                
+
+                                # Inject option_id for Webull legacy (requires it, no fallback)
+                                if 'webull' in broker_lower and 'official' not in broker_lower and broker_instance:
+                                    _cached_oid = broker_instance.get_cached_option_id(
+                                        symbol,
+                                        float(order['strike']),
+                                        order.get('expiry', ''),
+                                        order.get('opt_type', 'C')
+                                    )
+                                    if _cached_oid:
+                                        signal['option_id'] = _cached_oid
+                                        sys.stderr.write(f"[CONDITIONAL QOT] ✓ Webull option_id resolved from cache: {_cached_oid}\n")
+                                        sys.stderr.flush()
+                                    else:
+                                        sys.stderr.write(f"[CONDITIONAL QOT] ⚠️ Webull option_id not cached for {symbol} {order.get('strike')} {order.get('opt_type')} {order.get('expiry')} — order may fail\n")
+                                        sys.stderr.flush()
+
                                 if broker_instance and hasattr(broker_instance, 'get_option_quote'):
                                     # Use broker's async get_option_quote method
                                     quote_result = await broker_instance.get_option_quote(

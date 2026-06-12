@@ -45,7 +45,7 @@ class SpySniperSignal:
     @property
     def option_key(self) -> str:
         """Generate unique key for position matching."""
-        return f"{self.symbol}_{self.expiry_date}_{self.strike}{self.option_type}"
+        return f"{self.symbol}_{self.expiry_date}_{self.strike}_{self.option_type}"
     
     def to_dict(self) -> Dict[str, Any]:
         return {

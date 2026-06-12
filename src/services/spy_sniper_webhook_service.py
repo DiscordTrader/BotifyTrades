@@ -454,9 +454,10 @@ class SpySniperWebhookService:
         parts = option_key.split('_')
         symbol = parts[0] if len(parts) > 0 else "SPY"
         expiry = parts[1] if len(parts) > 1 else ""
-        strike_type = parts[2] if len(parts) > 2 else ""
-        
-        stc_msg = f"STC {exit_qty} {symbol} {expiry} {strike_type} @ {exit_price} ({exit_reason})"
+        strike = parts[2] if len(parts) > 2 else ""
+        opt_type = parts[3] if len(parts) > 3 else ""
+
+        stc_msg = f"STC {exit_qty} {symbol} {expiry} {strike}{opt_type} @ {exit_price} ({exit_reason})"
         
         result = {
             "action": "STC",

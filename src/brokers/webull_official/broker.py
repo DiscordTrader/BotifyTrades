@@ -311,6 +311,13 @@ class WebullOfficialBroker:
             )
 
     async def get_quote(self, symbol) -> dict:
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            q = get_webull_data_hub().get_quote(symbol)
+            if q:
+                return {"symbol": symbol, "last": q.last or 0.0, "bid": q.bid or 0.0, "ask": q.ask or 0.0}
+        except Exception:
+            pass
         return {"symbol": symbol, "last": 0.0, "bid": 0.0, "ask": 0.0}
 
     async def place_bracket_order(self, symbol, quantity, side, order_type="MARKET",
