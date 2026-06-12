@@ -266,9 +266,28 @@ class WebullOfficialBroker:
     async def place_option_order(self, symbol, quantity, action, order_type="LIMIT",
                                  limit_price=None, option_type=None,
                                  strike_price=None, expiry_date=None,
+                                 strike=None, expiry=None, price=None,
                                  **kwargs) -> OrderResult:
         if not self.connected:
             return OrderResult(success=False, message="Not connected")
+
+        # Resolve parameter aliases — caller uses strike/expiry/price; API layer uses strike_price/expiry_date/limit_price
+        effective_strike = strike_price if strike_price is not None else strike
+        effective_expiry = expiry_date if expiry_date is not None else expiry
+        effective_limit = limit_price if limit_price is not None else price
+
+        # Webull Official API does not support MARKET orders for options — require a limit price
+        if order_type.upper() == "MARKET":
+            order_type = "LIMIT"
+        if effective_limit is None:
+            print(f"[{self.name}] ❌ Option order rejected: no limit price for {symbol} — Webull Official API does not support MARKET orders for options", flush=True)
+            return OrderResult(
+                success=False,
+                message="Options require a limit price. Webull Official API does not support MARKET orders for options.",
+                symbol=symbol,
+                action=action,
+                quantity=quantity,
+            )
 
         intent_map = {
             "BTO": "BUY_TO_OPEN", "STC": "SELL_TO_CLOSE",
@@ -279,6 +298,9 @@ class WebullOfficialBroker:
         side = "BUY" if action.upper() in ("BTO", "BTC") else "SELL"
         otype = "CALL" if option_type and option_type.upper().startswith("C") else "PUT"
 
+        # Sell-side options only support DAY time-in-force per Webull Official API
+        tif = "DAY" if side == "SELL" else "DAY"
+
         try:
             result = await self._orders.place_option_order(
                 account_id=self.account_id,
@@ -286,17 +308,18 @@ class WebullOfficialBroker:
                 side=side,
                 quantity=quantity,
                 option_type=otype,
-                strike_price=strike_price,
-                expiry_date=expiry_date,
+                strike_price=effective_strike,
+                expiry_date=effective_expiry,
                 position_intent=position_intent,
                 order_type=order_type.upper(),
-                limit_price=limit_price,
+                limit_price=effective_limit,
+                time_in_force=tif,
             )
             return OrderResult(
                 success=True,
                 order_id=result.order_id or result.client_order_id,
                 message=f"Option order placed: {action} {quantity}x {symbol}",
-                price=limit_price,
+                price=effective_limit,
                 quantity=quantity,
                 symbol=symbol,
                 action=action,

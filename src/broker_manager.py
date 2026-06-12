@@ -297,7 +297,13 @@ class BrokerManager:
             )
         
         return await broker.place_option_order(
-            symbol, strike, expiry, option_type, action, quantity, price
+            symbol=symbol,
+            strike=strike,
+            expiry=expiry,
+            option_type=option_type,
+            action=action,
+            quantity=quantity,
+            price=price,
         )
     
     async def get_account_info(self, broker_name: Optional[str] = None) -> Dict[str, Any]:

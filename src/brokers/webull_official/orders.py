@@ -59,7 +59,7 @@ class OrdersAPI:
         option_type: str,
         strike_price: float,
         expiry_date: str,
-        position_intent: str,
+        position_intent: str = None,
         order_type: str = "LIMIT",
         limit_price: float = None,
         time_in_force: str = "DAY",
@@ -78,7 +78,6 @@ class OrdersAPI:
             "order_type": order_type,
             "time_in_force": time_in_force,
             "quantity": str(quantity),
-            "position_intent": position_intent,
             "legs": [{
                 "side": side,
                 "quantity": str(quantity),
