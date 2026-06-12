@@ -815,7 +815,13 @@ class RiskDBAdapter:
                         if trade_sl_price and trade_entry_price and trade_entry_price > 0:
                             sl_pct = ((trade_entry_price - trade_sl_price) / trade_entry_price) * 100
                             if sl_pct > 0:
-                                sl_override = round(sl_pct, 1)
+                                sl_pct_raw = round(sl_pct, 1)
+                                ch_sl_max = row[4] or 0
+                                if ch_sl_max > 0 and sl_pct_raw > ch_sl_max:
+                                    print(f"[RISK] ⚠️ Signal SL {sl_pct_raw}% > channel max {ch_sl_max}% — capping at {ch_sl_max}%")
+                                    sl_override = ch_sl_max
+                                else:
+                                    sl_override = sl_pct_raw
                                 print(f"[RISK] ✓ Bracket SL override: ${trade_sl_price:.2f} ({sl_override}% from entry ${trade_entry_price:.2f})")
                         if trade_pt_price and trade_entry_price and trade_entry_price > 0:
                             pt_pct = ((trade_pt_price - trade_entry_price) / trade_entry_price) * 100
@@ -919,7 +925,13 @@ class RiskDBAdapter:
                     if trade_sl_price and trade_entry_price and trade_entry_price > 0:
                         sl_pct_calc = ((trade_entry_price - trade_sl_price) / trade_entry_price) * 100
                         if sl_pct_calc > 0:
-                            sl = round(sl_pct_calc, 1)
+                            sl_pct_computed = round(sl_pct_calc, 1)
+                            ch_sl_max = row[4] or 0
+                            if ch_sl_max > 0 and sl_pct_computed > ch_sl_max:
+                                print(f"[RISK] ⚠️ Signal SL {sl_pct_computed}% > channel max {ch_sl_max}% (entry slippage) — capping at {ch_sl_max}%")
+                                sl = ch_sl_max
+                            else:
+                                sl = sl_pct_computed
                             print(f"[RISK] Using trade-level SL: ${trade_sl_price:.2f} ({sl}% from entry ${trade_entry_price:.2f})")
 
                     _signal_targets_json = row[50] if len(row) > 50 and row[50] else None

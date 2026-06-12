@@ -4739,8 +4739,11 @@ class WebullBroker:
                 if current_price:
                     print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
             
-            decision, slippage_pct = self._evaluate_slippage(limit_price, current_price, threshold_override=_current_slippage_settings['threshold_percent'])
-            
+            _slip_ref_wb = kwargs.get('_original_trigger_price') or limit_price
+            if _slip_ref_wb != limit_price:
+                print(f"[SLIPPAGE] 🎯 Conditional: using original trigger ${_slip_ref_wb:.2f} (not execution ${limit_price:.2f}) for slippage check")
+            decision, slippage_pct = self._evaluate_slippage(_slip_ref_wb, current_price, threshold_override=_current_slippage_settings['threshold_percent'])
+
             _eff_wait_minutes = _current_slippage_settings.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
             _is_conditional_order = bool(kwargs.get('_conditional_order_id'))
 
@@ -10892,6 +10895,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             'channel_id': order.get('channel_id'),
                             '_trigger_price': triggered_price,
                             '_conditional_expires_at': order.get('expires_at'),
+                            '_original_trigger_price': order.get('original_signal_price') or order.get('trigger_price'),
                         }
                         
                         all_brokers = order.get('all_brokers')
@@ -18662,8 +18666,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             return None
 
                         _cur_stk_price = await _get_stock_q()
+                        _slip_ref_s = signal.get('_original_trigger_price') or stock_order_price
+                        if _slip_ref_s != stock_order_price:
+                            _original_print(f"[{broker_name}] [SLIPPAGE] 🎯 Conditional: using original trigger ${_slip_ref_s:.2f} (not execution ${stock_order_price:.2f}) for slippage check")
                         _decision_s, _slippage_pct_s = _evaluate_slippage_check(
-                            stock_order_price, _cur_stk_price,
+                            _slip_ref_s, _cur_stk_price,
                             threshold_override=_slippage_cfg_s['threshold_percent'])
 
                         if _decision_s == SlippageDecision.ABORT:
