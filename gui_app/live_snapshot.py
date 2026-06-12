@@ -135,6 +135,7 @@ def _make_position(
     direction: str = '',
     order_id=None,
     fill_status=None,
+    raw_symbol: str = '',
 ) -> Dict[str, Any]:
     return {
         'id': pos_id,
@@ -158,6 +159,7 @@ def _make_position(
         'direction': direction,
         'order_id': order_id,
         'fill_status': fill_status,
+        'raw_symbol': raw_symbol or '',
     }
 
 
@@ -596,6 +598,7 @@ def _fetch_schwab(bot) -> List[Dict]:
                 pnl_pct=pnl_pct,
                 broker='SCHWAB',
                 source='live_brokerage',
+                raw_symbol=pos.get('raw_symbol', ''),
             ))
         return positions
     except Exception as e:
@@ -1081,18 +1084,35 @@ def _overlay_streaming_prices(positions: List[Dict]) -> Dict[str, Any]:
 
     for pos in positions:
         broker = (pos.get('broker') or '').upper()
-        if pos.get('asset_type') == 'option':
-            continue
         symbol = pos.get('symbol', '')
+        asset_type = pos.get('asset_type', 'stock')
         if not symbol:
             continue
 
         quote = None
 
         if 'WEBULL' in broker and wb_streaming:
-            quote = wb_hub.get_quote_detailed(symbol)
-        elif broker == 'SCHWAB' and sch_streaming:
-            quote = sch_hub.get_quote_detailed(symbol)
+            if asset_type == 'option':
+                raw_sym = pos.get('raw_symbol', '')
+                if raw_sym:
+                    quote = wb_hub.get_quote_detailed(raw_sym)
+            else:
+                quote = wb_hub.get_quote_detailed(symbol)
+        elif broker == 'SCHWAB' and sch_hub:
+            if asset_type == 'option':
+                # OCC symbol stored in raw_symbol; streaming key matches OCC format
+                raw_sym = pos.get('raw_symbol', '')
+                if raw_sym and sch_streaming:
+                    quote = sch_hub.get_quote_detailed(raw_sym)
+                # No streaming fallback for options — REST price is already best available
+            else:
+                if sch_streaming:
+                    quote = sch_hub.get_quote_detailed(symbol)
+                if not quote or quote.get('last', 0) <= 0:
+                    # Fallback: read price from hub quotes even if streaming flag is stale
+                    price = sch_hub.get_quote_price(symbol)
+                    if price and price > 0:
+                        quote = {'last': price, 'bid': 0, 'ask': 0}
         elif 'TRADING212' in broker:
             if wb_streaming:
                 quote = wb_hub.get_quote_detailed(symbol)

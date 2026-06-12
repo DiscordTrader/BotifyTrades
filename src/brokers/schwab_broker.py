@@ -149,12 +149,18 @@ class SchwabBroker(BrokerInterface):
         equity_symbols = []
         option_symbols = []
         for pos in positions:
-            symbol = pos.get('symbol', '') if isinstance(pos, dict) else str(pos)
-            asset_type = pos.get('assetType', pos.get('asset', 'EQUITY')) if isinstance(pos, dict) else 'EQUITY'
-            if asset_type in ('OPTION', 'option') or len(symbol) > 10:
-                option_symbols.append(symbol)
+            if isinstance(pos, dict):
+                asset_type = (pos.get('assetType') or pos.get('asset') or 'EQUITY').upper()
+                if asset_type == 'OPTION':
+                    occ = pos.get('raw_symbol') or pos.get('symbol', '')
+                    if occ:
+                        option_symbols.append(occ)
+                else:
+                    sym = pos.get('symbol', '')
+                    if sym:
+                        equity_symbols.append(sym)
             else:
-                equity_symbols.append(symbol)
+                equity_symbols.append(str(pos))
 
         streaming_loop = getattr(self._streaming_client, '_loop', None)
         try:

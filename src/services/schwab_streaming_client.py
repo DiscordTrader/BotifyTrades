@@ -458,12 +458,16 @@ class SchwabStreamingClient:
             option_symbols = []
             for pos in (positions or []):
                 if isinstance(pos, dict):
-                    sym = pos.get('symbol', '')
-                    asset = pos.get('assetType', pos.get('asset', 'EQUITY'))
-                    if asset == 'OPTION' or len(sym) > 10:
-                        option_symbols.append(sym)
-                    elif sym:
-                        equity_symbols.append(sym)
+                    asset = (pos.get('assetType') or pos.get('asset') or 'EQUITY').upper()
+                    if asset == 'OPTION':
+                        # Use OCC symbol (raw_symbol) for options — underlying ticker won't work
+                        occ = pos.get('raw_symbol') or pos.get('symbol', '')
+                        if occ:
+                            option_symbols.append(occ)
+                    else:
+                        sym = pos.get('symbol', '')
+                        if sym:
+                            equity_symbols.append(sym)
             if equity_symbols:
                 await self.subscribe_equities(equity_symbols)
             if option_symbols:
