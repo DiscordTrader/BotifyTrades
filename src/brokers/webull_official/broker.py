@@ -410,9 +410,44 @@ class WebullOfficialBroker:
             log.error(f"[{self.name}] get_order_history error: {e}")
             return []
 
+    def _on_mqtt_quote(self, tick_data):
+        try:
+            symbol = tick_data.get('symbol') or tick_data.get('ticker')
+            if not symbol:
+                return
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub:
+                quote = {}
+                if tick_data.get('bidPrice') is not None:
+                    quote['bid'] = float(tick_data['bidPrice'])
+                if tick_data.get('askPrice') is not None:
+                    quote['ask'] = float(tick_data['askPrice'])
+                if tick_data.get('close') is not None:
+                    quote['last'] = float(tick_data['close'])
+                elif tick_data.get('dealPrice') is not None:
+                    quote['last'] = float(tick_data['dealPrice'])
+                if tick_data.get('volume') is not None:
+                    quote['volume'] = int(tick_data['volume'])
+                if tick_data.get('high') is not None:
+                    quote['high'] = float(tick_data['high'])
+                if tick_data.get('low') is not None:
+                    quote['low'] = float(tick_data['low'])
+                if tick_data.get('open') is not None:
+                    quote['open'] = float(tick_data['open'])
+                if tick_data.get('change') is not None:
+                    quote['change'] = float(tick_data['change'])
+                if tick_data.get('changeRatio') is not None:
+                    quote['changeRatio'] = float(tick_data['changeRatio'])
+                if quote:
+                    hub.update_quote(symbol, quote, source='webull_official')
+        except Exception as e:
+            print(f"[WEBULL_OFF] ⚠️ MQTT quote handler error: {e}")
+
     async def start_streaming(self, symbols: list[str] = None):
         if not self._stream:
             self._stream = WebullMarketStream(self._config, self._client)
+            self._stream.on_quote_callback = self._on_mqtt_quote
 
         connected = await self._stream.connect()
         if connected and symbols:
@@ -421,6 +456,7 @@ class WebullOfficialBroker:
         if not self._event_poller:
             self._event_poller = TradeEventPoller(self._client, self.account_id)
             await self._event_poller.start()
+            print(f"[{self.name}] ✓ TradeEventPoller started")
 
     def get_accounts_list(self) -> list[dict]:
         return [

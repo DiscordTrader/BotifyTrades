@@ -254,9 +254,32 @@ class StreamingPriceMonitor(PriceMonitor):
                     sys.stderr.flush()
                 return False
 
+            # Webull Official: uses WebullMarketStream (MQTT), not _streaming_client
+            if (self.broker_instance is not None
+                    and hasattr(self.broker_instance, '_stream')
+                    and self.broker_instance._stream is not None
+                    and not hasattr(self.broker_instance, 'ib')):   # not IBKR (IBKR uses .ib, handled above)
+                try:
+                    if hasattr(self.broker_instance, 'subscribe_symbol'):
+                        self.broker_instance.subscribe_symbol(self.symbol)
+                        sys.stderr.write(f"[STREAM_MON] ✓ Webull Official: subscribed {self.symbol} via MQTT stream\n")
+                        sys.stderr.flush()
+                        return True
+                    elif hasattr(self.broker_instance._stream, 'subscribe'):
+                        import asyncio as _asyncio
+                        _loop = _asyncio.get_event_loop()
+                        _loop.create_task(self.broker_instance._stream.subscribe([self.symbol]))
+                        sys.stderr.write(f"[STREAM_MON] ✓ Webull Official: subscribed {self.symbol} via _stream.subscribe\n")
+                        sys.stderr.flush()
+                        return True
+                except Exception as e:
+                    sys.stderr.write(f"[STREAM_MON] Webull Official subscribe error for {self.symbol}: {e}\n")
+                    sys.stderr.flush()
+                return False
+
             has_broker = self.broker_instance is not None
             has_client = has_broker and hasattr(self.broker_instance, '_streaming_client') and self.broker_instance._streaming_client is not None
-            
+
             if not has_client:
                 sys.stderr.write(f"[STREAM_MON] Cannot subscribe {self.symbol}: broker={has_broker}, streaming_client={has_client}\n")
                 sys.stderr.flush()
@@ -2426,7 +2449,7 @@ class BaseConditionalOrderService(ABC):
                         else:
                             ct = created_at
                         age_seconds = (datetime.utcnow() - ct).total_seconds()
-                        if age_seconds < 10:
+                        if age_seconds < 2:
                             grace_expired = False
                             self._price_reset_needed[order_id] = False
                             self._log(
@@ -2817,6 +2840,15 @@ class BaseConditionalOrderService(ABC):
                 order['triggered_price'] = trigger_price
                 order['_triggered_at'] = datetime.now().isoformat()
                 order['_conditional_created_at'] = order.get('created_at')
+                # Use precomputed limit_price from order creation if available;
+                # recompute only as fallback (e.g. if order was created before this field existed)
+                if order.get('limit_cap_enabled'):
+                    limit_cap_pct = order.get('limit_cap_pct')
+                    effective_limit_price = order.get('limit_price')
+                    if not effective_limit_price or effective_limit_price <= 0:
+                        if limit_cap_pct is not None and float(limit_cap_pct) != 0:
+                            effective_limit_price = trigger_price * (1 + float(limit_cap_pct) / 100)
+                    order['limit_price'] = effective_limit_price
                 metadata_str = order.get('metadata')
                 if metadata_str:
                     try:

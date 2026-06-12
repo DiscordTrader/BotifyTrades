@@ -18,6 +18,7 @@ class WebullMarketStream:
         self._mqtt_client = None
         self._callbacks: dict[str, list[Callable]] = {}
         self._subscribed_symbols: set[str] = set()
+        self.on_quote_callback: Optional[Callable] = None  # set by broker after init
 
     async def connect(self):
         try:
@@ -99,6 +100,12 @@ class WebullMarketStream:
                 pass
         elif topic in ("snapshot", "quote", "tick"):
             self._emit(topic, msg.payload)
+            if self.on_quote_callback:
+                try:
+                    tick = json.loads(msg.payload)
+                    self.on_quote_callback(tick)
+                except Exception:
+                    pass
         elif topic == "echo":
             pass
 
