@@ -200,6 +200,16 @@ TEMPLE_ZZ_STANDALONE_TARGETS = re.compile(
     re.IGNORECASE
 )
 
+# Vertical multiline BTO: SYMBOL\n ENTRY\n SL\n T1....T2...T3+
+# e.g. "MASK\n 2.60\n 2.40\n 2.73....2.84...2.90...3.00+"
+TEMPLE_ZZ_VERTICAL_ENTRY = re.compile(
+    r'^([A-Z]{2,5})\s*\n'
+    r'[ \t]*\$?(\d+(?:\.\d+)?)[ \t]*\n'
+    r'(?:[ \t]*\$?(\d+(?:\.\d+)?)[ \t]*\n)?'
+    r'[ \t]*((?:\d+(?:\.\d+)?\.{2,})*\d+(?:\.\d+)?\+?)',
+    re.MULTILINE
+)
+
 # =============================================================================
 # OPTIONS PATTERNS (🚨│options-alerts💰 channel)
 # =============================================================================
@@ -1161,6 +1171,57 @@ def parse_temple_zz_plain_entry(match: re.Match, text: str) -> Optional[Dict[str
         "stop_loss_fixed": None,
         "stop_loss_pct": None,
         "profit_targets": [],
+    }
+
+
+def parse_temple_zz_vertical_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse vertical 4-line BTO: SYMBOL / entry / [SL] / T1....T2...T3+
+    e.g. 'MASK\n 2.60\n 2.40\n 2.73....2.84...2.90...3.00+'
+    """
+    symbol = match.group(1).upper()
+    if symbol in _STRUCTURED_REJECT_WORDS:
+        return None
+    entry_price = float(match.group(2))
+    raw_sl = float(match.group(3)) if match.group(3) else None
+    targets_str = match.group(4) or ''
+
+    # raw_sl is valid SL only if it is strictly below entry
+    sl_fixed = None
+    if raw_sl is not None and raw_sl < entry_price:
+        sl_fixed = raw_sl
+    elif raw_sl is not None:
+        # Might be a target disguised as SL line — append to targets
+        targets_str = f'{raw_sl}....{targets_str}' if targets_str else str(raw_sl)
+
+    targets = _parse_zz_targets(targets_str, entry_price=entry_price) if targets_str else []
+    # Only keep targets strictly above entry
+    targets = [t for t in targets if t > entry_price]
+
+    return {
+        'format': 'TEMPLE_ZZ_VERTICAL',
+        '_format_name': 'temple_zz_vertical_entry',
+        'is_conditional': True,
+        '_conditional_order': True,
+        '_temple_zz_vertical_entry': True,
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'action': 'BTO',
+        'ticker': symbol,
+        'symbol': symbol,
+        'trigger_type': 'over',
+        'trigger_price': entry_price,
+        'entry_high': entry_price,
+        'entry_low': None,
+        'stop_loss_type': 'fixed' if sl_fixed else None,
+        'stop_loss_value': sl_fixed,
+        'stop_loss_fixed': sl_fixed,
+        'stop_loss_pct': None,
+        'profit_targets': targets,
+        'qty': 1,
+        'qty_specified': False,
+        'price': entry_price,
+        'confidence': 1.0,
+        '_trade_type': 'day',
     }
 
 

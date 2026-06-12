@@ -1221,6 +1221,7 @@ class SignalFormatRegistry:
             parse_temple_zz_scalp, parse_temple_zz_lotto,
             parse_temple_zz_small_entry,
             parse_temple_zz_swing_update, parse_temple_zz_standalone_targets,
+            parse_temple_zz_vertical_entry,
         )
 
         # --- Stock channel (⚡│zz) ---
@@ -1447,6 +1448,24 @@ class SignalFormatRegistry:
                 "SNGX in at 0.95",
             ],
             flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_vertical_entry",
+            description="ZZ vertical 4-line BTO: SYMBOL / entry / SL / T1....T2...T3+",
+            priority=50,
+            pattern=(
+                r'^([A-Z]{2,5})\s*\n'
+                r'[ \t]*\$?(\d+(?:\.\d+)?)[ \t]*\n'
+                r'(?:[ \t]*\$?(\d+(?:\.\d+)?)[ \t]*\n)?'
+                r'[ \t]*((?:\d+(?:\.\d+)?\.{2,})*\d+(?:\.\d+)?\+?)'
+            ),
+            parser=parse_temple_zz_vertical_entry,
+            examples=[
+                "MASK\n 2.60\n 2.40\n 2.73....2.84...2.90...3.00+",
+                "NVDA\n 125.00\n 122.00\n 127....130...135+",
+            ],
+            flags=re.MULTILINE
         )
 
         self.register(
