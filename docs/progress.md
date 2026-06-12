@@ -1,5 +1,35 @@
 # BotifyTrades Progress Log
 
+## Session: June 12, 2026 — Per-Channel Settings Pipeline Audit + WO Market Order Fix
+
+Full end-to-end audit of all per-channel settings (Sizing, Risk Control, Order Types, Conditional). All 24+ settings confirmed wired. One broken wire found and fixed.
+
+### Audit Findings
+- **Sizing, Risk Control, Order Types, Conditional**: All wired end-to-end — DB → ChannelRiskSettings → execution/risk engine
+- **`conditional_auto_execute`**: Dead field — DB column exists, queried, but never consumed in any `src/` file and no UI toggle. Non-functional placeholder.
+- **`broker_bracket_mode`**: Confirmed wired — enforced in `_place_initial_broker_bracket()` via `allows_broker_sl` / `allows_broker_pt` properties
+- **`leave_runner`**: Confirmed wired — used in `calculate_tier_quantities()` at 3 call sites
+
+### Fix — Webull Official Market Order Simulation
+- **WO6 (HIGH): Market orders always rejected for WO options** — `_use_market_order=True` set `order_price=None`, WO broker rejected with "does not support MARKET orders". Affects: entry market mode, trim market mode, SL market mode, AND all emergency auto-overrides (stop_loss/dynamic_sl always forced market). File: `src/brokers/webull_official/broker.py`
+  - Added `get_option_quote()` — REST call to `/openapi/quote/option/query` with 3s timeout, returns `{bid, ask, last}`
+  - Updated `place_option_order()` market path: **BTO uses ask × 1.01 (1% buffer)**, **STC uses bid exactly**. Falls back to clear error if quote fetch fails.
+
+### Fix — WO Stock Order: `price` Param + `order_type` Auto-Derive (WO7)
+- **Bug 1**: Caller passes `price=X` (standard interface), WO broker had `limit_price` — no `**kwargs` to absorb it → `TypeError` on every stock order call. Fixed: renamed to `price`.
+- **Bug 2**: `order_type` defaulted to `"MARKET"` and caller never passed it → limit-mode stock orders sent as MARKET to Webull API. Fixed: auto-derive `order_type = "LIMIT" if price else "MARKET"` when not explicitly set.
+- Added `**kwargs` absorber so unknown extra kwargs (like `_signal_price_fallback`, `channel_id`) don't crash the call.
+
+### Fix — `_signal_price_fallback` Wired as Last-Resort Price
+- **Gap**: When `get_option_quote()` fails (API down / wrong endpoint / timeout), WO option market orders silently rejected even though the caller already computed a fresh price (`_signal_price_fallback` from UPH). For SL exits this is the live UPH bid — losing it on API failure means the stop-loss order rejects instead of executing.
+- **Fix** in `src/brokers/webull_official/broker.py` inside `if effective_limit is None` block:
+  - After failed `get_option_quote()`, reads `kwargs.get('_signal_price_fallback')`
+  - BTO: fallback × 1.01 (same 1% buffer as live quote path)
+  - STC: fallback exactly (bid price, already conservative)
+  - Prints `⚡ Market sim fallback: using signal price $X → limit=$Y`
+
+---
+
 ## Session: June 11, 2026 — Webull Official API Audit + Option Pipeline Fixes
 
 Reviewed official Webull API docs (developer.webull.com) against real code. Found 4 API spec violations and a broker_manager regression. All fixed.

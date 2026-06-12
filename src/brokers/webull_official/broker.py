@@ -212,9 +212,9 @@ class WebullOfficialBroker:
     async def get_positions_detailed(self) -> list:
         return await self.get_positions()
 
-    async def place_stock_order(self, symbol, quantity, action, order_type="MARKET",
-                                limit_price=None, stop_price=None, duration="DAY",
-                                extended_hours=False) -> OrderResult:
+    async def place_stock_order(self, symbol, quantity, action, price=None,
+                                order_type=None, stop_price=None, duration="DAY",
+                                extended_hours=False, **kwargs) -> OrderResult:
         if not self.connected:
             return OrderResult(success=False, message="Not connected")
 
@@ -224,11 +224,15 @@ class WebullOfficialBroker:
         }
         side = side_map.get(action.upper(), action.upper())
 
-        type_map = {
-            "MARKET": "MARKET", "LIMIT": "LIMIT",
-            "STOP": "STOP_LOSS", "STOP_LIMIT": "STOP_LOSS_LIMIT",
-        }
-        otype = type_map.get(order_type.upper(), order_type.upper())
+        # Derive order_type from price when not explicitly provided
+        if order_type is None:
+            otype = "LIMIT" if price is not None else "MARKET"
+        else:
+            type_map = {
+                "MARKET": "MARKET", "LIMIT": "LIMIT",
+                "STOP": "STOP_LOSS", "STOP_LIMIT": "STOP_LOSS_LIMIT",
+            }
+            otype = type_map.get(order_type.upper(), order_type.upper())
 
         tif_map = {"DAY": "DAY", "GTC": "GTC", "IOC": "IOC"}
         tif = tif_map.get(duration.upper(), "DAY")
@@ -240,7 +244,7 @@ class WebullOfficialBroker:
                 side=side,
                 quantity=quantity,
                 order_type=otype,
-                limit_price=limit_price,
+                limit_price=price,
                 stop_price=stop_price,
                 time_in_force=tif,
                 extended_hours=extended_hours,
@@ -249,7 +253,7 @@ class WebullOfficialBroker:
                 success=True,
                 order_id=result.order_id or result.client_order_id,
                 message=f"Order placed: {side} {quantity} {symbol}",
-                price=limit_price,
+                price=price,
                 quantity=quantity,
                 symbol=symbol,
                 action=action,
@@ -262,6 +266,31 @@ class WebullOfficialBroker:
                 action=action,
                 quantity=quantity,
             )
+
+    async def get_option_quote(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[dict]:
+        """Fetch live option bid/ask from Webull Official REST API."""
+        if not self._client:
+            return None
+        try:
+            otype = "CALL" if str(option_type).upper().startswith("C") else "PUT"
+            data = await asyncio.wait_for(
+                self._client.get("/openapi/quote/option/query", params={
+                    "symbol": symbol,
+                    "strike_price": str(strike),
+                    "option_expire_date": expiry,
+                    "option_type": otype,
+                }),
+                timeout=3.0,
+            )
+            if isinstance(data, dict):
+                bid = float(data.get("bidPrice") or data.get("bid_price") or data.get("bid") or 0)
+                ask = float(data.get("askPrice") or data.get("ask_price") or data.get("ask") or 0)
+                last = float(data.get("close") or data.get("lastPrice") or data.get("last") or 0)
+                if bid > 0 or ask > 0 or last > 0:
+                    return {"bid": bid, "ask": ask, "last": last}
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ get_option_quote failed for {symbol} ${strike} {expiry} {option_type}: {e}", flush=True)
+        return None
 
     async def place_option_order(self, symbol, quantity, action, order_type="LIMIT",
                                  limit_price=None, option_type=None,
@@ -276,18 +305,41 @@ class WebullOfficialBroker:
         effective_expiry = expiry_date if expiry_date is not None else expiry
         effective_limit = limit_price if limit_price is not None else price
 
-        # Webull Official API does not support MARKET orders for options — require a limit price
+        # Webull Official API does not support MARKET orders for options.
+        # Simulate market order by fetching live bid/ask: BTO uses ask, STC uses bid.
         if order_type.upper() == "MARKET":
             order_type = "LIMIT"
         if effective_limit is None:
-            print(f"[{self.name}] ❌ Option order rejected: no limit price for {symbol} — Webull Official API does not support MARKET orders for options", flush=True)
-            return OrderResult(
-                success=False,
-                message="Options require a limit price. Webull Official API does not support MARKET orders for options.",
-                symbol=symbol,
-                action=action,
-                quantity=quantity,
-            )
+            side = "BUY" if action.upper() in ("BTO", "BTC") else "SELL"
+            otype_str = "C" if option_type and str(option_type).upper().startswith("C") else "P"
+            q = await self.get_option_quote(symbol, effective_strike, effective_expiry, otype_str)
+            if q:
+                if side == "BUY":
+                    raw = q.get("ask") or q.get("last") or 0.0
+                    effective_limit = round(raw * 1.01, 2) if raw > 0 else None
+                    print(f"[{self.name}] ⚡ Market BTO sim: ask=${q.get('ask', 0):.4f} → limit=${effective_limit}", flush=True)
+                else:
+                    raw = q.get("bid") or q.get("last") or 0.0
+                    effective_limit = round(raw, 2) if raw > 0 else None
+                    print(f"[{self.name}] ⚡ Market STC sim: bid=${q.get('bid', 0):.4f} → limit=${effective_limit}", flush=True)
+            # Fallback: caller passes _signal_price_fallback (UPH bid for exits, signal price for entries)
+            if effective_limit is None:
+                _fb = kwargs.get('_signal_price_fallback')
+                if _fb and float(_fb) > 0:
+                    if side == "BUY":
+                        effective_limit = round(float(_fb) * 1.01, 2)
+                    else:
+                        effective_limit = round(float(_fb), 2)
+                    print(f"[{self.name}] ⚡ Market sim fallback: using signal price ${_fb:.4f} → limit=${effective_limit}", flush=True)
+            if effective_limit is None:
+                print(f"[{self.name}] ❌ Option order rejected: no price and live quote failed for {symbol} ${effective_strike} {effective_expiry}", flush=True)
+                return OrderResult(
+                    success=False,
+                    message="Options require a limit price. Market order simulation failed — could not fetch live bid/ask.",
+                    symbol=symbol,
+                    action=action,
+                    quantity=quantity,
+                )
 
         intent_map = {
             "BTO": "BUY_TO_OPEN", "STC": "SELL_TO_CLOSE",
