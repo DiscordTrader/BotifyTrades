@@ -13767,11 +13767,88 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[AI_FALLBACK] Checking: execute_enabled={execute_enabled}, channel_info={bool(channel_info)}, msg='{combined_content[:80]}'")
                     if execute_enabled and channel_info and not _is_trade_update(combined_content, message):
                         try:
+                            # ── TYPO CORRECTION LAYER 2: AI exit-intent with position context ──
+                            # If message has exit language but no parseable ticker, ask AI with
+                            # open positions listed — cheaper/safer than the general signal parser.
+                            _ch_id_str = str(message.channel.id)
+                            try:
+                                from src.services.signal_correction import get_signal_correction_service, has_exit_intent
+                                _corr_enabled = True
+                                if channel_info and hasattr(channel_info, 'typo_correction_enabled'):
+                                    _corr_enabled = channel_info.typo_correction_enabled
+                                if has_exit_intent(combined_content) and _corr_enabled:
+                                    _corr_svc = get_signal_correction_service()
+                                    _corr_result = await _corr_svc.ai_correct(combined_content, _ch_id_str, _corr_enabled)
+                                    if _corr_result.corrected_symbol and not _corr_result.rejected:
+                                        _corrected_sym = _corr_result.corrected_symbol
+                                        _orig_sym = _corr_result.original_symbol
+                                        author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                        import time as _corr_tmod
+                                        cond_brokers = self._get_channel_brokers(channel_info)
+                                        if cond_brokers:
+                                            for _cb in cond_brokers:
+                                                _corr_stc = {
+                                                    'action': 'STC',
+                                                    'asset': 'option',
+                                                    'asset_type': 'option',
+                                                    'symbol': _corrected_sym,
+                                                    'qty': 1,
+                                                    'price': 0,
+                                                    'is_market_order': True,
+                                                    'is_full_exit': True,
+                                                    'message_id': str(message.id),
+                                                    'channel_id': _ch_id_str,
+                                                    '_broker_override': _cb,
+                                                    '_typo_correction': True,
+                                                    '_original_symbol': _orig_sym,
+                                                    '_correction_method': 'ai',
+                                                    '_ai_confidence': _corr_result.confidence,
+                                                    '_queued_at': _corr_tmod.monotonic(),
+                                                    'detected_at': datetime.now().isoformat(),
+                                                    'parsed_at': datetime.now().isoformat(),
+                                                }
+                                                await self.order_queue.put(_corr_stc)
+                                                print(f'[CORRECTION] ✅ AI exit queued: STC {_corrected_sym} (original={_orig_sym!r}) on {_cb}')
+                                            try:
+                                                await message.channel.send(
+                                                    f"⚠️ Ticker auto-corrected: `{_orig_sym}` → `{_corrected_sym}` "
+                                                    f"(AI exit-intent, conf={_corr_result.confidence:.0%}). Executing STC {_corrected_sym}."
+                                                )
+                                            except Exception:
+                                                pass
+                                        return
+                            except Exception as _corr_l2_err:
+                                print(f'[CORRECTION] ⚠️ Layer2 error: {_corr_l2_err}')
+                            # ── END TYPO CORRECTION LAYER 2 ──
+
                             from gui_app.config_service import get_ai_provider
                             _ai_provider = get_ai_provider()
                             if _ai_provider != 'disabled':
                                 from src.services.ai_signal_parser import parse_signal_with_ai
                                 _ai_result = await parse_signal_with_ai(combined_content)
+                                # ── TYPO CORRECTION LAYER 1 (post-AI): fix ticker if AI parsed unknown STC ──
+                                if _ai_result and _ai_result.get('action') == 'STC' and _ai_result.get('symbol'):
+                                    try:
+                                        from src.services.signal_correction import get_signal_correction_service
+                                        _corr_svc = get_signal_correction_service()
+                                        _corr_enabled = True
+                                        if channel_info and hasattr(channel_info, 'typo_correction_enabled'):
+                                            _corr_enabled = channel_info.typo_correction_enabled
+                                        _fuzzy = await _corr_svc.fuzzy_correct(
+                                            _ai_result['symbol'], _ch_id_str, combined_content, _corr_enabled
+                                        )
+                                        if _fuzzy.rejected:
+                                            print(f'[CORRECTION] ⛔ Fuzzy ambiguous for AI-parsed STC {_ai_result["symbol"]} — skipping')
+                                            return
+                                        if _fuzzy.corrected_symbol:
+                                            print(f'[CORRECTION] ✅ Layer1 post-AI: {_ai_result["symbol"]!r} → {_fuzzy.corrected_symbol!r}')
+                                            _ai_result['symbol'] = _fuzzy.corrected_symbol
+                                            _ai_result['_typo_correction'] = True
+                                            _ai_result['_original_symbol'] = _fuzzy.original_symbol
+                                            _ai_result['_correction_method'] = 'fuzzy'
+                                    except Exception as _fl1_err:
+                                        print(f'[CORRECTION] ⚠️ Layer1 post-AI error: {_fl1_err}')
+                                # ── END TYPO CORRECTION LAYER 1 ──
                                 if _ai_result and _ai_result.get('action') in ('BTO', 'STC') and _ai_result.get('symbol') and _ai_result.get('confidence', 0) >= 0.8:
                                     _ai_sym = _ai_result['symbol']
                                     _ai_action = _ai_result['action']
@@ -13897,6 +13974,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             except Exception as _ai_exec_err:
                                                 print(f"[AI_FALLBACK] ⚠️ Execution error on {_ai_broker}: {_ai_exec_err}")
                                     elif _ai_action == 'STC':
+                                        _is_corrected = bool(_ai_result.get('_typo_correction'))
+                                        _orig_sym_log = _ai_result.get('_original_symbol', _ai_sym)
                                         for _aib_idx, _ai_broker in enumerate(cond_brokers):
                                             print(f"[AI_FALLBACK] Executing {_ai_action} {_ai_sym} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
                                             try:
@@ -13916,6 +13995,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     'detected_at': datetime.now().isoformat(),
                                                     'parsed_at': datetime.now().isoformat(),
                                                 }
+                                                if _is_corrected:
+                                                    stc_signal['_typo_correction'] = True
+                                                    stc_signal['_original_symbol'] = _orig_sym_log
+                                                    stc_signal['_correction_method'] = _ai_result.get('_correction_method', 'fuzzy')
                                                 if _ai_result.get('asset') == 'option' and _ai_result.get('strike'):
                                                     stc_signal['strike'] = _ai_result['strike']
                                                     stc_signal['opt_type'] = _ai_result['option_type']
@@ -13923,6 +14006,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 await self.order_queue.put(stc_signal)
                                             except Exception as _ai_exec_err:
                                                 print(f"[AI_FALLBACK] ⚠️ Exit error on {_ai_broker}: {_ai_exec_err}")
+                                        if _is_corrected and _aib_idx == 0:
+                                            try:
+                                                await message.channel.send(
+                                                    f"⚠️ Ticker auto-corrected: `{_orig_sym_log}` → `{_ai_sym}` "
+                                                    f"(edit distance {_ai_result.get('_correction_method','fuzzy')}, "
+                                                    f"conf={_ai_conf:.0%}). Executing STC `{_ai_sym}`."
+                                                )
+                                            except Exception:
+                                                pass
                                     return
                                 elif _ai_result and _ai_result.get('action'):
                                     print(f"[AI_FALLBACK] ⚠️ Low confidence ({_ai_result.get('confidence', 0):.2f}) — not executing: {_ai_result.get('action')} {_ai_result.get('symbol')}")

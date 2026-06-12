@@ -124,7 +124,9 @@ class ChannelRiskSettings:
     early_trailing_step_pct: float = 3.0  # Lock profit in this % increments
 
     escalation_only_mode: bool = False
-    
+
+    typo_correction_enabled: bool = True  # Layer 1+2 ticker typo correction for exit signals
+
     broker_bracket_mode: str = 'none'  # 'both', 'sl_only', 'pt_only', 'none'
     
     @property

@@ -546,6 +546,134 @@ KNOWN CHANNEL FORMATS (trained examples):
             return AIParseResult(error=str(e))
 
 
+    async def parse_exit_intent(
+        self,
+        message_text: str,
+        open_positions: List[Dict[str, Any]],
+    ) -> 'CorrectionResult':
+        """
+        Focused exit-intent prompt with open position context.
+        Used by SignalCorrectionService Layer 2 — not the general signal parser.
+
+        Gate 3: AI output symbol is hard-validated against open_positions.
+        Returns CorrectionResult — caller checks .corrected_symbol and .rejected.
+        """
+        from src.services.signal_correction import CorrectionResult
+
+        if not self._init_client():
+            return CorrectionResult(reason='AI provider not configured')
+
+        pos_lines = '\n'.join(
+            f"  - {p['symbol']} ({p.get('asset_type', 'option')}, opened {p.get('entry_time', 'unknown')})"
+            for p in open_positions
+        )
+        open_syms = {p['symbol'].upper() for p in open_positions}
+
+        system_prompt = (
+            "You are analyzing a trader's Discord message to determine if it is an exit signal "
+            "for one of their open positions listed below.\n\n"
+            f"Open positions in this channel:\n{pos_lines}\n\n"
+            "Return ONLY valid JSON:\n"
+            '{"is_exit": true/false, "symbol": "<exact symbol from list or null>", '
+            '"corrected_from": "<ticker in message or null>", '
+            '"confidence": 0.0-1.0, "reason": "<brief explanation>"}\n\n'
+            "RULES:\n"
+            "- symbol MUST be one of the listed positions — never invent others\n"
+            "- 'hit my SL', 'took the loss', 'out here', 'stopped out', 'closed', 'sold' are exits\n"
+            "- Comments, questions, analysis are NOT exits — return is_exit=false\n"
+            "- Only return is_exit=true if highly confident this is an actionable exit"
+        )
+        user_content = f'Message: "{message_text}"'
+
+        try:
+            raw_text = None
+            async with self._semaphore:
+                if self._provider == 'gemini' and hasattr(self, '_gemini_client') and self._gemini_client:
+                    resp = await asyncio.wait_for(
+                        asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: self._gemini_client.models.generate_content(
+                                model=self._gemini_model if hasattr(self, '_gemini_model') else 'gemini-2.0-flash',
+                                contents=f'{system_prompt}\n\n{user_content}\n\nReturn ONLY valid JSON.'
+                            )
+                        ),
+                        timeout=8.0,
+                    )
+                    raw_text = resp.text.strip()
+                elif self._anthropic_client and self._provider == 'claude':
+                    resp = await asyncio.wait_for(
+                        self._anthropic_client.messages.create(
+                            model=self._anthropic_model,
+                            max_tokens=256,
+                            system=system_prompt,
+                            messages=[
+                                {'role': 'user', 'content': user_content},
+                                {'role': 'assistant', 'content': '{'},
+                            ],
+                        ),
+                        timeout=8.0,
+                    )
+                    raw_text = '{' + (resp.content[0].text or '}')
+                elif self._client:
+                    resp = await asyncio.wait_for(
+                        self._client.chat.completions.create(
+                            model=self._model,
+                            messages=[
+                                {'role': 'system', 'content': system_prompt},
+                                {'role': 'user', 'content': user_content},
+                            ],
+                            max_tokens=256,
+                            temperature=0.1,
+                            response_format={'type': 'json_object'},
+                        ),
+                        timeout=8.0,
+                    )
+                    raw_text = resp.choices[0].message.content or '{}'
+                else:
+                    return CorrectionResult(reason='no AI client available')
+
+            # Strip markdown fences if present
+            if raw_text and raw_text.startswith('```'):
+                raw_text = raw_text.split('\n', 1)[1] if '\n' in raw_text else raw_text[3:]
+            if raw_text and raw_text.endswith('```'):
+                raw_text = raw_text[:raw_text.rfind('```')].strip()
+
+            import json as _json
+            data = _json.loads(raw_text)
+
+            if not data.get('is_exit'):
+                return CorrectionResult(reason=f"AI: not an exit — {data.get('reason', '')}")
+
+            conf = float(data.get('confidence', 0))
+            if conf < 0.75:
+                print(f'[CORRECTION] ⚠️ AI exit-intent below threshold (conf={conf:.2f}): {message_text[:60]}')
+                return CorrectionResult(reason=f'AI confidence {conf:.2f} < 0.75 threshold')
+
+            sym = (data.get('symbol') or '').upper().strip()
+
+            # Gate 3: symbol must be in open positions
+            if sym not in open_syms:
+                print(f'[CORRECTION] ⚠️ AI returned symbol {sym!r} not in open positions {open_syms} — rejected')
+                return CorrectionResult(
+                    rejected=True,
+                    reason=f'AI symbol {sym!r} not in open positions (hallucination guard)',
+                )
+
+            corrected_from = data.get('corrected_from') or None
+            print(f'[CORRECTION] ✅ Layer2 AI: {corrected_from!r} → {sym!r} (conf={conf:.2f}): {data.get("reason", "")}')
+            return CorrectionResult(
+                corrected_symbol=sym,
+                original_symbol=corrected_from or sym,
+                correction_method='ai',
+                confidence=conf,
+                reason=data.get('reason', ''),
+            )
+
+        except Exception as e:
+            print(f'[CORRECTION] ⚠️ parse_exit_intent error: {e}')
+            return CorrectionResult(reason=f'AI parse error: {e}')
+
+
 # Global singleton
 _parser_instance: Optional[AISignalParser] = None
 
