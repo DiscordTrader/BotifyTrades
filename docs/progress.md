@@ -1,5 +1,36 @@
 # BotifyTrades Progress Log
 
+## Session: June 12, 2026 — Signal Correction Service (Typo/Fuzzy Ticker Fix)
+
+Industry-grade design review + full implementation of ticker typo correction for exit signals. Handles cases like "hit my SL with DYS" when DSY is the open position.
+
+### New: `src/services/signal_correction.py` — Commit 16bdfc6c
+
+**Layer 1 — Fuzzy (stdlib, free):** Levenshtein edit distance against open positions per channel. Thresholds: len≤2=no fuzzy, len 3-4=dist≤1, len≥5=dist≤2. Catches DSY↔DYS, SPY↔SPYY, TSLA↔TSLE.
+
+**Layer 2 — AI exit-intent (new `parse_exit_intent()` in AISignalParser):** Focused prompt with open positions listed. AI must return a symbol from the list (gate 3). Confidence ≥ 0.75 required. Handles "took the loss on DYS", "out of TSLA here" (informal phrasing).
+
+**6 safety gates:** exit-intent keyword required, ambiguity rejection (2+ candidates → hard reject), AI symbol validated against open positions, 60s min position age, channel scope only, per-channel opt-out via `ChannelRiskSettings.typo_correction_enabled`.
+
+**Integration:** Pre-AI hook (Layer 2 before general AI parse) + Post-AI hook (Layer 1 fixes AI-returned STC symbol). Discord channel notification on any correction. Signal dict annotated with `_typo_correction`, `_original_symbol`, `_correction_method`.
+
+---
+
+## Session: June 12, 2026 — AI Intelligence Hub Audit + Full Gap Fix
+
+Full audit of Admin → Settings → AI Intelligence Hub for all providers (Claude, Gemini, OpenAI). 6 gaps found and fixed.
+
+### Fixes — Commit 08fe08b8
+
+- **AI1 (ALL providers): Model selector ignored at runtime** — `chat_assistant.py`, `ai_analyzer.py`, `format_trainer.py` all hardcoded models per provider instead of reading from `ai_settings.model` DB field. Fixed: added `_get_model_for_provider()` / `_resolve_model()` / `_get_model()` helpers that read from DB with provider defaults as fallback. All 9 hardcoded model strings replaced.
+- **AI2: Cache not invalidated on settings change** — Changing API keys or AI provider in GUI had no effect until bot restart. Fixed: `api_save_api_keys_settings()` and `api_update_ai_settings()` in routes.py now clear `_chat_ai_cache` after save so next chat request picks up new config immediately.
+- **AI3: Cache key missing model** — `_chat_ai_cache` only keyed on provider; model change wouldn't trigger re-init. Fixed: cache check now includes model.
+- **AI4: `sentiment_enabled` not enforced when `enabled=False`** — Routes allowed saving `sentiment_enabled=True` with master AI disabled. Fixed: `api_update_ai_settings()` forces `sentiment_enabled=False` when `enabled=False`.
+- **AI5: `replit_ai` dead code** — Provider branch existed in `format_trainer.py`, `ai_analyzer.py`, error messages, and docstrings but is no longer in the UI. Removed. `config_service.py` already maps old DB value `replit_ai` → `disabled` for backwards compat.
+- **AI6: Default provider fallback was `replit_ai`** — `routes.py` `api_save_api_keys_settings()` defaulted `ai_provider` to `'replit_ai'` when field missing from POST body. Fixed to `'disabled'`.
+
+---
+
 ## Session: June 12, 2026 — Per-Channel Settings Pipeline Audit + WO Market Order Fix
 
 Full end-to-end audit of all per-channel settings (Sizing, Risk Control, Order Types, Conditional). All 24+ settings confirmed wired. One broken wire found and fixed.
