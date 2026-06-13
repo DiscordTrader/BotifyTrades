@@ -47,7 +47,28 @@ def create_app():
     else:
         app = Flask(__name__)
     
-    app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
+    # Persist SECRET_KEY in DB so sessions survive bot restarts
+    _env_key = os.environ.get('FLASK_SECRET_KEY')
+    if _env_key:
+        _secret_key = _env_key
+    else:
+        try:
+            import sqlite3 as _sqlite3
+            from pathlib import Path as _Path
+            _db_candidates = [_Path('bot_data.db'), _Path(__file__).parent.parent / 'bot_data.db']
+            _db_path = next((str(p) for p in _db_candidates if p.exists()), 'bot_data.db')
+            _conn = _sqlite3.connect(_db_path)
+            _row = _conn.execute("SELECT value FROM settings WHERE key='flask_secret_key'").fetchone()
+            if _row:
+                _secret_key = _row[0]
+            else:
+                _secret_key = secrets.token_hex(32)
+                _conn.execute("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('flask_secret_key', ?, CURRENT_TIMESTAMP)", (_secret_key,))
+                _conn.commit()
+            _conn.close()
+        except Exception:
+            _secret_key = secrets.token_hex(32)
+    app.config['SECRET_KEY'] = _secret_key
     app.config['JSON_SORT_KEYS'] = False
     app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
     app.config['TEMPLATES_AUTO_RELOAD'] = True  # Force template reload

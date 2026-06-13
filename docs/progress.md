@@ -1,5 +1,27 @@
 # BotifyTrades Progress Log
 
+## Session: June 12, 2026 — v11.2.9: Persistent Session + "Error loading trades" Fix
+
+### Root Cause
+`SECRET_KEY = secrets.token_hex(32)` in `gui_app/app.py:50` regenerated a new random key on every bot restart. Flask uses this key to sign session cookies — every restart invalidated all active sessions, requiring re-login. During the brief gap between restart and re-login, any pending `loadTrades()` poll would either get a 401 or ECONNREFUSED, showing "Error loading trades / Failed to fetch". Since `_isFirstLoad` was never reset after a TypeError, the error display persisted indefinitely.
+
+### Fixes — v11.2.9
+
+**1. Persistent `SECRET_KEY` (`gui_app/app.py`)**
+- On startup, reads `flask_secret_key` from `settings` table in `bot_data.db`
+- If not found, generates new key and saves it to DB
+- Result: sessions survive bot restarts — user stays logged in
+
+**2. 401 → login redirect (`gui_app/templates/index.html`)**
+- `loadTrades()` now checks `response.status === 401` and redirects to `/login` instead of silently showing empty positions
+- Consistent with `trades.html` behavior
+
+**3. TypeError auto-retry (`gui_app/templates/index.html`)**
+- On `TypeError: Failed to fetch` (network-level) in `loadTrades()`, shows "Retrying…" and automatically retries after 3 seconds
+- Prevents stale error screen when server is briefly unavailable during restart
+
+---
+
 ## Session: June 12, 2026 — Signal Correction Service (Typo/Fuzzy Ticker Fix)
 
 Industry-grade design review + full implementation of ticker typo correction for exit signals. Handles cases like "hit my SL with DYS" when DSY is the open position.
@@ -1162,3 +1184,29 @@ Position: `Webull_QQQ_718.0_2026-06-10_C` — entry $0.85, Trail 20%@20%, PT1=50
 
 ### Contributing Factor (No Fix): UPH StreamTicks=0
 UPH shows `StreamTicks: 0, Cache: 0 symbols` throughout session. All risk cycles show `ticks=0`. Risk engine running on REST-only (1-2s cycles). This means fast 0DTE moves can be missed between REST cycles (e.g., the $1.01 peak was captured once then price dropped to $0.95 in the next REST fetch 2s later). Root cause likely Webull re-auth needed (known issue: 1094ms cycles, `Position refresh failed` errors).
+
+---
+
+## 2026-06-12: v11.2.12 — Schwab Option PT/SL Missed Exits Root Cause Found + Fixed
+
+### Investigation Trigger
+Trades #399 (IWM C +35.4%) and #404 (QQQ C -41.0%) both closed as `broker_closed_position` instead of the risk engine triggering PT/SL. Channel `options-templeboom` was correctly configured: `risk_management_enabled=1, SL=30%, PT=10%, broker_bracket_mode='none'`.
+
+### Root Cause 1: No Schwab REST fallback for stuck option prices (CRITICAL)
+`_try_rest_quote()` in `position_monitor.py` has an early `if not is_option:` branch that handles all cross-broker equity quotes. For options, it skips this branch entirely and falls through to `_try_broker_get_quote()`. That function has no SCHWAB case — it only handles Alpaca, Tastytrade, Robinhood, IBKR, Trading212, Webull Official. For Schwab options, it returned `None` silently.
+
+Result: When Schwab streaming wasn't delivering option quotes (e.g., `schwab-stream(no-quote)` heartbeat), the `_detect_and_fix_stuck_prices` mechanism tried to repair the stuck price but always got `None` back. The price stayed at 0 or at entry indefinitely → ZERO PRICE GUARD blocked evaluation → PT/SL never triggered.
+
+**Fix**: Added Schwab option path at start of `_try_rest_quote` using `pos.raw_symbol` (OCC symbol, e.g., `QQQ  260612C00726000`) to call `_try_schwab_rest_quote`. Returns correct bid/ask midpoint directly from Schwab marketdata API.
+
+### Root Cause 2: REST sanity guard incorrectly rejecting valid Schwab option prices
+The sanity guard at line 8740 rejects REST prices where `rest_deviation > 30% AND streaming_deviation < 10%`. This protects against stale REST data when streaming is live. But for Schwab options, the guard fires precisely in the broken scenario: streaming is stuck at entry price (0% deviation) while REST correctly shows a 35% move — the guard would reject the valid REST price.
+
+**Fix**: Added `source != 'Schwab-option'` exception to the sanity guard. Since the price comes directly from Schwab's own marketdata API for the exact OCC symbol, it should not be second-guessed by a comparison with stale streaming data.
+
+### Files Changed
+- `src/risk/position_monitor.py`: Two fixes (REST path + sanity guard exemption)
+- `upgrade/version.py`: Bumped to v11.2.12
+
+### Note on `schwab-stream(no-quote)` Heartbeat
+This message does NOT mean Schwab streaming is completely broken — it means SPY has no streaming quote. Since SPY is only subscribed when there's an open SPY position, the heartbeat is misleading. Option streaming can be working while SPY shows no-quote. However, if option streaming IS broken, the two fixes above ensure the risk engine can recover prices via REST within 2-3 seconds.
