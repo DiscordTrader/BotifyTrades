@@ -15049,7 +15049,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 try:
                     conn = db.get_connection()
                     cursor = conn.cursor()
-                    cursor.execute('''SELECT id, symbol, broker, qty, executed_price
+                    cursor.execute('''SELECT id, symbol, broker, quantity, executed_price
                                      FROM trades WHERE channel_id = ? AND UPPER(symbol) = UPPER(?)
                                      AND status IN ('OPEN','PARTIAL') AND direction = 'BTO'
                                      ORDER BY id DESC LIMIT 1''', (channel_id_str, exit_sym))

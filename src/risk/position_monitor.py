@@ -8731,7 +8731,7 @@ class RiskManager:
                             source = f'REST/{rest_via}' if rest_via else 'REST'
                             if abs(rest_price - pos.current_price) > 0.0001:
                                 rest_repairs_this_cycle += 1
-                if fresh_price and fresh_price > 0 and source and 'REST' in source:
+                if fresh_price and fresh_price > 0 and source and 'REST' in source and source != 'Schwab-option':
                     cache_entry = self.cache.get(key) or self.cache.get(f"{pos.broker}_{pos.symbol}")
                     if cache_entry and cache_entry.entry_price > 0:
                         entry = cache_entry.entry_price
@@ -8964,6 +8964,14 @@ class RiskManager:
         is_option = pos.asset == 'option'
 
         _last_valid_rest = None
+        if is_option and 'SCHWAB' in broker_upper:
+            occ_sym = pos.raw_symbol or pos.symbol
+            price = await self._try_schwab_rest_quote(occ_sym)
+            if price and price > 0:
+                _last_valid_rest = price
+                if abs(price - current) > 0.0001:
+                    self._last_rest_source = 'Schwab-option'
+                    return price
         if not is_option:
             if 'WEBULL' in broker_upper:
                 price = await self._try_schwab_rest_quote(pos.symbol)
