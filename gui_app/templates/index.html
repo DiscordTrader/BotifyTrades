@@ -1227,6 +1227,18 @@ let currentRegion = localStorage.getItem('selectedRegion') || 'USA';
 let isPrivacyMode = false;
 let isClosingPosition = false;
 let dashboardRiskStates = {};
+
+// AbortController for tab-switch request cancellation
+let _tabFetchController = null;
+function _newTabSignal() {
+    if (_tabFetchController) _tabFetchController.abort();
+    _tabFetchController = new AbortController();
+    return _tabFetchController.signal;
+}
+function _tabFetch(url, opts) {
+    if (!_tabFetchController) _tabFetchController = new AbortController();
+    return fetch(url, { ...opts, signal: _tabFetchController.signal });
+}
 let dashboardRiskPollTimer = null;
 
 function buildDashboardRiskBadges(rs) {
@@ -1573,32 +1585,35 @@ function togglePrivacy() {
 }
 
 async function switchTab(tab) {
+    // Cancel all in-flight requests from the previous tab
+    _newTabSignal();
+
     currentTab = tab;
     _currentPositionIds = [];
     _clearElCache();
     _isFirstLoad = true;
     _streamingIndicator = null;
-    
+
     document.querySelectorAll('.tab').forEach(btn => {
         btn.classList.remove('active');
     });
     document.getElementById(`tab-${tab}`).classList.add('active');
-    
+
     // Show/hide appropriate containers
     const tradesContainer = document.getElementById('trades-table-container');
     const botTradesContainer = document.getElementById('bot-trades-container');
     const conditionalContainer = document.getElementById('conditional-orders-container');
     const filledContainer = document.getElementById('filled-orders-container');
-    
+
     // Hide all containers first
     tradesContainer.style.display = 'none';
     botTradesContainer.style.display = 'none';
     conditionalContainer.style.display = 'none';
     filledContainer.style.display = 'none';
-    
+
     // Stop conditional orders auto-refresh when leaving the tab
     stopConditionalOrdersAutoRefresh();
-    
+
     if (tab === 'bot-trades') {
         botTradesContainer.style.display = 'block';
         await loadBotTrades();
@@ -1611,7 +1626,7 @@ async function switchTab(tab) {
         await loadFilledOrders();
     } else {
         tradesContainer.style.display = 'block';
-        loadTrades();
+        await loadTrades();
     }
 }
 
@@ -1711,9 +1726,10 @@ async function loadFilledOrders() {
         let url = `/api/filled-orders?days=${days}&limit=100`;
         if (broker) url += `&broker=${encodeURIComponent(broker)}`;
         
-        const response = await fetch(url);
+        const response = await _tabFetch(url);
+        if (response.status === 401) { window.location.href = '/login'; return; }
         const data = await response.json();
-        
+
         if (!data.success) {
             container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">${data.error || 'Failed to load'}</div>`;
             return;
@@ -1795,8 +1811,9 @@ async function loadFilledOrders() {
         container.innerHTML = tableHTML;
         
     } catch (error) {
+        if (error.name === 'AbortError') return; // tab switched — discard silently
         console.error('[loadFilledOrders] Error:', error);
-        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load filled orders</div>';
+        container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load filled orders: ${error.message}</div>`;
     }
 }
 
@@ -1919,7 +1936,7 @@ async function loadTrades() {
         if (currentBroker) url += `broker=${currentBroker}`;
         url = url.replace(/[&?]$/, '');
         
-        const response = await fetch(url);
+        const response = await _tabFetch(url);
         if (response.status === 401) {
             if (_isFirstLoad) {
                 container.innerHTML = `
@@ -1985,6 +2002,7 @@ async function loadTrades() {
         _isFirstLoad = false;
         
     } catch (err) {
+        if (err.name === 'AbortError') return; // tab switched — discard silently
         console.error('[loadTrades] Error:', err);
         if (_isFirstLoad) {
             const isNetworkErr = err instanceof TypeError;
@@ -2613,8 +2631,8 @@ let _condOrdersCache = [];
 
 function startConditionalOrdersAutoRefresh() {
     stopConditionalOrdersAutoRefresh();
-    conditionalLivePriceInterval = setInterval(refreshLivePricesOnly, 1000);
-    conditionalOrdersRefreshInterval = setInterval(refreshConditionalOrderPrices, 5000);
+    conditionalLivePriceInterval = setInterval(refreshLivePricesOnly, 3000);
+    conditionalOrdersRefreshInterval = setInterval(refreshConditionalOrderPrices, 10000);
     console.log('[ConditionalOrders] Auto-refresh started (prices: 1s, full: 5s)');
 }
 
@@ -2631,7 +2649,7 @@ function stopConditionalOrdersAutoRefresh() {
 
 async function refreshLivePricesOnly() {
     try {
-        const resp = await fetch('/api/conditional_orders/live_prices');
+        const resp = await _tabFetch('/api/conditional_orders/live_prices');
         const data = await resp.json();
         if (!data.success) return;
         const livePrices = data.prices || {};
@@ -2677,7 +2695,7 @@ async function refreshLivePricesOnly() {
 
 async function refreshConditionalOrderPrices() {
     try {
-        const resp = await fetch('/api/conditional_orders?active_only=true');
+        const resp = await _tabFetch('/api/conditional_orders?active_only=true');
         const data = await resp.json();
         const orders = data.orders || [];
         _condOrdersCache = orders;
@@ -2690,11 +2708,12 @@ async function loadConditionalOrders() {
     console.log('[loadConditionalOrders] Starting...');
     const container = document.getElementById('conditional-orders-table');
     if (!container) return;
-    
+
     container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading conditional orders...</div></div>';
-    
+
     try {
-        const response = await fetch('/api/conditional_orders');
+        const response = await _tabFetch('/api/conditional_orders');
+        if (response.status === 401) { window.location.href = '/login'; return; }
         const data = await response.json();
         let orders = data.orders || [];
         
@@ -2947,6 +2966,7 @@ async function loadConditionalOrders() {
         container.innerHTML = html;
         
     } catch (err) {
+        if (err.name === 'AbortError') return; // tab switched — discard silently
         console.error('[loadConditionalOrders] Error:', err);
         container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Error loading conditional orders: ${err.message}</div>`;
     }
@@ -3614,8 +3634,11 @@ document.addEventListener('DOMContentLoaded', () => {
         loadStats();
         
         setInterval(() => {
-            loadTrades();
-            loadStats();
+            // Only poll on tabs that use live trade data; other tabs manage their own refresh
+            if (currentTab === 'live' || currentTab === 'pending') {
+                loadTrades();
+                loadStats();
+            }
         }, 10000);
 
         setInterval(streamingQuotePoll, 1000);
