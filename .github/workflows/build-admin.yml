@@ -369,8 +369,43 @@ jobs:
           path: dist/BotifyTrades-Admin-macOS-Silicon.tar.gz
           retention-days: 90
 
-  cleanup:
+  publish-to-private-repo:
     needs: [build-windows, build-linux, build-macos-intel, build-macos-silicon]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: releases
+          pattern: BotifyTrades-Admin-*
+
+      - name: Create Release on Private Repo
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: v${{ env.VERSION }}-admin
+          name: BotifyTrades Admin v${{ env.VERSION }}
+          body: |
+            ## BotifyTrades Admin v${{ env.VERSION }}
+
+            ### Downloads
+            - **Windows**: BotifyTrades-Admin-Windows.exe
+            - **Linux**: BotifyTrades-Admin-Linux
+            - **macOS (Intel)**: BotifyTrades-Admin-macOS-Intel.tar.gz
+            - **macOS (Apple Silicon)**: BotifyTrades-Admin-macOS-Silicon.tar.gz
+
+            ### Admin Features
+            - Full channel mappings (dual-action)
+            - Debug tools and admin panel
+            - All trading features unlocked
+          files: |
+            releases/**/*
+          draft: false
+          prerelease: false
+
+  cleanup:
+    needs: [publish-to-private-repo]
     runs-on: ubuntu-latest
     if: always()
     steps:
