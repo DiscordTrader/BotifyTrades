@@ -26,6 +26,8 @@ jobs:
         run: |
           sed -i "s/^BUILD_TYPE = .*/BUILD_TYPE = 'ADMIN'  # Set by release.sh/" src/selfbot_webull.py
           cat src/selfbot_webull.py | grep BUILD_TYPE
+          echo "BUILD_TYPE = 'ADMIN'" > gui_app/build_info.py
+          cat gui_app/build_info.py
       
       - name: Update version
         run: |

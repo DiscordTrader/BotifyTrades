@@ -38,7 +38,9 @@ def _read_build_type_from_source() -> str:
     import sys
     candidates = []
     repo_root = Path(__file__).resolve().parent.parent
+    # Check build_info.py first — gui_app/ is NOT PyArmor-obfuscated so regex is reliable
     candidates.extend([
+        Path(__file__).resolve().parent / 'build_info.py',
         repo_root / 'src' / 'selfbot_webull.py',
         repo_root / 'selfbot_webull.py',
     ])
@@ -46,6 +48,7 @@ def _read_build_type_from_source() -> str:
     if meipass:
         meipass_path = Path(meipass)
         candidates.extend([
+            meipass_path / 'gui_app' / 'build_info.py',
             meipass_path / 'src' / 'selfbot_webull.py',
             meipass_path / 'selfbot_webull.py',
         ])
