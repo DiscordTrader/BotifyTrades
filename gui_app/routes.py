@@ -13,7 +13,6 @@ from typing import Optional, Any, Dict, Callable
 from functools import wraps
 from flask import render_template, jsonify, request, make_response, session, redirect, url_for, send_from_directory, flash, Response
 from . import database as db
-from .webhook_service import get_db_connection
 
 # Admin password from environment (set via Replit Secrets)
 # SECURITY: No default password - must be set via environment variable or setup wizard
@@ -22524,6 +22523,7 @@ def register_routes(app):
             from datetime import datetime, timedelta
             
             # Get recent trades from database with signal timestamps
+            from .webhook_service import get_db_connection
             conn = get_db_connection()
             cursor = conn.cursor()
             

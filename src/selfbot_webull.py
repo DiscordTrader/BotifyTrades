@@ -23267,22 +23267,26 @@ Environment Variables:
                         import webbrowser
                         import subprocess
                         global _gui_auto_browser_done
+                        _already_opened = _gui_auto_browser_done
                         _gui_auto_browser_done = True  # Prevent CLI delayed-open from firing too
                         _gui_port = startup_state.get('gui_port') or 5000
                         url = f"http://localhost:{_gui_port}"
-                        _original_print(f"[GUI] Opening control panel in browser: {url}")
-                        try:
-                            if sys.platform == 'win32':
-                                subprocess.Popen(['cmd', '/c', 'start', '', url], 
-                                               shell=False, 
-                                               creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0x08000000)
-                            elif sys.platform == 'darwin':
-                                subprocess.Popen(['open', url])
-                            else:
-                                subprocess.Popen(['xdg-open', url])
-                        except Exception as browser_err:
-                            _original_print(f"[GUI] subprocess open failed ({browser_err}), trying webbrowser fallback")
-                            webbrowser.open(url)
+                        if _already_opened:
+                            _original_print(f"[GUI] Browser already opened by startup thread: {url}")
+                        else:
+                            _original_print(f"[GUI] Opening control panel in browser: {url}")
+                            try:
+                                if sys.platform == 'win32':
+                                    subprocess.Popen(['cmd', '/c', 'start', '', url],
+                                                   shell=False,
+                                                   creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0x08000000)
+                                elif sys.platform == 'darwin':
+                                    subprocess.Popen(['open', url])
+                                else:
+                                    subprocess.Popen(['xdg-open', url])
+                            except Exception as browser_err:
+                                _original_print(f"[GUI] subprocess open failed ({browser_err}), trying webbrowser fallback")
+                                webbrowser.open(url)
                         
                         def _gui_discord_error_monitor():
                             try:

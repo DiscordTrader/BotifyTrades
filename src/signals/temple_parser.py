@@ -378,6 +378,10 @@ def parse_temple_zz_stock_entry(match: re.Match, text: str) -> Optional[Dict[str
     if not symbol:
         return None
 
+    # Reject "In QQQ 714C @.60" — letter immediately after price digits = options strike suffix
+    if groups[1] and match.end(2) < len(text) and text[match.end(2)].isalpha():
+        return None
+
     _COMMON_WORDS = {
         'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL',
         'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'OUT', 'DAY', 'GET',

@@ -1627,6 +1627,7 @@ async function switchTab(tab) {
     } else {
         tradesContainer.style.display = 'block';
         await loadTrades();
+        loadStats();
     }
 }
 
