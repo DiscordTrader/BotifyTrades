@@ -1210,3 +1210,136 @@ The sanity guard at line 8740 rejects REST prices where `rest_deviation > 30% AN
 
 ### Note on `schwab-stream(no-quote)` Heartbeat
 This message does NOT mean Schwab streaming is completely broken — it means SPY has no streaming quote. Since SPY is only subscribed when there's an open SPY position, the heartbeat is misleading. Option streaming can be working while SPY shows no-quote. However, if option streaming IS broken, the two fixes above ensure the risk engine can recover prices via REST within 2-3 seconds.
+
+## Session: June 14, 2026 — v11.2.13–11.2.16: Dashboard Fixes + JPM Signal Parser
+
+### v11.2.13: IBKR Pending Orders in Dashboard
+- Added IBKR pending orders to Pending Orders tab (`gui_app/routes.py`)
+- Fixed cancel button for IBKR_LIVE broker label (unified cancel route map)
+- IBKR orders injected as synthetic trade entries when status_filter == 'PENDING'
+
+### v11.2.14: Webull Official Live Positions Fix
+- Added `_fetch_webull_official()` to `gui_app/live_snapshot.py` — was entirely missing
+- Webull Official positions (e.g. CRWV) now appear in Live Trading Monitor
+- 30-second stale cache fallback for resilience
+
+### v11.2.15: Tab-Switching "Failed to Fetch" Fix
+- Root cause: Flask thread exhaustion from concurrent polling storms + no AbortController
+- Added AbortController infrastructure to cancel in-flight requests on tab switch
+- Tab-guarded global 10s interval (only fires on live/pending tabs)
+- Slowed conditional orders refresh: 3s (was 1s) + 10s (was 5s)
+- Fixed loadTrades() missing await in switchTab()
+
+### v11.2.16: JPM Investments Signal Parser
+- New parser: `src/signals/jpm_investments_parser.py`
+- Author ID gated: 1367190877419602011 (JpmInvestments)
+- Handles embed title "Open" (BTO) / "Close" (STC) / "Update" (skip) / None (SL update/skip)
+- Parses: `SYMBOL MM/DD STRIKE C/P @PRICE` with optional `(SL $x)` or `> SL under $x`
+- Handles freeform Close: `All out of SYMBOL @ LOD/price/market`
+- Handles no-title `Open —— SYMBOL...` as BTO
+- Skips corrections and noise
+- Wired into selfbot_webull.py: detection, routing, forwarding, PNL tracking
+
+## Session: June 14, 2026 — v11.2.17: Namrood Trades Signal Parser
+
+### Analysis: ◽︱namrood-options (author_id: 1182389736904593510)
+All signals from "Namrood-Trades" bot. Human user ("namrood", 626631444285882388) only posts reactions — skip.
+
+**Signal taxonomy (by embed title):**
+- `Buy To Open` → BTO: ANSI codeblock `SYMBOL STRIKEC/P DTE/DATE PRICE`
+- `⚠️ Lotto Trade — RISKY` → BTO (lotto): plain codeblock `SYMBOL STRIKEC/P DTE/DATE $PRICE`
+- `Close or Trim & Set SL to BE` → STC trim: ANSI block `SYMBOL STRIKEC/P DATE\nENTRY → CURRENT`
+- `Trade Update - Manage your risk` → STC full exit (stop loss): same ANSI block format, red color
+- `Sell To Close` → STC full exit: freeform price, symbol resolved from open position
+- `Idea` / `📊 Trade Breakdown...` / `Namrood Trades Performance Recap...` → skip
+
+**Key format quirks:**
+- Compact symbol+strike: `GOOGL377.5C` (no space)
+- Date formats: `0DTE/1DTE/NDTE`, `YYYY-MM-DD`, `MM-DD-YYYY`, `MM/DD/YYYY`
+- Lotto BTO uses `$` prefix; regular BTO does not
+
+### v11.2.17 implementation
+- New parser: `src/signals/namrood_parser.py`
+- Wired into selfbot_webull.py: detection, signal condition, routing, forwarding, direct broker execution opt block, PNL tracking
+- Freeform STC ("Sell To Close") resolves symbol/strike/expiry from most recent open position in channel
+- Follows identical integration pattern as JPM and KC Trades
+
+## 2026-06-14 — v11.2.18: Fix options-alerts💰 channel parsing gaps
+
+### Root Cause Analysis
+The temple_parser.py and signal_format_registry.py already handle options-alerts channel
+(no channel ID scoping needed — registry runs globally for all channels). However 4 signal
+format gaps were missed, causing those specific trader signals to silently fall through.
+
+### Gaps Found & Fixed
+
+**1. Compact ticker — no space between ticker and strike** (`IWM281p @.17`)
+- `TEMPLE_OPTIONS_STANDARD` required `\s+` (one+ spaces), regex changed to `\s*` (zero or more)
+- Registry pattern updated to match
+- Also fixes `IWM281p`, `APPL292.5c` style compact signals
+
+**2. Sirfawazz format — C/P before strike with date** (`INTC C117 12/6 Avg 1.55 Sl 1.35`)
+- New pattern: `TEMPLE_SIRFAWAZZ_OPTIONS` — `TICKER CPSTRIKE DATE [Avg] PRICE [Sl PRICE]`
+- Author: sirfawazz (ID: 961741166146117712)
+
+**3. Sirfawazz compact 0DTE** (`MSFT C405 0.75 0Dte`)
+- New pattern: `TEMPLE_SIRFAWAZZ_OPTIONS_0DTE` — `TICKER CPSTRIKE PRICE NDTE`
+
+**4. ZZ reversed order — strike before CP** (`SPY 724 p daily 1.84`, `SPY 738 c daily`)
+- Existing `temple_zz_options_a` requires `TICKER CP STRIKE daily` (CP before strike)
+- New pattern: `TEMPLE_ZZ_OPTIONS_A_REV` — `TICKER STRIKE CP daily [PRICE]`
+- Also handles price-after-daily and price-absent (market order)
+
+### Files Modified
+- `src/signals/temple_parser.py` — 4 new patterns + 3 new parser functions
+- `src/services/signal_format_registry.py` — 3 new registrations (priority 77-78), 1 pattern fix
+
+### What Already Worked (no changes needed)
+- `QQQ 714C @.60` → temple_options_standard ✓
+- `buy INTC 115C at 3.9 for 6/12` → temple_rf_options ✓ (+ was already optional)
+- `QQQ 715 C 0.60 C` → temple_zz_options_b ✓
+- `QQQ 693 P 1.10-1.20 ( SL 1.00` → temple_tc_options_range ✓
+
+---
+
+## Session: June 14, 2026 — v11.2.19: Fix ⚡│zz Channel Parsing Gaps (Penny Stocks)
+
+### Context
+Gap analysis on `extracted_⚡│zz_20260614_023753.json` (1000 messages). Registry test showed
+304 matched signals and 696 "unmatched." Analysis: 95%+ of unmatched were correctly-rejected
+P&L reports (`SYMBOL LOW-HIGH 🔥`) guarded by the pink_flame check. Found 5 real actionable gaps.
+
+### Gaps Fixed
+
+**1. `In $AZI again 1.90` — "again" modifier + no `$` on price**
+- `TEMPLE_ZZ_STOCK_ENTRY` and registry `temple_zz_stock_entry` pattern extended:
+  - Added optional `(?:again|back|add(?:ing)?)` modifier before price
+  - Made `$` prefix optional (was required)
+
+**2. `CDTG in again with free shares at 3.80` — extra words between modifier and "at"**
+- `TEMPLE_ZZ_PLAIN_ENTRY` and registry `temple_zz_plain_entry` pattern extended:
+  - `(?:(?!\bat\b)\w+\s+){0,4}` allows up to 4 extra words before "at"
+
+**3. `EDHL will enter on 10.90 break for 11.79-16.00` — `on PRICE break` variant**
+- New registry entry `temple_zz_will_enter_on_break` (priority 49)
+- Pattern: `SYMBOL will enter on PRICE break for TARGETS`
+
+**4. `CPOP will ✅ on clear 1.16 break for 1.22-1.77` — ✅ as conditional trigger verb**
+- New registry entry `temple_zz_checkmark_breakout` (priority 49)
+- Pattern: `SYMBOL [will] ✅ [on] [clear] PRICE break [for] TARGETS`
+
+**5. `ZNB will take a clear break of 2.00 for a scalp` — "will take break" without "I"**
+- Existing `temple_zz_i_will_take_break` requires "I will take" — didn't match "will take"
+- New registry entry `temple_zz_will_take_break` (priority 48)
+- Pattern: `SYMBOL will take [a] [clear] break of PRICE [for TARGETS]`
+- Handles both "for a scalp" (no numeric targets) and "for 1.70...1.90"
+
+### Files Modified
+- `src/signals/temple_parser.py` — 2 pattern fixes (STOCK_ENTRY, PLAIN_ENTRY)
+- `src/services/signal_format_registry.py` — 2 pattern fixes, 3 new registrations
+
+### Unmatched signals (correctly ignored — not actionable)
+- All `SYMBOL LOW-HIGH 🔥` — P&L result reports, pink_flame guard correctly rejects
+- `SYMBOL +X% 🔥` — percentage gain reports
+- `SYMBOL all PTs hit 🔥` — target confirmation messages
+- Commentary, swing update ranges, news reactions

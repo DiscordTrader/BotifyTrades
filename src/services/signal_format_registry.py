@@ -1207,6 +1207,8 @@ class SignalFormatRegistry:
             parse_temple_zz_options_a, parse_temple_zz_options_b,
             parse_temple_zz_options_exp, parse_temple_tc_options_range,
             parse_temple_ts_options, parse_temple_options_exit,
+            parse_temple_sirfawazz_options, parse_temple_sirfawazz_options_0dte,
+            parse_temple_zz_options_a_rev,
             parse_temple_zz_breakout, parse_temple_zz_breakout_reverse,
             parse_temple_zz_ticker_price_now,
             parse_temple_zz_sl_update_new,
@@ -1258,11 +1260,11 @@ class SignalFormatRegistry:
 
         self.register(
             name="temple_zz_stock_entry",
-            description="Temple stock entry: In SYMBOL $PRICE",
+            description="Temple stock entry: In SYMBOL [again] $PRICE or In SYMBOL again PRICE",
             priority=77,
-            pattern=r'\b[Ii]n\s+\$?([A-Z]{1,5})\s+(?:\$|avg\s*\$?)(\d+(?:\.\d+)?)',
+            pattern=r'\b[Ii]n\s+\$?([A-Z]{1,5})\s+(?:(?:again|back|add(?:ing)?)\s+)?(?:\$|avg\s*\$?)?(\d+(?:\.\d+)?)',
             parser=parse_temple_zz_stock_entry,
-            examples=["In PLTR $22.50", "In SOFI avg $8.30"],
+            examples=["In PLTR $22.50", "In SOFI avg $8.30", "In $AZI again 1.90"],
             flags=re.IGNORECASE
         )
 
@@ -1437,15 +1439,16 @@ class SignalFormatRegistry:
 
         self.register(
             name="temple_zz_plain_entry",
-            description="ZZ plain text entry: SYMBOL in [again] at PRICE [@Tag]",
+            description="ZZ plain text entry: SYMBOL in [again] [extra words] at PRICE [@Tag]",
             priority=50,
-            pattern=r'^\$?([A-Z]{1,5})\s+in\s+(?:again\s+|back\s+|small\s+)?at\s+\$?(\d+(?:\.\d+)?)\s*(?:@(\w+))?',
+            pattern=r'^\$?([A-Z]{1,5})\s+in\s+(?:(?:again|back|small)\s+)?(?:(?!\bat\b)\w+\s+){0,4}at\s+\$?(\d+(?:\.\d+)?)\s*(?:@(\w+))?',
             parser=parse_temple_zz_plain_entry,
             examples=[
                 "MREO in at 2.50",
                 "NCEL in at 3.80 @Momentum",
                 "YMAT in again at 1.15 @Swing",
                 "SNGX in at 0.95",
+                "CDTG in again with free shares at 3.80",
             ],
             flags=re.IGNORECASE
         )
@@ -1508,6 +1511,26 @@ class SignalFormatRegistry:
         )
 
         self.register(
+            name="temple_zz_will_enter_on_break",
+            description="ZZ will-enter on: SYMBOL will enter on PRICE break for TARGETS",
+            priority=49,
+            pattern=r'^\$?([A-Z]{1,5})\s+will\s+enter\s+on\s+\$?(\d+(?:\.\d+)?)\s+bre?a?k\s+for\s+(.+)',
+            parser=parse_temple_zz_will_enter_break,
+            examples=["EDHL will enter on 10.90 break for 11.79-16.00"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_checkmark_breakout",
+            description="ZZ inline ✅ conditional breakout: SYMBOL will ✅ on clear PRICE break for TARGETS",
+            priority=49,
+            pattern=r'^\$?([A-Z]{1,5})\s+(?:will\s+)?✅\s+(?:on\s+)?(?:clear\s+)?\$?(\d+(?:\.\d+)?)\s+bre?a?k\s+(?:for\s+)?(.+)',
+            parser=parse_temple_zz_will_enter_break,
+            examples=["CPOP will ✅ on clear 1.16 break for 1.22-1.77"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
             name="temple_zz_will_enter_if_breaks",
             description="ZZ will enter if breaks: SYMBOL will enter [only] if [it] breaks PRICE for TARGETS",
             priority=48,
@@ -1563,6 +1586,19 @@ class SignalFormatRegistry:
                 "DRCT I will take 3.67 break",
                 "ABVE I will take clear break of 0.84 for 1.00",
                 "$DARE I will buy if it breaks 2.80 for 3.00+",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_will_take_break",
+            description="ZZ will-take: SYMBOL will take [a] [clear] break of PRICE [for TARGETS]",
+            priority=48,
+            pattern=r'^\$?([A-Z]{1,5})\s+will\s+take\s+(?:a\s+)?(?:clear\s+)?bre?a?k\s+(?:of\s+)?\$?(\d+(?:\.\d+)?)(?:\s+for\s+(.+))?',
+            parser=parse_temple_zz_will_enter_break,
+            examples=[
+                "ZNB will take a clear break of 2.00 for a scalp",
+                "ABCD will take break of 1.50 for 1.70...1.90",
             ],
             flags=re.IGNORECASE
         )
@@ -1714,11 +1750,11 @@ class SignalFormatRegistry:
 
         self.register(
             name="temple_options_standard",
-            description="Temple options standard: TICKER STRIKEc @.PRICE",
+            description="Temple options standard: TICKER[space]STRIKEc @.PRICE (space optional for compact IWM281p @.17)",
             priority=79,
-            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])\s+@\s*\$?(\.?\d+(?:\.\d+)?)',
+            pattern=r'\$?([A-Z]{1,5})\s*(\d+(?:\.\d+)?)\s*([CcPp])\s+@\s*\$?(\.?\d+(?:\.\d+)?)',
             parser=parse_temple_options_standard,
-            examples=["TSLA 350c @.85", "SPY 580 C @1.80", "NVDA 135c @1.20"],
+            examples=["TSLA 350c @.85", "SPY 580 C @1.80", "NVDA 135c @1.20", "IWM281p @.17"],
             flags=re.IGNORECASE
         )
 
@@ -1729,6 +1765,36 @@ class SignalFormatRegistry:
             pattern=r'\b(?:out|sold|cut|SL\s+out)\s+\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])',
             parser=parse_temple_options_exit,
             examples=["out TSLA 350c", "sold SPY 580c 2.50", "SL out QQQ 480p"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_sirfawazz_options",
+            description="Temple sirfawazz options: TICKER CPSTRIKE DATE [Avg] PRICE [Sl PRICE]",
+            priority=77,
+            pattern=r'\$?([A-Z]{1,5})\s+([CcPp])(\d+(?:\.\d+)?)\s+(\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d+\s*[Dd][Tt][Ee])\s+(?:[Aa]vg\s+)?\$?(\.?\d+(?:\.\d+)?)',
+            parser=parse_temple_sirfawazz_options,
+            examples=["INTC C117 12/6 Avg 1.55 Sl 1.35", "AAPL P200 6/20 1.80 SL 1.50"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_sirfawazz_options_0dte",
+            description="Temple sirfawazz compact 0DTE: TICKER CPSTRIKE PRICE 0DTE",
+            priority=77,
+            pattern=r'\$?([A-Z]{1,5})\s+([CcPp])(\d+(?:\.\d+)?)\s+(\.?\d+(?:\.\d+)?)\s+(\d+)\s*[Dd][Tt][Ee]',
+            parser=parse_temple_sirfawazz_options_0dte,
+            examples=["MSFT C405 0.75 0Dte", "SPY P720 1.20 1DTE"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_options_a_rev",
+            description="Temple zz options reversed: TICKER STRIKE CP daily [PRICE]",
+            priority=78,
+            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s+([CcPp])\s+(daily|weekly|\d{1,2}/\d{1,2}(?:/\d{2,4})?)(?:\s+(\.?\d+(?:\.\d+)?))?',
+            parser=parse_temple_zz_options_a_rev,
+            examples=["SPY 724 p daily 1.84", "SPY 738 c daily", "QQQ 710 C 6/12 2.50"],
             flags=re.IGNORECASE
         )
 

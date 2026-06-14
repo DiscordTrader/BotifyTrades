@@ -75,7 +75,7 @@ TEMPLE_ZZ_EMOJI_TARGET = re.compile(
 
 # Natural language entry: "In SYMBOL $PRICE" / "In SYMBOL avg PRICE"
 TEMPLE_ZZ_STOCK_ENTRY = re.compile(
-    r'\b[Ii]n\s+\$?([A-Z]{1,5})\s+(?:\$|avg\s*\$?)(\d+(?:\.\d+)?)',
+    r'\b[Ii]n\s+\$?([A-Z]{1,5})\s+(?:(?:again|back|add(?:ing)?)\s+)?(?:\$|avg\s*\$?)?(\d+(?:\.\d+)?)',
     re.IGNORECASE
 )
 
@@ -180,7 +180,7 @@ TEMPLE_ZZ_INLINE_ROLE_ENTRY_A = re.compile(
 
 # Plain text entry: "SYMBOL in [again/back] at PRICE [@Tag]" (no Discord role mention needed)
 TEMPLE_ZZ_PLAIN_ENTRY = re.compile(
-    r'^\$?([A-Z]{1,5})\s+in\s+(?:again\s+|back\s+|small\s+)?at\s+\$?(\d+(?:\.\d+)?)\s*(?:@(\w+))?',
+    r'^\$?([A-Z]{1,5})\s+in\s+(?:(?:again|back|small)\s+)?(?:(?!\bat\b)\w+\s+){0,4}at\s+\$?(\d+(?:\.\d+)?)\s*(?:@(\w+))?',
     re.IGNORECASE
 )
 TEMPLE_ZZ_INLINE_ROLE_ENTRY_B = re.compile(
@@ -222,16 +222,37 @@ TEMPLE_RF_OPTIONS = re.compile(
 )
 
 # Standard options: "TICKER STRIKEc @.PRICE" or "TICKER STRIKE C @PRICE"
-# e.g. "TSLA 350c @.85" / "SPY 580 C 1.80" / "NVDA 135c @1.20"
+# Also handles compact "IWM281p @.17" (no space between ticker and strike)
+# e.g. "TSLA 350c @.85" / "SPY 580 C 1.80" / "NVDA 135c @1.20" / "IWM281p @.17"
 TEMPLE_OPTIONS_STANDARD = re.compile(
-    r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])\s+@\s*\$?(\.?\d+(?:\.\d+)?)',
+    r'\$?([A-Z]{1,5})\s*(\d+(?:\.\d+)?)\s*([CcPp])\s+@\s*\$?(\.?\d+(?:\.\d+)?)',
     re.IGNORECASE
 )
 
-# traderzz1m options: "SPY P 653 daily" / "SPY 580c 1.80"
-# Two sub-patterns: "TICKER C/P STRIKE [expiry]" or "TICKER STRIKEc/p PRICE"
+# Sirfawazz options: "TICKER CPSTRIKE DATE PRICE SL PRICE"
+# C/P appears directly before the strike with no space, then date, then price
+# e.g. "INTC C117 12/6 Avg 1.55 Sl 1.35" / "MSFT C405 0.75 0Dte"
+TEMPLE_SIRFAWAZZ_OPTIONS = re.compile(
+    r'\$?([A-Z]{1,5})\s+([CcPp])(\d+(?:\.\d+)?)\s+(\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d+\s*[Dd][Tt][Ee])\s+(?:[Aa]vg\s+)?\$?(\.?\d+(?:\.\d+)?)',
+    re.IGNORECASE
+)
+
+# Sirfawazz compact 0DTE: "MSFT C405 0.75 0Dte" (price before DTE)
+TEMPLE_SIRFAWAZZ_OPTIONS_0DTE = re.compile(
+    r'\$?([A-Z]{1,5})\s+([CcPp])(\d+(?:\.\d+)?)\s+(\.?\d+(?:\.\d+)?)\s+(\d+)\s*[Dd][Tt][Ee]',
+    re.IGNORECASE
+)
+
+# traderzz1m options: "SPY P 653 daily" (CP before strike) or "SPY 724 p daily" (strike before CP)
+# Both orderings supported
 TEMPLE_ZZ_OPTIONS_A = re.compile(
     r'\$?([A-Z]{1,5})\s+([CcPp])\s+(\d+(?:\.\d+)?)\s+(daily|weekly|\d{1,2}/\d{1,2}(?:/\d{2,4})?)',
+    re.IGNORECASE
+)
+
+# ZZ reversed: "SPY 724 p daily [PRICE]" — strike before CP (opposite of OPTIONS_A)
+TEMPLE_ZZ_OPTIONS_A_REV = re.compile(
+    r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s+([CcPp])\s+(daily|weekly|\d{1,2}/\d{1,2}(?:/\d{2,4})?)(?:\s+(\.?\d+(?:\.\d+)?))?',
     re.IGNORECASE
 )
 TEMPLE_ZZ_OPTIONS_B = re.compile(
@@ -696,6 +717,102 @@ def parse_temple_zz_sl_update_move(match: re.Match, text: str) -> Optional[Dict[
         "confidence": 0.95,
         "is_sl_update": True,
         "_temple_sl_update": True,
+    }
+
+
+def parse_temple_sirfawazz_options(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse sirfawazz 'INTC C117 12/6 Avg 1.55 Sl 1.35' — CP before strike, then date, then price."""
+    groups = match.groups()
+    symbol = groups[0].upper()
+    opt_type = groups[1].upper()
+    strike = float(groups[2])
+    expiry = normalize_expiry_iso(groups[3])
+    price = float(groups[4])
+
+    sl = None
+    sl_match = re.search(r'\bSl?\b\s+\$?(\.?\d+(?:\.\d+)?)', text, re.IGNORECASE)
+    if sl_match:
+        sl = float(sl_match.group(1))
+
+    result = {
+        "asset": "option",
+        "action": "BTO",
+        "qty": 1,
+        "qty_specified": False,
+        "symbol": symbol,
+        "strike": strike,
+        "opt_type": opt_type,
+        "expiry": expiry,
+        "price": price,
+        "is_market_order": False,
+        "confidence": 1.0,
+        "_temple_sirfawazz_entry": True,
+    }
+    if sl is not None:
+        result["stop_loss"] = sl
+    return result
+
+
+def parse_temple_sirfawazz_options_0dte(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse sirfawazz compact 0DTE: 'MSFT C405 0.75 0Dte'."""
+    groups = match.groups()
+    symbol = groups[0].upper()
+    opt_type = groups[1].upper()
+    strike = float(groups[2])
+    price = float(groups[3])
+    dte_days = int(groups[4])
+    expiry = normalize_expiry_iso(f"{dte_days}DTE")
+
+    return {
+        "asset": "option",
+        "action": "BTO",
+        "qty": 1,
+        "qty_specified": False,
+        "symbol": symbol,
+        "strike": strike,
+        "opt_type": opt_type,
+        "expiry": expiry,
+        "price": price,
+        "is_market_order": False,
+        "confidence": 1.0,
+        "_temple_sirfawazz_entry": True,
+        "_expiry_defaulted": False,
+    }
+
+
+def parse_temple_zz_options_a_rev(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse ZZ reversed 'SPY 724 p daily [1.84]' — strike before CP, optional price."""
+    groups = match.groups()
+    symbol = groups[0].upper()
+    strike = float(groups[1])
+    opt_type = groups[2].upper()
+    expiry_raw = groups[3].lower()
+    price_str = groups[4] if len(groups) > 4 else None
+
+    if expiry_raw in ('daily', 'weekly'):
+        expiry = normalize_expiry_iso(expiry_raw)
+        expiry_defaulted = True
+    else:
+        expiry = normalize_expiry_iso(groups[3])
+        expiry_defaulted = False
+
+    price = float(price_str) if price_str else None
+
+    return {
+        "asset": "option",
+        "action": "BTO",
+        "qty": 1,
+        "qty_specified": False,
+        "symbol": symbol,
+        "strike": strike,
+        "opt_type": opt_type,
+        "expiry": expiry,
+        "price": price,
+        "is_market_order": price is None,
+        "confidence": 0.9,
+        "_temple_zz_options_entry": True,
+        "_expiry_hint": expiry_raw,
+        "_expiry_defaulted": expiry_defaulted,
     }
 
 
