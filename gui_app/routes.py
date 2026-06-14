@@ -6215,6 +6215,10 @@ def register_routes(app):
             'robinhood': 'robinhood',
             'schwab': 'schwab',
             'ibkr': 'ibkr',
+            'ibkrlive': 'ibkr',
+            'ibkr_live': 'ibkr',
+            'ibkrpaper': 'ibkr',
+            'ibkr_paper': 'ibkr',
             'tastytrade': 'tastytrade',
             'trading212': 'trading212',
         }
@@ -8015,6 +8019,19 @@ def register_routes(app):
                                 webull_orders = wb.get_current_orders() or []
                 except Exception as e:
                     print(f"[API] Webull orders fetch error: {e}")
+
+            ibkr_pending_orders = []
+            if not broker_filter_upper or 'IBKR' in broker_filter_upper:
+                try:
+                    ibkr_broker = getattr(_bot_instance, 'ibkr_broker', None)
+                    if ibkr_broker and getattr(ibkr_broker, 'ib', None) and ibkr_broker.ib.isConnected():
+                        future = asyncio.run_coroutine_threadsafe(
+                            ibkr_broker.get_pending_orders(),
+                            _bot_instance.loop
+                        )
+                        ibkr_pending_orders = future.result(timeout=10) or []
+                except Exception as e:
+                    print(f"[API] IBKR pending orders fetch error: {e}")
             
             # Create order_id -> status mapping for quick lookup
             order_status_map = {order.get('order_id', ''): order.get('status', '') for order in webull_orders if order.get('order_id')}
@@ -8212,6 +8229,48 @@ def register_routes(app):
                             'stop_loss_pct': channel_info.get('stop_loss_pct', 10) if channel_info else 10
                         })
             
+            # Add IBKR broker-native pending orders (not in DB — e.g. GUI-submitted close orders)
+            if ibkr_pending_orders and (not status_filter or status_filter == 'PENDING'):
+                ibkr_broker_inst = getattr(_bot_instance, 'ibkr_broker', None)
+                ibkr_broker_label = 'IBKR_LIVE'
+                if ibkr_broker_inst and getattr(ibkr_broker_inst, 'paper_trade', False):
+                    ibkr_broker_label = 'IBKR_PAPER'
+                existing_ids = {str(t.get('order_id', '')) for t in merged if t.get('order_id')}
+                for ibkr_ord in ibkr_pending_orders:
+                    oid = str(ibkr_ord.get('order_id', ''))
+                    if oid in existing_ids:
+                        continue
+                    action = ibkr_ord.get('action', '').upper()
+                    side = 'STC' if action == 'SELL' else 'BTO'
+                    lmt = ibkr_ord.get('limit_price')
+                    stp = ibkr_ord.get('stop_price')
+                    entry_price = lmt or stp or 0.0
+                    merged.append({
+                        'id': f'ibkr_pending_{oid}',
+                        'order_id': oid,
+                        'symbol': ibkr_ord.get('symbol', ''),
+                        'asset_type': ibkr_ord.get('asset_type', 'stock'),
+                        'side': side,
+                        'direction': side,
+                        'quantity': ibkr_ord.get('quantity', 0),
+                        'remaining_qty': ibkr_ord.get('quantity', 0),
+                        'original_qty': ibkr_ord.get('quantity', 0),
+                        'entry_price': entry_price,
+                        'current_price': 0.0,
+                        'pnl': 0.0,
+                        'pnl_percent': 0.0,
+                        'broker': ibkr_broker_label,
+                        'status': 'PENDING',
+                        'display_status': ibkr_ord.get('status', 'PENDING'),
+                        'fill_status': ibkr_ord.get('status', 'PENDING'),
+                        'order_type': ibkr_ord.get('order_type', ''),
+                        'oca_group': ibkr_ord.get('oca_group', ''),
+                        'source': 'ibkr_broker',
+                        'source_display': {'name': 'IBKR', 'color': 'dark', 'icon': '🏦', 'full_name': 'IBKR Broker Order'},
+                        'channel_name': 'Global',
+                        'channel_id': None,
+                    })
+
             # Add live positions not tracked by bot (all brokers)
             for pos in live_positions:
                 direction = pos.get('direction') or pos.get('call_put') or ''
