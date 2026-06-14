@@ -156,12 +156,15 @@ def start_gui_server(host='0.0.0.0', port=None):
     app = create_app()
 
     def run():
+        import logging
+        logging.info(f"[GUI] Starting Flask on http://{host}:{port}")
         print(f"[GUI] Starting web control panel on http://{host}:{port}")
-        print(f"[GUI] Open your browser to access the control panel")
         app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
 
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
-    print(f"[GUI] Web server thread started")
+    import logging
+    logging.info(f"[GUI] Web server thread started on port {port}")
+    print(f"[GUI] Web server thread started on port {port}")
 
     return thread, port

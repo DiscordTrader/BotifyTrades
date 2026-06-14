@@ -12200,6 +12200,36 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as kc_err:
                 print(f"[KC-TRADES] ⚠️ Parse error: {kc_err}")
 
+        namrood_signals = []
+        is_namrood = False
+        if hasattr(message, 'embeds') and message.embeds:
+            try:
+                from src.signals.namrood_parser import is_namrood_embed, parse_namrood_embed, NAMROOD_AUTHOR_ID
+                embeds_as_dicts_nr = [{'title': e.title, 'description': e.description} for e in message.embeds if (e.title or e.description)]
+                if is_namrood_embed(message.author.id, embeds_as_dicts_nr):
+                    nr_parsed = parse_namrood_embed(embeds_as_dicts_nr)
+                    if nr_parsed:
+                        namrood_signals = nr_parsed
+                        is_namrood = True
+                        print(f"[NAMROOD] ✓ Detected {len(nr_parsed)} signal(s) from embed (author={message.author.id})")
+            except Exception as nr_err:
+                print(f"[NAMROOD] ⚠️ Parse error: {nr_err}")
+
+        jpm_signals = []
+        is_jpm = False
+        if hasattr(message, 'embeds') and message.embeds:
+            try:
+                from src.signals.jpm_investments_parser import is_jpm_investments_embed, parse_jpm_investments_embed, JPM_AUTHOR_ID
+                embeds_as_dicts_jpm = [{'title': e.title, 'description': e.description} for e in message.embeds if (e.title or e.description)]
+                if is_jpm_investments_embed(message.author.id, embeds_as_dicts_jpm):
+                    jpm_parsed = parse_jpm_investments_embed(embeds_as_dicts_jpm)
+                    if jpm_parsed:
+                        jpm_signals = jpm_parsed
+                        is_jpm = True
+                        print(f"[JPM] ✓ Detected {len(jpm_parsed)} signal(s) from embed (author={message.author.id})")
+            except Exception as jpm_err:
+                print(f"[JPM] ⚠️ Parse error: {jpm_err}")
+
         equity_genie_entries = []
         equity_genie_exits = []
         if hasattr(message, 'embeds') and message.embeds:
@@ -12454,8 +12484,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception:
                     pass
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman or is_kc_trades or is_phoenix_registry or is_protrader_conditional:
-                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed}, sir_goldman={is_sir_goldman}, phoenix_registry={is_phoenix_registry}, protrader_cond={is_protrader_conditional})")
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman or is_kc_trades or is_jpm or is_namrood or is_phoenix_registry or is_protrader_conditional:
+                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed}, sir_goldman={is_sir_goldman}, kc_trades={is_kc_trades}, jpm={is_jpm}, namrood={is_namrood}, phoenix_registry={is_phoenix_registry}, protrader_cond={is_protrader_conditional})")
                     
                     # === SIGNAL ROUTING ENGINE: Forward BTO via routing engine (creates position for risk monitoring) ===
                     if is_signal_routing_source and signal_routing_config and signal_routing_config.enable_forwarding:
@@ -12567,6 +12597,79 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     except Exception as e:
                                         print(f"[KC-TRADES] ⚠️ Multi-signal routing error (idx={kc_idx}): {e}")
                             print(f"[KC-TRADES] ✓ Converted {len(kc_trades_signals)} signal(s) to routing format")
+                        elif is_jpm and jpm_signals:
+                            first_jpm = jpm_signals[0]
+                            if first_jpm.get('action') == 'STC' and not first_jpm.get('strike'):
+                                try:
+                                    from gui_app.database import get_connection
+                                    conn = get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute('''
+                                        SELECT symbol, strike, call_put, expiry
+                                        FROM trades
+                                        WHERE channel_id = ? AND symbol = ?
+                                        AND direction = 'BTO'
+                                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                                        ORDER BY created_at DESC LIMIT 1
+                                    ''', (str(message.channel.id), first_jpm.get('symbol', '')))
+                                    open_pos = cursor.fetchone()
+                                    if open_pos:
+                                        first_jpm['strike'] = first_jpm.get('strike') or open_pos['strike'] or 0
+                                        first_jpm['opt_type'] = first_jpm.get('opt_type') or open_pos['call_put'] or 'C'
+                                        first_jpm['expiry'] = first_jpm.get('expiry') or open_pos['expiry'] or ''
+                                except Exception:
+                                    pass
+                            routing_parsed = {
+                                'action': first_jpm.get('action', 'BTO'),
+                                'symbol': first_jpm.get('symbol', ''),
+                                'strike': first_jpm.get('strike', 0) or 0,
+                                'opt_type': first_jpm.get('opt_type', 'C') or 'C',
+                                'expiry': first_jpm.get('expiry', '') or '',
+                                'price': first_jpm.get('price', 0),
+                                'qty': 1,
+                                'is_trim': False,
+                                'is_full_exit': first_jpm.get('is_full_exit', False),
+                                'asset': 'option',
+                            }
+                            print(f"[JPM] ✓ Converted to routing format: {routing_parsed}")
+                        elif is_namrood and namrood_signals:
+                            first_nr = namrood_signals[0]
+                            nr_sym = first_nr.get('symbol', '') or ''
+                            nr_strike = first_nr.get('strike') or 0
+                            nr_opt = first_nr.get('opt_type', 'C') or 'C'
+                            nr_exp = first_nr.get('expiry', '') or ''
+                            if first_nr.get('_stc_freeform') or (first_nr.get('action') == 'STC' and not nr_strike):
+                                try:
+                                    from gui_app.database import get_connection
+                                    conn = get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute('''
+                                        SELECT symbol, strike, call_put, expiry FROM trades
+                                        WHERE channel_id = ? AND direction = 'BTO'
+                                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                                        ORDER BY created_at DESC LIMIT 1
+                                    ''', (str(message.channel.id),))
+                                    open_pos = cursor.fetchone()
+                                    if open_pos:
+                                        nr_sym = nr_sym or open_pos['symbol'] or ''
+                                        nr_strike = nr_strike or open_pos['strike'] or 0
+                                        nr_opt = nr_opt or open_pos['call_put'] or 'C'
+                                        nr_exp = nr_exp or open_pos['expiry'] or ''
+                                except Exception:
+                                    pass
+                            routing_parsed = {
+                                'action': first_nr.get('action', 'BTO'),
+                                'symbol': nr_sym,
+                                'strike': nr_strike,
+                                'opt_type': nr_opt,
+                                'expiry': nr_exp,
+                                'price': first_nr.get('price', 0),
+                                'qty': 1,
+                                'is_trim': first_nr.get('is_trim', False),
+                                'is_full_exit': first_nr.get('is_full_exit', False),
+                                'asset': 'option',
+                            }
+                            print(f"[NAMROOD] ✓ Converted to routing format: {routing_parsed}")
                         elif is_bishop:
                             routing_parsed = parse_bishop_signal(combined_content)
                         elif is_evapanda:
@@ -12877,6 +12980,36 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     fwd_parts.append(f"{kc_action} {kc_sym} {price_part}")
                             forward_msg = "\n".join(fwd_parts)
                             print(f"[CHANNEL MAP] ✓ Formatted KC Trades ({len(fwd_parts)} signals): {forward_msg}")
+                        elif is_jpm and jpm_signals:
+                            print(f"[DEBUG] Taking JPM path", flush=True)
+                            jpm_fwd = jpm_signals[0]
+                            jpm_action = jpm_fwd.get('action', 'BTO')
+                            jpm_sym = jpm_fwd.get('symbol', '')
+                            jpm_str = jpm_fwd.get('strike', '')
+                            jpm_ot = jpm_fwd.get('opt_type', 'C') or 'C'
+                            jpm_exp = jpm_fwd.get('expiry', '')
+                            jpm_pr = jpm_fwd.get('price')
+                            price_part = f"@ {jpm_pr}" if jpm_pr else "@ m"
+                            if jpm_str:
+                                forward_msg = f"{jpm_action} {jpm_sym} {jpm_str}{jpm_ot} {jpm_exp} {price_part}"
+                            else:
+                                forward_msg = f"{jpm_action} {jpm_sym} {price_part}"
+                            print(f"[CHANNEL MAP] ✓ Formatted JPM: {forward_msg}")
+                        elif is_namrood and namrood_signals:
+                            print(f"[DEBUG] Taking NAMROOD path", flush=True)
+                            nr_fwd = namrood_signals[0]
+                            nr_action = nr_fwd.get('action', 'BTO')
+                            nr_sym = nr_fwd.get('symbol', '') or ''
+                            nr_str = nr_fwd.get('strike', '') or ''
+                            nr_ot = nr_fwd.get('opt_type', 'C') or 'C'
+                            nr_exp = nr_fwd.get('expiry', '') or ''
+                            nr_pr = nr_fwd.get('price')
+                            price_part = f"@ {nr_pr}" if nr_pr else "@ m"
+                            if nr_str:
+                                forward_msg = f"{nr_action} {nr_sym} {nr_str}{nr_ot} {nr_exp} {price_part}"
+                            else:
+                                forward_msg = f"{nr_action} {nr_sym} {price_part}"
+                            print(f"[CHANNEL MAP] ✓ Formatted Namrood: {forward_msg}")
                         elif is_sir_goldman and sir_goldman_parsed:
                             print(f"[DEBUG] Taking SIR_GOLDMAN path", flush=True)
                             from src.signals.sir_goldman_parser import format_forwarding_message
@@ -13152,6 +13285,91 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'asset_type': 'option'
                             }
                             print(f"[PNL TRACK] KC Trades parsed: {parsed_signal} (partial={is_partial})")
+                        elif is_jpm and jpm_signals:
+                            first_jpm = jpm_signals[0]
+                            is_exit = first_jpm.get('is_exit', False)
+                            jpm_sym = first_jpm.get('symbol', '')
+                            jpm_strike = first_jpm.get('strike')
+                            jpm_opt_type = first_jpm.get('opt_type', 'C') or 'C'
+                            jpm_expiry = first_jpm.get('expiry', '')
+                            if is_exit and not jpm_strike:
+                                try:
+                                    from gui_app.database import get_connection
+                                    conn = get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute('''
+                                        SELECT symbol, strike, call_put, expiry
+                                        FROM trades
+                                        WHERE channel_id = ? AND symbol = ?
+                                        AND direction = 'BTO'
+                                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                                        ORDER BY created_at DESC LIMIT 1
+                                    ''', (str(channel_id), jpm_sym))
+                                    open_pos = cursor.fetchone()
+                                    if open_pos:
+                                        jpm_strike = jpm_strike or open_pos['strike']
+                                        jpm_opt_type = open_pos['call_put'] or jpm_opt_type
+                                        jpm_expiry = open_pos['expiry'] or jpm_expiry
+                                        print(f"[JPM] ✓ Resolved EXIT to open position: {jpm_sym} ${jpm_strike}{jpm_opt_type} {jpm_expiry}")
+                                    else:
+                                        print(f"[JPM] ⚠️ No open position found for EXIT signal: {jpm_sym}")
+                                except Exception as e:
+                                    print(f"[JPM] ⚠️ Error looking up open position: {e}")
+                            parsed_signal = {
+                                'symbol': jpm_sym,
+                                'strike': jpm_strike,
+                                'opt_type': jpm_opt_type,
+                                'expiry': jpm_expiry,
+                                'price': first_jpm.get('price'),
+                                'qty': 1,
+                                'is_exit': is_exit,
+                                'is_partial': False,
+                                'is_market_order': False,
+                                'asset_type': 'option'
+                            }
+                            print(f"[PNL TRACK] JPM parsed: {parsed_signal}")
+                        elif is_namrood and namrood_signals:
+                            first_nr = namrood_signals[0]
+                            is_exit = first_nr.get('is_exit', False)
+                            nr_sym = first_nr.get('symbol', '')
+                            nr_strike = first_nr.get('strike')
+                            nr_opt_type = first_nr.get('opt_type', 'C') or 'C'
+                            nr_expiry = first_nr.get('expiry', '')
+                            if is_exit and (not nr_sym or not nr_strike) and first_nr.get('_stc_freeform'):
+                                try:
+                                    from gui_app.database import get_connection
+                                    conn = get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute('''
+                                        SELECT symbol, strike, call_put, expiry FROM trades
+                                        WHERE channel_id = ? AND direction = 'BTO'
+                                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                                        ORDER BY created_at DESC LIMIT 1
+                                    ''', (str(channel_id),))
+                                    open_pos = cursor.fetchone()
+                                    if open_pos:
+                                        nr_sym = nr_sym or open_pos['symbol']
+                                        nr_strike = nr_strike or open_pos['strike']
+                                        nr_opt_type = open_pos['call_put'] or nr_opt_type
+                                        nr_expiry = open_pos['expiry'] or nr_expiry
+                                        print(f"[NAMROOD] ✓ Resolved freeform STC to open position: {nr_sym} ${nr_strike}{nr_opt_type} {nr_expiry}")
+                                    else:
+                                        print(f"[NAMROOD] ⚠️ No open position found for freeform STC")
+                                except Exception as e:
+                                    print(f"[NAMROOD] ⚠️ Error looking up open position: {e}")
+                            parsed_signal = {
+                                'symbol': nr_sym,
+                                'strike': nr_strike,
+                                'opt_type': nr_opt_type,
+                                'expiry': nr_expiry,
+                                'price': first_nr.get('price'),
+                                'qty': 1,
+                                'is_exit': is_exit,
+                                'is_partial': first_nr.get('is_trim', False),
+                                'is_market_order': False,
+                                'asset_type': 'option'
+                            }
+                            print(f"[PNL TRACK] Namrood parsed: {parsed_signal}")
                         elif is_sir_goldman and sir_goldman_parsed:
                             is_exit = sir_goldman_parsed.action == 'STC'
                             is_partial = sir_goldman_parsed.signal_type.value == 'TRIM'
@@ -14947,6 +15165,103 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 }
                 _ab_fmt = _ab.get('_format_name', 'abtrades')
                 print(f"[ABTRADES] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ {opt['price']} ({_ab_fmt})")
+            elif is_jpm and jpm_signals:
+                _jpm = jpm_signals[0]
+                _jpm_sym = _jpm.get('symbol', '')
+                _jpm_strike = _jpm.get('strike') or 0
+                _jpm_opt = _jpm.get('opt_type', 'C') or 'C'
+                _jpm_exp = _jpm.get('expiry', '') or ''
+                # For freeform close (all-out) with no strike/expiry, look up open position
+                if _jpm.get('_all_out') or (not _jpm_strike and _jpm.get('action') == 'STC'):
+                    try:
+                        _jpm_pos = get_open_position_for_symbol(_jpm_sym, str(message.channel.id))
+                        if _jpm_pos:
+                            _jpm_strike = _jpm_pos.get('strike') or _jpm_strike
+                            _jpm_opt = _jpm_pos.get('call_put') or _jpm_pos.get('opt_type') or _jpm_opt
+                            _jpm_exp = _jpm_pos.get('expiry') or _jpm_exp
+                    except Exception:
+                        pass
+                opt = {
+                    'action': _jpm.get('action', 'BTO'),
+                    'symbol': _jpm_sym,
+                    'strike': _jpm_strike,
+                    'opt_type': _jpm_opt,
+                    'expiry': _jpm_exp,
+                    'price': _jpm.get('price'),
+                    'qty': 1,
+                    'asset': 'option',
+                    'is_market_order': _jpm.get('action') == 'STC' and not _jpm.get('price'),
+                    'is_full_exit': _jpm.get('is_full_exit', False),
+                    'stop_loss': _jpm.get('stop_loss'),
+                    '_jpm': True,
+                }
+                print(f"[JPM] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ {opt['price']}")
+            elif is_kc_trades and kc_trades_signals:
+                _kc = kc_trades_signals[0]
+                _kc_sym = _kc.get('symbol', '')
+                _kc_strike = _kc.get('strike') or 0
+                _kc_opt = _kc.get('opt_type', 'C') or 'C'
+                _kc_exp = _kc.get('expiry', '') or ''
+                if _kc.get('is_exit') and not _kc_strike:
+                    try:
+                        _kc_pos = get_open_position_for_symbol(_kc_sym, str(message.channel.id))
+                        if _kc_pos:
+                            _kc_strike = _kc_pos.get('strike') or _kc_strike
+                            _kc_opt = _kc_pos.get('call_put') or _kc_pos.get('opt_type') or _kc_opt
+                            _kc_exp = _kc_pos.get('expiry') or _kc_exp
+                    except Exception:
+                        pass
+                opt = {
+                    'action': _kc.get('action', 'BTO'),
+                    'symbol': _kc_sym,
+                    'strike': _kc_strike,
+                    'opt_type': _kc_opt,
+                    'expiry': _kc_exp,
+                    'price': _kc.get('price'),
+                    'qty': 1,
+                    'asset': 'option',
+                    'is_market_order': False,
+                    'is_trim': _kc.get('is_trim', False),
+                    'is_full_exit': _kc.get('is_full_exit', False),
+                    '_kc_trades': True,
+                }
+                print(f"[KC-TRADES] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ {opt['price']}")
+            elif is_namrood and namrood_signals:
+                _nr = namrood_signals[0]
+                _nr_sym = _nr.get('symbol') or ''
+                _nr_strike = _nr.get('strike') or 0
+                _nr_opt = _nr.get('opt_type', 'C') or 'C'
+                _nr_exp = _nr.get('expiry', '') or ''
+                # Freeform STC — look up open position
+                if _nr.get('_stc_freeform') or (_nr.get('action') == 'STC' and not _nr_strike):
+                    try:
+                        _nr_pos = get_open_position_for_symbol(_nr_sym or '', str(message.channel.id)) if _nr_sym else None
+                        if not _nr_pos:
+                            # No symbol — grab most recent open position in channel
+                            _nr_pos = get_open_position_for_symbol('', str(message.channel.id))
+                        if _nr_pos:
+                            _nr_sym = _nr_sym or _nr_pos.get('symbol', '')
+                            _nr_strike = _nr_strike or _nr_pos.get('strike') or 0
+                            _nr_opt = _nr_opt or _nr_pos.get('call_put') or 'C'
+                            _nr_exp = _nr_exp or _nr_pos.get('expiry') or ''
+                    except Exception:
+                        pass
+                opt = {
+                    'action': _nr.get('action', 'BTO'),
+                    'symbol': _nr_sym,
+                    'strike': _nr_strike,
+                    'opt_type': _nr_opt,
+                    'expiry': _nr_exp,
+                    'price': _nr.get('price'),
+                    'qty': 1,
+                    'asset': 'option',
+                    'is_market_order': _nr.get('action') == 'STC' and not _nr.get('price'),
+                    'is_trim': _nr.get('is_trim', False),
+                    'is_full_exit': _nr.get('is_full_exit', False),
+                    '_namrood': True,
+                    '_lotto': _nr.get('_lotto', False),
+                }
+                print(f"[NAMROOD] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ {opt['price']}")
             else:
                 opt = parse_option_signal(normalized_content)
         
@@ -22074,6 +22389,7 @@ _discord_shutdown_event = None
 _discord_error_queue = None
 _startup_in_progress = False  # Guard against duplicate startup calls
 _discord_thread_started = False  # Prevent multiple Discord threads
+_gui_auto_browser_done = False  # Dedup: tray mode sets this before its own open so CLI delayed-open skips
 
 def run_discord_bot_thread():
     """
@@ -22404,6 +22720,31 @@ def _run_bot_startup_inner(progress_callback=None):
         gui_port = get_gui_port()
         gui_thread, gui_port = start_gui_server()
         _original_print(f"[GUI] ✓ Web control panel started on port {gui_port}")
+        logging.info(f"[GUI] Web control panel: http://localhost:{gui_port}")
+
+        def _cli_auto_open_browser(port):
+            import time, subprocess, webbrowser
+            global _gui_auto_browser_done
+            time.sleep(2.0)
+            if _gui_auto_browser_done:
+                return
+            _gui_auto_browser_done = True
+            url = f"http://localhost:{port}"
+            _original_print(f"[GUI] Opening browser: {url}")
+            logging.info(f"[GUI] Opening browser: {url}")
+            try:
+                if sys.platform == 'win32':
+                    subprocess.Popen(['cmd', '/c', 'start', '', url], shell=False,
+                                     creationflags=0x08000000)
+                elif sys.platform == 'darwin':
+                    subprocess.Popen(['open', url])
+                else:
+                    subprocess.Popen(['xdg-open', url])
+            except Exception:
+                webbrowser.open(url)
+
+        threading.Thread(target=_cli_auto_open_browser, args=(gui_port,), daemon=True,
+                         name="GUIAutoBrowser").start()
     except Exception as e:
         _original_print(f"[GUI] ⚠️  Failed to start web GUI: {e}")
         _original_print("[GUI] Bot will continue without web interface")
@@ -22925,6 +23266,8 @@ Environment Variables:
                         
                         import webbrowser
                         import subprocess
+                        global _gui_auto_browser_done
+                        _gui_auto_browser_done = True  # Prevent CLI delayed-open from firing too
                         _gui_port = startup_state.get('gui_port') or 5000
                         url = f"http://localhost:{_gui_port}"
                         _original_print(f"[GUI] Opening control panel in browser: {url}")
