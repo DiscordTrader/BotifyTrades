@@ -81,14 +81,25 @@ def create_app():
     
     # Import database and config services
     from . import database
-    from . import config_service
-    from . import webhook_service
-    
+    try:
+        from . import config_service  # requires cryptography — may fail on mismatched OpenSSL builds
+    except Exception as _cs_err:
+        import logging
+        logging.warning(f"[FLASK] config_service unavailable (cryptography error): {_cs_err}")
+        logging.warning("[FLASK] Settings encryption disabled — GUI will still start")
+    try:
+        from . import webhook_service
+    except Exception as _ws_err:
+        import logging
+        logging.warning(f"[FLASK] webhook_service unavailable: {_ws_err}")
+        webhook_service = None
+
     # Initialize database
     database.init_db()
-    
+
     # Initialize webhook tables (uses same database)
-    webhook_service.init_webhook_tables()
+    if webhook_service is not None:
+        webhook_service.init_webhook_tables()
     
     # Register routes
     from . import routes
