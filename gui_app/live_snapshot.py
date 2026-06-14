@@ -44,6 +44,7 @@ _BROKER_INTERVALS = {
     'IBKR': 5,
     'TASTYTRADE': 5,
     'TRADING212': 6,
+    'WEBULL_OFFICIAL': 6,
 }
 _broker_last_fetch: Dict[str, float] = {}
 _broker_last_fetch_lock = threading.Lock()
@@ -826,6 +827,87 @@ def _convert_t212_raw(raw: list) -> List[Dict]:
     return positions
 
 
+_wo_cache: List[Dict] = []
+_wo_cache_ts: float = 0.0
+_wo_cache_lock = threading.Lock()
+
+
+def _fetch_webull_official(bot) -> List[Dict]:
+    global _wo_cache, _wo_cache_ts
+    try:
+        wo_broker = getattr(bot, 'webull_official_broker', None)
+        if not wo_broker:
+            wo_broker = getattr(getattr(bot, 'broker_manager', None), 'webull_official_broker', None)
+
+        if not wo_broker or not getattr(wo_broker, 'connected', False):
+            with _wo_cache_lock:
+                if _wo_cache and (time.time() - _wo_cache_ts) < 30:
+                    return list(_wo_cache)
+            return []
+
+        if not hasattr(bot, 'loop') or bot.loop is None or bot.loop.is_closed():
+            with _wo_cache_lock:
+                if _wo_cache and (time.time() - _wo_cache_ts) < 30:
+                    return list(_wo_cache)
+            return []
+
+        future = asyncio.run_coroutine_threadsafe(
+            wo_broker.get_positions(max_age_seconds=10),
+            bot.loop
+        )
+        raw = future.result(timeout=10) or []
+
+        broker_label = 'WEBULL_OFFICIAL_LIVE' if not getattr(wo_broker, 'paper_trade', True) else 'WEBULL_OFFICIAL_PAPER'
+        positions = []
+        for idx, pos in enumerate(raw):
+            sym = str(pos.get('symbol', '') or '').strip()
+            if not sym:
+                continue
+            qty = float(pos.get('quantity', 0) or 0)
+            if qty == 0:
+                continue
+            avg_cost = float(pos.get('avg_cost', 0) or 0)
+            cur_price = float(pos.get('current_price', 0) or 0)
+            unrealized = float(pos.get('unrealized_pl', 0) or 0)
+            pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
+            asset = pos.get('asset', 'stock')
+            is_option = asset == 'option'
+            ot = (pos.get('option_type') or '').upper()
+            call_put = 'C' if 'CALL' in ot else ('P' if 'PUT' in ot else '')
+            strike = float(pos.get('strike_price') or 0) or None
+            expiry = pos.get('expiry_date')
+            pos_id = f"WO_{sym}_{idx}" if not is_option else f"WO_{sym}_{strike}_{expiry}_{call_put}"
+
+            positions.append(_make_position(
+                pos_id=pos_id,
+                symbol=sym,
+                asset_type='option' if is_option else 'stock',
+                strike=strike,
+                expiry=expiry,
+                call_put=call_put,
+                quantity=qty,
+                entry_price=avg_cost,
+                current_price=cur_price,
+                last=cur_price,
+                unrealized_pnl=unrealized,
+                pnl_pct=pnl_pct,
+                broker=broker_label,
+                source='live_brokerage',
+            ))
+
+        with _wo_cache_lock:
+            _wo_cache = positions
+            _wo_cache_ts = time.time()
+        return positions
+    except Exception as e:
+        err_msg = str(e).strip() if str(e).strip() else type(e).__name__
+        _log(f"Webull Official fetch error: {err_msg}")
+        with _wo_cache_lock:
+            if _wo_cache and (time.time() - _wo_cache_ts) < 30:
+                return list(_wo_cache)
+        return []
+
+
 def _normalize_strike(val):
     if val is None or val == '':
         return ''
@@ -1168,6 +1250,7 @@ def _refresh_snapshot(bot_instance, force_all: bool = False):
             'IBKR': (_fetch_ibkr, bot_instance),
             'TASTYTRADE': (_fetch_tastytrade, bot_instance),
             'TRADING212': (_fetch_trading212, bot_instance),
+            'WEBULL_OFFICIAL': (_fetch_webull_official, bot_instance),
         }
 
         now = time.time()
