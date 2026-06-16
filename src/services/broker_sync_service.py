@@ -434,18 +434,15 @@ class BrokerSyncService:
         
         normalized_data = await self._fetch_and_normalize(broker_name, broker_instance)
         await asyncio.sleep(0)
-        
+
         if not normalized_data:
             print(f"[SYNC] No data from {broker_name}")
             return
-        
-        await self._reconcile_trades(broker_name, normalized_data, broker_instance=broker_instance)
-        await asyncio.sleep(0)
-        
+
         if not hasattr(self, '_fill_sync_counter'):
             self._fill_sync_counter = {}
         self._fill_sync_counter[broker_name] = self._fill_sync_counter.get(broker_name, 0) + 1
-        
+
         has_positions = bool(normalized_data.get('positions'))
         has_db_trades = False
         has_pending_trades = False
@@ -458,6 +455,7 @@ class BrokerSyncService:
         except Exception:
             has_db_trades = True
 
+        # Sync fills BEFORE reconcile so exit fill prices are available when close is detected
         fill_sync_interval = 1 if (has_pending_trades or has_positions) else 5
         if self._fill_sync_counter[broker_name] >= fill_sync_interval and (has_positions or has_db_trades):
             await self._sync_filled_orders(broker_name, broker_instance)
@@ -465,6 +463,9 @@ class BrokerSyncService:
             await asyncio.sleep(0)
         elif self._fill_sync_counter[broker_name] >= 5:
             self._fill_sync_counter[broker_name] = 0
+
+        await self._reconcile_trades(broker_name, normalized_data, broker_instance=broker_instance)
+        await asyncio.sleep(0)
         
         if hasattr(self, '_risk_manager') and self._risk_manager:
             await self.reconcile_bracket_orders(self._risk_manager)
@@ -2136,22 +2137,24 @@ class BrokerSyncService:
                             except Exception as fill_lookup_err:
                                 print(f"[SYNC] ⚠️ Execution closure lookup: {fill_lookup_err}")
 
-                        # Priority 4: Check filled_orders by order_id
+                        # Priority 4: Check filled_orders linked by trade_id
                         if exit_price_source == 'last_sync':
                             try:
-                                _stc_order_id = trade.get('order_id', '')
-                                if _stc_order_id:
-                                    _cur.execute('''
-                                        SELECT filled_price, filled_at FROM filled_orders
-                                        WHERE broker_order_id = ? AND UPPER(broker) = UPPER(?)
-                                          AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
-                                        LIMIT 1
-                                    ''', (_stc_order_id, broker_name))
-                                    _fo_row = _cur.fetchone()
-                                    if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
-                                        exit_price = float(_fo_row['filled_price'])
-                                        exit_price_source = 'filled_orders_oid'
-                                        print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders by order_id: ${exit_price:.4f}")
+                                from gui_app.database import get_connection as _get_conn4
+                                _conn4 = _get_conn4()
+                                _cur4 = _conn4.cursor()
+                                _cur4.execute('''
+                                    SELECT filled_price, filled_at FROM filled_orders
+                                    WHERE trade_id = ? AND UPPER(broker) = UPPER(?)
+                                      AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
+                                      AND filled_price > 0
+                                    ORDER BY filled_at DESC LIMIT 1
+                                ''', (trade_id, broker_name))
+                                _fo_row = _cur4.fetchone()
+                                if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
+                                    exit_price = float(_fo_row['filled_price'])
+                                    exit_price_source = 'filled_orders_tid'
+                                    print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders by trade_id: ${exit_price:.4f}")
                             except Exception:
                                 pass
 
@@ -3504,31 +3507,41 @@ class BrokerSyncService:
                     if response and response.status_code == 200:
                         orders = response.json()
                         symbol_upper = symbol.upper()
+                        trade_strike = float(trade.get('strike') or 0)
                         for order in orders:
                             legs = order.get('orderLegCollection', [])
                             for leg in legs:
                                 instr = leg.get('instrument', {})
-                                if instr.get('symbol', '').upper() == symbol_upper and \
-                                   leg.get('instruction', '').upper() in ('SELL', 'SELL_TO_CLOSE'):
-                                    activities = order.get('orderActivityCollection', [])
-                                    total_filled = 0
-                                    total_cost = 0.0
-                                    for activity in activities:
-                                        if activity.get('activityType') == 'EXECUTION':
-                                            for exec_leg in activity.get('executionLegs', []):
-                                                lq = int(exec_leg.get('quantity', 0))
-                                                lp = float(exec_leg.get('price', 0))
-                                                total_filled += lq
-                                                total_cost += lq * lp
-                                    if total_filled > 0:
-                                        avg = total_cost / total_filled
-                                        filled_time = order.get('closeTime') or order.get('enteredTime') or ''
-                                        return {
-                                            'price': avg,
-                                            'order_id': str(order.get('orderId', '')),
-                                            'filled_at': filled_time or datetime.now().isoformat(),
-                                            'source': 'schwab_recent_orders'
-                                        }
+                                # For options Schwab puts full OCC symbol in 'symbol'; use underlyingSymbol
+                                instr_sym = (instr.get('underlyingSymbol') or instr.get('symbol') or '').upper()
+                                if instr_sym != symbol_upper:
+                                    continue
+                                if leg.get('instruction', '').upper() not in ('SELL', 'SELL_TO_CLOSE'):
+                                    continue
+                                # For options additionally filter by strike to avoid grabbing wrong contract
+                                if trade_strike > 0 and instr.get('assetType', '').upper() == 'OPTION':
+                                    leg_strike = float(instr.get('strikePrice') or 0)
+                                    if leg_strike > 0 and abs(leg_strike - trade_strike) > 0.01:
+                                        continue
+                                activities = order.get('orderActivityCollection', [])
+                                total_filled = 0
+                                total_cost = 0.0
+                                for activity in activities:
+                                    if activity.get('activityType') == 'EXECUTION':
+                                        for exec_leg in activity.get('executionLegs', []):
+                                            lq = int(exec_leg.get('quantity', 0))
+                                            lp = float(exec_leg.get('price', 0))
+                                            total_filled += lq
+                                            total_cost += lq * lp
+                                if total_filled > 0:
+                                    avg = total_cost / total_filled
+                                    filled_time = order.get('closeTime') or order.get('enteredTime') or ''
+                                    return {
+                                        'price': avg,
+                                        'order_id': str(order.get('orderId', '')),
+                                        'filled_at': filled_time or datetime.now().isoformat(),
+                                        'source': 'schwab_recent_orders'
+                                    }
                 except Exception as e:
                     print(f"[SYNC] ⚠️ Schwab recent orders search: {e}")
 
