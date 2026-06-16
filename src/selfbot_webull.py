@@ -7471,6 +7471,17 @@ class SelfClient(discord.Client):
         # Risk Manager (pluggable module) - initialized in setup() when async context ready
         self.risk_manager = None
     
+    def _evaluate_slippage(self, signal_price: float, current_price, threshold_override=None):
+        return _evaluate_slippage_check(signal_price, current_price, threshold_override)
+
+    async def _wait_for_better_price(self, signal: dict, get_current_price_func,
+                                      wait_minutes: int = None, hub_price_func=None,
+                                      keep_watching: bool = False):
+        return await WebullBroker._wait_for_better_price(
+            self, signal, get_current_price_func,
+            wait_minutes=wait_minutes, hub_price_func=hub_price_func,
+            keep_watching=keep_watching)
+
     def _get_channel_category(self, channel_id: int) -> Optional[str]:
         """Get channel category from database (EXECUTE or TRACK) - legacy method"""
         channel_info = self._get_channel_info(channel_id)
@@ -18083,6 +18094,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[{broker_name}] [POSITION SIZE] Cache miss — falling back to live API")
                             if hasattr(broker_instance, 'get_account_info'):
                                 account_info = await broker_instance.get_account_info()
+                                # If live API returned $0 buying power, try last-known-good fallback
+                                if account_info and float(account_info.get('buying_power') or 0) <= 0 and hasattr(broker_instance, '_get_account_info_for_sizing'):
+                                    account_info = broker_instance._get_account_info_for_sizing()
+                                    _original_print(f"[{broker_name}] [POSITION SIZE] Live BP=$0 — using last-known-good balance (BP=${account_info.get('buying_power', 0):.2f})")
                                 if account_info:
                                     options_buying_power = account_info.get('options_buying_power') or account_info.get('buying_power')
                                     _original_print(f"[{broker_name}] [POSITION SIZE] Got account info from live API (BP=${account_info.get('buying_power', 0):.2f})")

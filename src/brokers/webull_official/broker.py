@@ -187,10 +187,24 @@ class WebullOfficialBroker:
             }
             self._account_info_cache = result
             self._account_info_cache_ts = now
+            # Only update last-known-good when balance has real buying power
+            if float(balance.buying_power or 0) > 0:
+                self._last_known_good_balance = result
             return result
         except Exception as e:
             log.error(f"[{self.name}] get_account_info error: {e}")
             return self._account_info_cache or {}
+
+    def _get_account_info_for_sizing(self) -> dict:
+        """Return best available balance for position sizing — prefers live, falls back to last known good."""
+        cache = self._account_info_cache or {}
+        if float(cache.get('buying_power') or 0) > 0:
+            return cache
+        fallback = getattr(self, '_last_known_good_balance', None)
+        if fallback and float(fallback.get('buying_power') or 0) > 0:
+            log.warning(f"[{self.name}] Live balance returned $0 — using last known good balance (BP=${fallback['buying_power']:.2f})")
+            return fallback
+        return cache
 
     async def get_positions(self, max_age_seconds: float = 30.0) -> list:
         import time as _time
@@ -254,7 +268,8 @@ class WebullOfficialBroker:
 
         if side == "BUY":
             try:
-                acct = await self.get_account_info(max_age_seconds=60)
+                await self.get_account_info(max_age_seconds=60)
+                acct = self._get_account_info_for_sizing()
                 bp = float(acct.get('buying_power', 0) or 0)
                 if bp <= 0:
                     print(f"[{self.name}] ❌ FUNDS: No buying power available (${bp:.2f})", flush=True)
