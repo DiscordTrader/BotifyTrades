@@ -7,789 +7,918 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+        --bg-primary:    #0a0d14;
+        --bg-secondary:  #0f1420;
+        --bg-card:       #141c2e;
+        --bg-input:      #0d1117;
+        --accent-cyan:   #00d4ff;
+        --accent-purple: #7c3aed;
+        --accent-green:  #10b981;
+        --accent-amber:  #f59e0b;
+        --accent-red:    #ef4444;
+        --text-primary:  #e8edf5;
+        --text-secondary:#8b96a8;
+        --text-muted:    #5a6478;
+        --border:        rgba(0,212,255,0.12);
+        --border-strong: rgba(0,212,255,0.25);
+        --shadow-glow:   0 0 30px rgba(0,212,255,0.08);
+        --radius-msg:    16px;
+        --font-base:     'Inter', system-ui, sans-serif;
+        --font-mono:     'JetBrains Mono', 'Consolas', monospace;
     }
+
+    html, body { height: 100%; overflow: hidden; }
+
     body {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-        background: linear-gradient(135deg, #0a0f1a 0%, #0d1420 50%, #0a0f1a 100%);
-        color: #E6EDF3;
-        min-height: 100vh;
+        font-family: var(--font-base);
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 15px;
+        line-height: 1.6;
         display: flex;
         flex-direction: column;
     }
-    .chat-container {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        max-width: 900px;
-        margin: 0 auto;
-        width: 100%;
-        height: 100vh;
-        background: rgba(13, 17, 23, 0.95);
-        border-left: 1px solid rgba(0, 245, 255, 0.1);
-        border-right: 1px solid rgba(0, 245, 255, 0.1);
-    }
+
+    /* ── HEADER ── */
     .chat-header {
-        padding: 20px 24px;
-        background: linear-gradient(135deg, rgba(0, 245, 255, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
-        border-bottom: 1px solid rgba(0, 245, 255, 0.15);
+        flex-shrink: 0;
+        padding: 14px 20px;
+        background: linear-gradient(135deg, rgba(0,212,255,0.07) 0%, rgba(124,58,237,0.07) 100%);
+        border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
+        gap: 12px;
+        backdrop-filter: blur(12px);
     }
-    .chat-header-left {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
     .chat-avatar {
-        width: 48px;
-        height: 48px;
-        background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
+        width: 44px; height: 44px; flex-shrink: 0;
+        background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-purple) 100%);
         border-radius: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-        box-shadow: 0 4px 20px rgba(0, 245, 255, 0.25);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px;
+        box-shadow: 0 4px 16px rgba(0,212,255,0.3);
     }
-    .chat-header-info h1 {
-        font-size: 18px;
-        font-weight: 700;
-        color: #fff;
-        margin-bottom: 2px;
+    .header-info h1 { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+    .header-meta { display: flex; align-items: center; gap: 10px; margin-top: 3px; }
+    .status-dot {
+        display: flex; align-items: center; gap: 5px;
+        font-size: 12.5px; color: var(--text-secondary);
     }
-    .chat-header-info p {
-        font-size: 13px;
-        color: #00F5FF;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-    .chat-header-info p::before {
-        content: '';
-        width: 8px;
-        height: 8px;
-        background: #10B981;
-        border-radius: 50%;
-        animation: pulse-dot 2s infinite;
+    .status-dot::before {
+        content: ''; width: 7px; height: 7px;
+        background: var(--accent-green); border-radius: 50%;
+        animation: pulse-dot 2.5s ease infinite;
+        box-shadow: 0 0 6px rgba(16,185,129,0.6);
     }
     @keyframes pulse-dot {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.6; transform: scale(0.9); }
+        0%,100% { opacity:1; transform:scale(1); }
+        50% { opacity:0.5; transform:scale(0.8); }
     }
-    .chat-header-actions {
-        display: flex;
-        gap: 8px;
+    .ai-badge {
+        font-size: 11px; font-weight: 600; padding: 2px 8px;
+        border-radius: 20px; letter-spacing: 0.3px;
+        background: rgba(0,212,255,0.12);
+        border: 1px solid rgba(0,212,255,0.25);
+        color: var(--accent-cyan);
     }
-    .header-btn {
-        width: 36px;
-        height: 36px;
-        border: 1px solid rgba(0, 245, 255, 0.2);
-        background: rgba(0, 245, 255, 0.05);
-        border-radius: 10px;
-        color: #888;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        transition: all 0.2s ease;
+    .header-actions { display: flex; gap: 6px; align-items: center; }
+    .hdr-btn {
+        width: 34px; height: 34px; border-radius: 10px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.04);
+        color: var(--text-secondary); cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 13px; transition: all 0.18s ease;
     }
-    .header-btn:hover {
-        background: rgba(0, 245, 255, 0.1);
-        color: #00F5FF;
-        border-color: rgba(0, 245, 255, 0.4);
-    }
-    .header-btn.close-btn:hover {
-        background: rgba(239, 68, 68, 0.2);
-        color: #ef4444;
-        border-color: rgba(239, 68, 68, 0.4);
-    }
+    .hdr-btn:hover { background: rgba(255,255,255,0.09); color: #fff; border-color: rgba(255,255,255,0.15); }
+    .hdr-btn.danger:hover { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
+    .hdr-btn[title="Clear chat"]:hover { background: rgba(245,158,11,0.12); color: var(--accent-amber); border-color: rgba(245,158,11,0.3); }
+
+    /* ── MESSAGES ── */
     .chat-messages {
-        flex: 1;
-        overflow-y: auto;
-        padding: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
+        flex: 1; overflow-y: auto;
+        padding: 20px 20px 8px;
+        display: flex; flex-direction: column; gap: 14px;
+        scroll-behavior: smooth;
     }
-    .chat-messages::-webkit-scrollbar {
-        width: 6px;
+    .chat-messages::-webkit-scrollbar { width: 5px; }
+    .chat-messages::-webkit-scrollbar-track { background: transparent; }
+    .chat-messages::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); border-radius: 3px; }
+    .chat-messages::-webkit-scrollbar-thumb:hover { background: rgba(0,212,255,0.35); }
+
+    .msg-row {
+        display: flex; gap: 10px; align-items: flex-end;
+        animation: msgIn 0.22s ease;
     }
-    .chat-messages::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.2);
+    @keyframes msgIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .msg-row.user { flex-direction: row-reverse; }
+
+    .msg-avatar {
+        width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px;
     }
-    .chat-messages::-webkit-scrollbar-thumb {
-        background: rgba(0, 245, 255, 0.3);
-        border-radius: 3px;
+    .msg-row.assistant .msg-avatar { background: linear-gradient(135deg,var(--accent-cyan),var(--accent-purple)); }
+    .msg-row.user .msg-avatar { background: rgba(255,255,255,0.08); font-size: 13px; }
+
+    .msg-body { display: flex; flex-direction: column; max-width: 78%; gap: 3px; }
+    .msg-row.user .msg-body { align-items: flex-end; }
+
+    .msg-timestamp {
+        font-size: 11px; color: var(--text-muted);
+        padding: 0 4px;
     }
-    .chat-message {
-        display: flex;
-        flex-direction: column;
-        max-width: 80%;
-        animation: messageIn 0.3s ease;
+
+    .msg-bubble {
+        padding: 13px 16px;
+        border-radius: var(--radius-msg);
+        font-size: 15px; line-height: 1.65;
+        position: relative;
     }
-    @keyframes messageIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+    .msg-row.user .msg-bubble {
+        background: linear-gradient(135deg, var(--accent-cyan) 0%, #0099cc 100%);
+        color: #000; font-weight: 500;
+        border-bottom-right-radius: 5px;
+        box-shadow: 0 4px 16px rgba(0,212,255,0.25);
     }
-    .chat-message.user {
-        align-self: flex-end;
+    .msg-row.assistant .msg-bubble {
+        background: var(--bg-card);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-bottom-left-radius: 5px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.3);
     }
-    .chat-message.assistant {
-        align-self: flex-start;
+
+    /* ── MARKDOWN RENDERING ── */
+    .msg-bubble h2 { font-size: 17px; font-weight: 700; color: #fff; margin: 14px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .msg-bubble h3 { font-size: 15.5px; font-weight: 600; color: var(--accent-cyan); margin: 12px 0 6px; }
+    .msg-bubble h4 { font-size: 14.5px; font-weight: 600; color: var(--text-primary); margin: 10px 0 5px; }
+    .msg-bubble p { margin-bottom: 8px; }
+    .msg-bubble p:last-child { margin-bottom: 0; }
+    .msg-bubble strong { color: var(--accent-cyan); font-weight: 600; }
+    .msg-row.user .msg-bubble strong { color: #000; }
+    .msg-bubble em { color: #a5b4c8; font-style: italic; }
+    .msg-bubble ul, .msg-bubble ol { margin: 6px 0 8px 20px; }
+    .msg-bubble li { margin: 4px 0; font-size: 14.5px; }
+    .msg-bubble hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+    .msg-bubble blockquote {
+        border-left: 3px solid var(--accent-purple);
+        padding: 6px 12px; margin: 8px 0;
+        background: rgba(124,58,237,0.08);
+        border-radius: 0 8px 8px 0;
+        color: var(--text-secondary);
+        font-size: 14px;
     }
-    .message-content {
+
+    /* inline code */
+    .msg-bubble code {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        background: rgba(0,0,0,0.35);
+        border: 1px solid rgba(255,255,255,0.08);
+        padding: 1px 6px; border-radius: 5px;
+        color: #79c0ff;
+        white-space: nowrap;
+    }
+    .msg-row.user .msg-bubble code { background: rgba(0,0,0,0.2); color: #003844; border-color: rgba(0,0,0,0.15); }
+
+    /* code blocks */
+    .code-block {
+        margin: 10px 0; border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: #0d1117;
+    }
+    .code-block-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 7px 12px;
+        background: rgba(255,255,255,0.04);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        font-size: 11.5px; color: var(--text-muted);
+        font-family: var(--font-mono);
+    }
+    .copy-btn {
+        background: none; border: 1px solid rgba(255,255,255,0.12);
+        color: var(--text-muted); cursor: pointer;
+        padding: 2px 8px; border-radius: 4px; font-size: 11px;
+        transition: all 0.15s ease; font-family: var(--font-base);
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .copy-btn.copied { color: var(--accent-green); border-color: rgba(16,185,129,0.4); }
+    .code-block pre {
+        padding: 14px 16px; overflow-x: auto;
+        font-family: var(--font-mono); font-size: 13px;
+        line-height: 1.6; color: #c9d1d9;
+        white-space: pre;
+    }
+
+    /* field/value table style for signal test results */
+    .msg-bubble .field-row {
+        display: flex; gap: 8px; align-items: baseline;
+        padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+        font-size: 14px;
+    }
+    .msg-bubble .field-row:last-child { border-bottom: none; }
+    .msg-bubble .field-label { color: var(--text-muted); min-width: 80px; font-size: 13px; }
+    .msg-bubble .field-val { color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; }
+
+    /* status tags */
+    .tag {
+        display: inline-block; font-size: 11px; font-weight: 600;
+        padding: 2px 7px; border-radius: 5px; letter-spacing: 0.2px;
+    }
+    .tag-ok  { background: rgba(16,185,129,0.15); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+    .tag-warn { background: rgba(245,158,11,0.15); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.25); }
+    .tag-err { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+
+    /* ── TYPING INDICATOR ── */
+    .typing-bubble {
         padding: 14px 18px;
-        border-radius: 18px;
-        font-size: 14px;
-        line-height: 1.6;
+        display: flex; gap: 5px; align-items: center;
     }
-    .chat-message.user .message-content {
-        background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
-        color: #000;
-        border-bottom-right-radius: 6px;
-        font-weight: 500;
+    .typing-bubble span {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: var(--accent-cyan); opacity: 0.6;
+        animation: blink 1.2s ease infinite;
     }
-    .chat-message.assistant .message-content {
-        background: #1C2128;
-        color: #E6EDF3;
-        border-bottom-left-radius: 6px;
-        border: 1px solid rgba(0, 245, 255, 0.1);
+    .typing-bubble span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-bubble span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100% { transform:translateY(0); opacity:0.4; } 40% { transform:translateY(-5px); opacity:1; } }
+
+    /* ── QUICK ACTIONS ── */
+    .quick-actions {
+        flex-shrink: 0;
+        padding: 10px 16px;
+        border-top: 1px solid rgba(255,255,255,0.04);
+        background: rgba(0,0,0,0.15);
     }
-    .message-content strong {
-        color: #00F5FF;
+    .qa-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+    .qa-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+    .qa-chip {
+        background: rgba(0,212,255,0.07);
+        border: 1px solid rgba(0,212,255,0.18);
+        color: var(--accent-cyan);
+        padding: 6px 14px; border-radius: 20px;
+        font-size: 13px; font-weight: 500; cursor: pointer;
+        transition: all 0.15s ease; white-space: nowrap;
     }
-    .message-content ul {
-        margin: 10px 0 0 20px;
-        padding: 0;
+    .qa-chip:hover { background: rgba(0,212,255,0.16); border-color: rgba(0,212,255,0.4); transform: translateY(-1px); }
+    .qa-chip.secondary { background: rgba(124,58,237,0.08); border-color: rgba(124,58,237,0.2); color: #a78bfa; }
+    .qa-chip.secondary:hover { background: rgba(124,58,237,0.18); border-color: rgba(124,58,237,0.4); }
+    .qa-chip.neutral { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); color: var(--text-secondary); }
+    .qa-chip.neutral:hover { background: rgba(255,255,255,0.09); color: #fff; }
+    .qa-chip.back { color: var(--text-muted); background: none; border-color: rgba(255,255,255,0.08); }
+    .qa-chip.back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+    /* sub-category panels */
+    .qa-panel { display: none; flex-direction: column; gap: 6px; }
+    .qa-panel.active { display: flex; }
+    .qa-panel-row { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+    .qa-panel-title { font-size: 11.5px; font-weight: 700; color: var(--text-secondary); min-width: 80px; }
+
+    /* ── UPLOAD AREA ── */
+    .upload-banner {
+        flex-shrink: 0;
+        display: none; padding: 8px 18px;
+        background: rgba(124,58,237,0.1);
+        border-top: 1px solid rgba(124,58,237,0.2);
+        font-size: 13px; color: #a78bfa;
+        align-items: center; justify-content: space-between;
     }
-    .message-content li {
-        margin: 6px 0;
+    .paste-area {
+        flex-shrink: 0;
+        display: none; padding: 10px 16px;
+        background: rgba(0,0,0,0.2);
+        border-top: 1px solid var(--border);
     }
-    .message-content code {
-        background: rgba(0, 0, 0, 0.3);
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-family: 'SF Mono', 'Consolas', monospace;
-        font-size: 13px;
+    .paste-area textarea {
+        width: 100%; height: 110px;
+        background: rgba(13,17,23,0.95); color: var(--text-primary);
+        border: 1px solid rgba(124,58,237,0.3); border-radius: 10px;
+        padding: 10px 12px; font-size: 13px;
+        font-family: var(--font-mono); resize: vertical; outline: none;
     }
-    .chat-suggestions {
-        padding: 16px 24px;
-        border-top: 1px solid rgba(255, 255, 255, 0.05);
-        background: rgba(0, 0, 0, 0.2);
+    .paste-area textarea:focus { border-color: rgba(124,58,237,0.6); }
+    .paste-area-btns { display: flex; gap: 8px; margin-top: 8px; }
+    .paste-submit {
+        flex: 1; padding: 8px;
+        background: linear-gradient(135deg,#7c3aed,#4f46e5);
+        color: #fff; border: none; border-radius: 8px;
+        cursor: pointer; font-size: 13px; font-weight: 600;
+        transition: opacity 0.15s;
     }
-    .chat-suggestions > div {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
+    .paste-submit:hover { opacity: 0.9; }
+    .paste-cancel {
+        padding: 8px 14px;
+        background: rgba(255,255,255,0.06); color: var(--text-muted);
+        border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
+        cursor: pointer; font-size: 13px;
     }
-    .chat-suggestions button {
-        background: rgba(0, 245, 255, 0.08);
-        border: 1px solid rgba(0, 245, 255, 0.2);
-        color: #00F5FF;
-        padding: 10px 18px;
-        border-radius: 24px;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
+    .paste-cancel:hover { color: #fff; }
+
+    /* ── INPUT BAR ── */
+    .input-bar {
+        flex-shrink: 0;
+        padding: 14px 18px;
+        border-top: 1px solid var(--border);
+        background: linear-gradient(180deg, rgba(20,28,46,0.9) 0%, var(--bg-primary) 100%);
+        display: flex; gap: 10px; align-items: flex-end;
     }
-    .chat-suggestions button:hover {
-        background: rgba(0, 245, 255, 0.15);
-        border-color: #00F5FF;
-        transform: translateY(-1px);
+    .input-actions { display: flex; gap: 6px; align-items: center; }
+    .tool-btn {
+        width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+        border: 1px solid rgba(124,58,237,0.2);
+        background: rgba(124,58,237,0.08);
+        color: #a78bfa; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: all 0.15s ease;
     }
-    .chat-suggestions .back-btn {
-        background: rgba(255,255,255,0.08);
-        border-color: rgba(255,255,255,0.2);
-        color: #aaa;
-    }
-    .chat-suggestions .back-btn:hover {
-        background: rgba(255,255,255,0.15);
-        color: #fff;
-    }
-    .chat-input-container {
-        padding: 20px 24px;
-        border-top: 1px solid rgba(0, 245, 255, 0.1);
-        display: flex;
-        gap: 12px;
-        background: linear-gradient(180deg, rgba(22, 27, 34, 0.95) 0%, rgba(13, 17, 23, 1) 100%);
-    }
+    .tool-btn:hover { background: rgba(124,58,237,0.2); border-color: rgba(124,58,237,0.4); color: #c4b5fd; }
+    .input-wrapper { flex: 1; position: relative; }
     .chat-input {
-        flex: 1;
-        background: #0D1117;
-        border: 1px solid rgba(0, 245, 255, 0.2);
-        border-radius: 28px;
-        padding: 14px 22px;
-        color: #fff;
-        font-size: 14px;
-        outline: none;
-        transition: all 0.2s ease;
+        width: 100%;
+        background: var(--bg-input);
+        border: 1px solid rgba(0,212,255,0.18);
+        border-radius: 14px;
+        padding: 12px 18px;
+        color: var(--text-primary);
+        font-size: 15px; font-family: var(--font-base);
+        outline: none; resize: none;
+        min-height: 48px; max-height: 140px;
+        line-height: 1.5; overflow-y: auto;
+        transition: border-color 0.2s, box-shadow 0.2s;
     }
     .chat-input:focus {
-        border-color: #00F5FF;
-        box-shadow: 0 0 0 3px rgba(0, 245, 255, 0.1);
+        border-color: var(--accent-cyan);
+        box-shadow: 0 0 0 3px rgba(0,212,255,0.1);
     }
-    .chat-input::placeholder {
-        color: #666;
+    .chat-input::placeholder { color: var(--text-muted); }
+    .send-btn {
+        width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
+        background: linear-gradient(135deg, var(--accent-cyan) 0%, #0088bb 100%);
+        border: none; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        color: #000; transition: all 0.2s ease;
+        box-shadow: 0 4px 16px rgba(0,212,255,0.3);
     }
-    .upload-btn {
-        width: 42px;
-        height: 42px;
-        border-radius: 21px;
-        background: rgba(139, 92, 246, 0.15);
-        border: 1px solid rgba(139, 92, 246, 0.3);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #A78BFA;
-        transition: all 0.2s ease;
-        flex-shrink: 0;
-    }
-    .upload-btn:hover {
-        background: rgba(139, 92, 246, 0.3);
-        border-color: rgba(139, 92, 246, 0.5);
-        color: #C4B5FD;
-        box-shadow: 0 2px 12px rgba(139, 92, 246, 0.2);
-    }
+    .send-btn:hover { transform: scale(1.06); box-shadow: 0 6px 22px rgba(0,212,255,0.45); }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* ── DRAG OVERLAY ── */
     .drag-overlay {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(139, 92, 246, 0.15);
-        backdrop-filter: blur(4px);
-        z-index: 999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
+        position: fixed; inset: 0;
+        background: rgba(124,58,237,0.18); backdrop-filter: blur(6px);
+        z-index: 999; display: none;
+        align-items: center; justify-content: center;
     }
-    .drag-overlay-content {
-        background: rgba(13, 17, 23, 0.95);
-        border: 2px dashed rgba(139, 92, 246, 0.6);
-        border-radius: 20px;
-        padding: 40px 60px;
-        text-align: center;
-        color: #A78BFA;
+    .drag-box {
+        background: var(--bg-card);
+        border: 2px dashed rgba(124,58,237,0.5); border-radius: 20px;
+        padding: 40px 60px; text-align: center; color: #a78bfa;
     }
-    .drag-overlay-content .icon { font-size: 48px; margin-bottom: 12px; }
-    .drag-overlay-content .title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-    .drag-overlay-content .subtitle { font-size: 13px; color: #6B7A90; }
-    .chat-send {
-        width: 52px;
-        height: 52px;
-        border-radius: 26px;
-        background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #000;
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 20px rgba(0, 245, 255, 0.3);
-    }
-    .chat-send:hover {
-        transform: scale(1.05);
-        box-shadow: 0 6px 25px rgba(0, 245, 255, 0.4);
-    }
-    .chat-send:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none;
-    }
-    .typing-indicator {
-        display: flex;
-        gap: 5px;
-        padding: 14px 18px;
-        align-items: center;
-    }
-    .typing-indicator span {
-        width: 10px;
-        height: 10px;
-        background: #00F5FF;
-        border-radius: 50%;
-        animation: typing 1.4s infinite;
-    }
-    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes typing {
-        0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-        30% { transform: translateY(-6px); opacity: 1; }
-    }
-    .welcome-message {
-        text-align: center;
-        padding: 40px;
-        color: #888;
-    }
-    .welcome-message h2 {
-        font-size: 20px;
-        color: #fff;
-        margin-bottom: 12px;
-    }
-    .welcome-message p {
-        font-size: 14px;
-        line-height: 1.6;
-    }
+    .drag-box .ico { font-size: 44px; margin-bottom: 10px; }
+    .drag-box .lbl { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+    .drag-box .sub { font-size: 13px; color: var(--text-muted); }
     </style>
 </head>
 <body>
-    <div class="chat-container">
-        <div class="chat-header">
-            <div class="chat-header-left">
-                <div class="chat-avatar">🤖</div>
-                <div class="chat-header-info">
-                    <h1>BotifyTrades Assistant</h1>
-                    <p id="chat-status">Ready to help</p>
-                </div>
-            </div>
-            <div class="chat-header-actions">
-                <button class="header-btn close-btn" onclick="window.close()" title="Close">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path d="M18 6L6 18M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-        
-        <div id="chat-messages" class="chat-messages">
-            <div class="chat-message assistant">
-                <div class="message-content">
-                    <strong>Welcome to BotifyTrades Assistant!</strong>
-                    <br><br>
-                    I can help you with:
-                    <ul>
-                        <li>Getting started with the bot</li>
-                        <li>Setting up channels and trading</li>
-                        <li>Broker configuration</li>
-                        <li>Options trading strategies</li>
-                        <li>P&L tracking and analytics</li>
-                        <li>Risk management settings</li>
-                        <li>Teaching new signal formats</li>
-                    </ul>
-                    <br>
-                    <em style="color: #00F5FF;">Ask me anything!</em>
-                </div>
+
+<!-- DRAG OVERLAY -->
+<div id="drag-overlay" class="drag-overlay">
+    <div class="drag-box">
+        <div class="ico">📄</div>
+        <div class="lbl">Drop Log File</div>
+        <div class="sub">.log · .txt · .csv supported</div>
+    </div>
+</div>
+
+<!-- HEADER -->
+<div class="chat-header">
+    <div class="header-left">
+        <div class="chat-avatar">🤖</div>
+        <div class="header-info">
+            <h1>BotifyTrades Assistant</h1>
+            <div class="header-meta">
+                <span class="status-dot" id="chat-status">Ready</span>
+                <span class="ai-badge" id="ai-badge">AI</span>
             </div>
         </div>
-        
-        <div class="chat-suggestions" id="chat-suggestions">
-            <div id="main-suggestions">
-                <button onclick="askQuestion('How do I get started?')">Getting Started</button>
-                <button onclick="askQuestion('How do I add a channel?')">Add Channel</button>
-                <button onclick="askQuestion('Show formats')">Signal Formats</button>
-                <button onclick="askQuestion('Scan channels')">Scan Channels</button>
-                <button onclick="askQuestion('Any issues?')">Check Issues</button>
-                <button onclick="showSubButtons('investigation')">Investigation</button>
-                <button onclick="showSubButtons('channel')">Channel Settings</button>
-                <button onclick="showSubButtons('risk')">Risk Management</button>
-                <button onclick="askQuestion('help')">All Commands</button>
+    </div>
+    <div class="header-actions">
+        <button class="hdr-btn" title="Clear chat" onclick="clearChat()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+            </svg>
+        </button>
+        <button class="hdr-btn danger" title="Close" onclick="window.close()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+        </button>
+    </div>
+</div>
+
+<!-- MESSAGES -->
+<div id="chat-messages" class="chat-messages">
+    <div class="msg-row assistant">
+        <div class="msg-avatar">🤖</div>
+        <div class="msg-body">
+            <div class="msg-bubble">
+                <strong>Welcome to BotifyTrades Assistant</strong><br><br>
+                I can help you with trades, signal formats, broker issues, risk settings, P&amp;L analysis, and more.<br><br>
+                <em>Try the quick-action buttons below, or type any question.</em>
             </div>
-            <div id="investigation-suggestions" class="sub-suggestions" style="display:none;">
-                <button onclick="showMainButtons()" class="back-btn">&#8592; Back</button>
-                <button onclick="askQuestion('show events')">Recent Events</button>
-                <button onclick="askQuestion('show failures')">Failures</button>
-                <button onclick="askQuestion('show entries')">Entries</button>
-                <button onclick="askQuestion('show exits')">Exits</button>
-                <button onclick="askQuestion('show stops')">Stop Losses</button>
-                <button onclick="askQuestion('show targets')">Profit Targets</button>
-                <button onclick="askQuestion('show fills')">Filled Orders</button>
-                <button onclick="askQuestion('show broker failures')">Broker Errors</button>
-                <button onclick="askQuestion('show chasers')">Order Chasers</button>
-                <button onclick="askQuestion('show conditionals')">Conditionals</button>
-                <button onclick="askQuestion('event summary')">24h Summary</button>
-                <button onclick="promptSymbolInvestigation()">Investigate Symbol</button>
-            </div>
-            <div id="channel-suggestions" class="sub-suggestions" style="display:none;">
-                <button onclick="showMainButtons()" class="back-btn">&#8592; Back</button>
-                <button onclick="askQuestion('channel settings')">All Settings</button>
-                <button onclick="askQuestion('execution mode')">Execution Mode</button>
-                <button onclick="askQuestion('broker override')">Broker Override</button>
-                <button onclick="askQuestion('multi broker execution')">Multi-Broker</button>
-                <button onclick="askQuestion('conditional orders')">Conditional Orders</button>
-                <button onclick="askQuestion('ticker filter')">Ticker Filter</button>
-                <button onclick="askQuestion('NDX to QQQ')">NDX→QQQ</button>
-                <button onclick="askQuestion('position sizing')">Position Sizing</button>
-                <button onclick="askQuestion('entry order mode')">Entry Order Mode</button>
-                <button onclick="askQuestion('order chasing')">Order Chasing</button>
-                <button onclick="askQuestion('signal update automation')">Signal Updates</button>
-            </div>
-            <div id="risk-suggestions" class="sub-suggestions" style="display:none;">
-                <button onclick="showMainButtons()" class="back-btn">&#8592; Back</button>
-                <button onclick="askQuestion('risk management')">All Risk Settings</button>
-                <button onclick="askQuestion('profit targets')">Profit Targets</button>
-                <button onclick="askQuestion('stop loss settings')">Stop Loss</button>
-                <button onclick="askQuestion('trailing stop')">Trailing Stop</button>
-                <button onclick="askQuestion('early trailing stop')">Early Trailing</button>
-                <button onclick="askQuestion('giveback guard')">Giveback Guard</button>
-                <button onclick="askQuestion('leave runner')">Leave Runner</button>
-                <button onclick="askQuestion('dynamic SL escalation')">Dynamic SL</button>
-                <button onclick="askQuestion('stop loss order type')">SL Order Type</button>
-                <button onclick="askQuestion('circuit breaker')">Circuit Breaker</button>
-                <button onclick="askQuestion('best risk settings for scalping')">Scalping Preset</button>
-                <button onclick="askQuestion('best risk settings for conservative')">Conservative Preset</button>
-            </div>
+            <div class="msg-timestamp" id="welcome-ts"></div>
         </div>
-        
-        <div id="log-upload-banner" style="display:none; padding: 8px 24px; background: rgba(139,92,246,0.1); border-top: 1px solid rgba(139,92,246,0.2); font-size: 12px; color: #A78BFA;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span id="log-upload-filename"></span>
-                <button onclick="clearLogUpload()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px; padding: 0 4px;">x</button>
-            </div>
-        </div>
-        <div id="paste-log-area" style="display:none; padding: 8px 16px;">
-            <textarea id="paste-log-text" style="width:100%; height:120px; background:rgba(15,20,30,0.9); color:#e0e0e0; border:1px solid rgba(139,92,246,0.3); border-radius:8px; padding:8px; font-size:11px; font-family:monospace; resize:vertical;" placeholder="Paste your log content here..."></textarea>
-            <div style="display:flex; gap:8px; margin-top:6px;">
-                <button onclick="submitPastedLog()" style="flex:1; padding:6px; background:linear-gradient(135deg,#8B5CF6,#6366F1); color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">Analyze Pasted Log</button>
-                <button onclick="closePasteArea()" style="padding:6px 12px; background:rgba(255,255,255,0.1); color:#aaa; border:none; border-radius:6px; cursor:pointer; font-size:12px;">Cancel</button>
-            </div>
-        </div>
-        <div class="chat-input-container">
-            <input type="file" id="log-file-input" accept=".log,.txt,.text,.csv,.out" style="display:none" onchange="handleFileSelect(event)">
-            <button onclick="document.getElementById('log-file-input').click()" class="upload-btn" title="Upload log file">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-                </svg>
-            </button>
-            <button onclick="togglePasteArea()" class="upload-btn" title="Paste log text" style="margin-left:2px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                </svg>
-            </button>
-            <input type="text" id="chat-input" class="chat-input" placeholder="Type your question..." onkeypress="handleKeypress(event)" autofocus>
-            <button id="chat-send" class="chat-send" onclick="sendMessage()">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-                </svg>
-            </button>
+    </div>
+</div>
+
+<!-- QUICK ACTIONS -->
+<div class="quick-actions">
+    <div class="qa-label">Quick Actions</div>
+
+    <!-- Main panel -->
+    <div id="panel-main" class="qa-panel active">
+        <div class="qa-chips">
+            <span class="qa-chip" onclick="ask('How do I get started?')">🚀 Get Started</span>
+            <span class="qa-chip" onclick="ask('show formats')">📋 Formats</span>
+            <span class="qa-chip" onclick="ask('scan channels')">🔍 Scan Channels</span>
+            <span class="qa-chip" onclick="ask('Any issues?')">⚠️ Issues</span>
+            <span class="qa-chip secondary" onclick="showPanel('investigate')">🔎 Investigate</span>
+            <span class="qa-chip secondary" onclick="showPanel('channel')">⚙️ Channels</span>
+            <span class="qa-chip secondary" onclick="showPanel('risk')">🛡️ Risk</span>
+            <span class="qa-chip secondary" onclick="showPanel('format')">🎯 Format Tools</span>
+            <span class="qa-chip neutral" onclick="ask('help')">All Commands</span>
         </div>
     </div>
 
-    <script>
-    const channel = new BroadcastChannel('botify-chat');
-    
-    channel.onmessage = (event) => {
-        if (event.data.type === 'sync-messages') {
-            syncMessages(event.data.messages);
-        } else if (event.data.type === 'new-message') {
-            addMessage(event.data.content, event.data.isUser);
+    <!-- Investigate panel -->
+    <div id="panel-investigate" class="qa-panel">
+        <div class="qa-panel-row">
+            <span class="qa-chip back" onclick="showPanel('main')">← Back</span>
+            <span class="qa-chip" onclick="ask('show events')">Events</span>
+            <span class="qa-chip" onclick="ask('show failures')">Failures</span>
+            <span class="qa-chip" onclick="ask('show entries')">Entries</span>
+            <span class="qa-chip" onclick="ask('show exits')">Exits</span>
+            <span class="qa-chip" onclick="ask('show stops')">Stop Losses</span>
+            <span class="qa-chip" onclick="ask('show targets')">PT Hits</span>
+            <span class="qa-chip" onclick="ask('show fills')">Fills</span>
+            <span class="qa-chip" onclick="ask('show broker failures')">Broker Errors</span>
+            <span class="qa-chip" onclick="ask('show conditionals')">Conditionals</span>
+            <span class="qa-chip" onclick="ask('event summary')">24h Summary</span>
+            <span class="qa-chip secondary" onclick="promptSymbol()">Symbol Lookup</span>
+        </div>
+    </div>
+
+    <!-- Channel panel -->
+    <div id="panel-channel" class="qa-panel">
+        <div class="qa-panel-row">
+            <span class="qa-chip back" onclick="showPanel('main')">← Back</span>
+            <span class="qa-chip" onclick="ask('channel settings')">All Settings</span>
+            <span class="qa-chip" onclick="ask('execution mode')">Exec Mode</span>
+            <span class="qa-chip" onclick="ask('broker override')">Broker Override</span>
+            <span class="qa-chip" onclick="ask('multi broker execution')">Multi-Broker</span>
+            <span class="qa-chip" onclick="ask('conditional orders')">Conditionals</span>
+            <span class="qa-chip" onclick="ask('ticker filter')">Ticker Filter</span>
+            <span class="qa-chip" onclick="ask('position sizing')">Position Sizing</span>
+            <span class="qa-chip" onclick="ask('order chasing')">Order Chasing</span>
+            <span class="qa-chip" onclick="ask('signal update automation')">Signal Updates</span>
+        </div>
+    </div>
+
+    <!-- Risk panel -->
+    <div id="panel-risk" class="qa-panel">
+        <div class="qa-panel-row">
+            <span class="qa-chip back" onclick="showPanel('main')">← Back</span>
+            <span class="qa-chip" onclick="ask('profit targets')">Profit Targets</span>
+            <span class="qa-chip" onclick="ask('stop loss settings')">Stop Loss</span>
+            <span class="qa-chip" onclick="ask('trailing stop')">Trailing Stop</span>
+            <span class="qa-chip" onclick="ask('early trailing stop')">Early Trailing</span>
+            <span class="qa-chip" onclick="ask('giveback guard')">Giveback Guard</span>
+            <span class="qa-chip" onclick="ask('leave runner')">Leave Runner</span>
+            <span class="qa-chip" onclick="ask('dynamic SL escalation')">Dynamic SL</span>
+            <span class="qa-chip" onclick="ask('circuit breaker')">Circuit Breaker</span>
+            <span class="qa-chip secondary" onclick="ask('best risk settings for scalping')">Scalping Preset</span>
+            <span class="qa-chip secondary" onclick="ask('best risk settings for conservative')">Conservative Preset</span>
+        </div>
+    </div>
+
+    <!-- Format Tools panel -->
+    <div id="panel-format" class="qa-panel">
+        <div class="qa-panel-row">
+            <span class="qa-chip back" onclick="showPanel('main')">← Back</span>
+            <span class="qa-chip" onclick="ask('show formats')">Show Formats</span>
+            <span class="qa-chip" onclick="ask('show active patterns')">Active Patterns</span>
+            <span class="qa-chip" onclick="promptTestSignal()">Test Signal</span>
+            <span class="qa-chip" onclick="promptTeachFormat()">Teach Format</span>
+            <span class="qa-chip" onclick="promptAnalyzeChannel()">Analyze Channel</span>
+            <span class="qa-chip" onclick="ask('show candidates')">Show Candidates</span>
+            <span class="qa-chip" onclick="ask('approve all formats')">Approve All</span>
+            <span class="qa-chip neutral" onclick="ask('reload formats')">Reload Formats</span>
+        </div>
+    </div>
+</div>
+
+<!-- UPLOAD BANNER -->
+<div id="upload-banner" class="upload-banner">
+    <span id="upload-filename"></span>
+    <button onclick="clearUpload()" style="background:none;border:none;color:var(--accent-red);cursor:pointer;font-size:16px;padding:0 4px;">×</button>
+</div>
+
+<!-- PASTE AREA -->
+<div id="paste-area" class="paste-area">
+    <textarea id="paste-text" placeholder="Paste log content here..."></textarea>
+    <div class="paste-area-btns">
+        <button class="paste-submit" onclick="submitPasted()">Analyze Log</button>
+        <button class="paste-cancel" onclick="closePaste()">Cancel</button>
+    </div>
+</div>
+
+<!-- INPUT BAR -->
+<div class="input-bar">
+    <input type="file" id="file-input" accept=".log,.txt,.text,.csv,.out" style="display:none" onchange="handleFile(event)">
+    <div class="input-actions">
+        <button class="tool-btn" title="Upload log file" onclick="document.getElementById('file-input').click()">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+        </button>
+        <button class="tool-btn" title="Paste log text" onclick="togglePaste()">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            </svg>
+        </button>
+    </div>
+    <div class="input-wrapper">
+        <textarea id="chat-input" class="chat-input" placeholder="Ask anything about your bot, trades, formats…" rows="1"></textarea>
+    </div>
+    <button id="send-btn" class="send-btn" onclick="send()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+        </svg>
+    </button>
+</div>
+
+<script>
+/* ── BroadcastChannel ── */
+const bc = new BroadcastChannel('botify-chat');
+bc.onmessage = e => {
+    if (e.data.type === 'sync-messages') syncMessages(e.data.messages);
+    else if (e.data.type === 'new-message') appendMsg(e.data.content, e.data.isUser, true);
+};
+window.onload  = () => { bc.postMessage({ type: 'popout-opened' }); setWelcomeTs(); loadAIBadge(); };
+window.onunload = () => bc.postMessage({ type: 'popout-closed' });
+
+function setWelcomeTs() {
+    const el = document.getElementById('welcome-ts');
+    if (el) el.textContent = fmtTime(new Date());
+}
+
+async function loadAIBadge() {
+    try {
+        const r = await fetch('/api/ai/status', { credentials: 'include' });
+        const d = await r.json();
+        const badge = document.getElementById('ai-badge');
+        if (d.connected && d.model) {
+            badge.textContent = d.model;
+            badge.style.background = 'rgba(16,185,129,0.12)';
+            badge.style.borderColor = 'rgba(16,185,129,0.3)';
+            badge.style.color = '#10b981';
+        } else {
+            badge.textContent = d.provider || 'AI';
+            badge.style.background = 'rgba(245,158,11,0.12)';
+            badge.style.borderColor = 'rgba(245,158,11,0.3)';
+            badge.style.color = '#f59e0b';
         }
-    };
-    
-    window.onload = () => {
-        channel.postMessage({ type: 'popout-opened' });
-    };
-    
-    window.onbeforeunload = () => {
-        channel.postMessage({ type: 'popout-closed' });
-    };
-    
-    function syncMessages(messages) {
-        const container = document.getElementById('chat-messages');
-        container.innerHTML = '';
-        messages.forEach(msg => {
-            addMessageHTML(msg.content, msg.isUser);
+    } catch(_) {}
+}
+
+/* ── PANELS ── */
+function showPanel(name) {
+    document.querySelectorAll('.qa-panel').forEach(p => p.classList.remove('active'));
+    const el = document.getElementById('panel-' + name);
+    if (el) el.classList.add('active');
+}
+
+/* ── PROMPT HELPERS ── */
+function promptSymbol() {
+    const s = prompt('Enter ticker symbol (e.g. AAPL, QQQ):');
+    if (s && s.trim()) ask('what happened with ' + s.trim().toUpperCase());
+}
+function promptTestSignal() {
+    const s = prompt('Paste signal to test:');
+    if (s && s.trim()) ask('test signal: ' + s.trim());
+}
+function promptTeachFormat() {
+    const s = prompt('Paste signal example to teach:');
+    if (s && s.trim()) ask('teach this format: ' + s.trim());
+}
+function promptAnalyzeChannel() {
+    const s = prompt('Enter channel ID:');
+    if (s && s.trim()) ask('analyze channel ' + s.trim());
+}
+
+/* ── TIME ── */
+function fmtTime(d) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+/* ── MARKDOWN RENDERER ── */
+function renderMd(raw) {
+    let text = raw || '';
+
+    // Stash fenced code blocks as placeholders BEFORE any inline regex runs.
+    // This prevents italic/bold patterns from corrupting generated HTML attribute IDs.
+    const codeBlocks = [];
+    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const id = 'cb_' + Math.random().toString(36).slice(2,7);
+        const escaped = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const html = `<div class="code-block"><div class="code-block-header"><span>${lang || 'code'}</span><button class="copy-btn" id="btn_${id}" onclick="copyCode('${id}','btn_${id}')">Copy</button></div><pre id="${id}">${escaped}</pre></div>`;
+        const tok = `\x02CB${codeBlocks.length}\x02`;
+        codeBlocks.push(html);
+        return tok;
+    });
+
+    // inline code (also stashed so underscores inside backticks are protected)
+    const inlineCodes = [];
+    text = text.replace(/`([^`\n]+)`/g, (_, inner) => {
+        const tok = `\x02IC${inlineCodes.length}\x02`;
+        inlineCodes.push(`<code>${inner.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code>`);
+        return tok;
+    });
+
+    // headings
+    text = text.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    text = text.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    text = text.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+
+    // bold / italic — (?<!\w) guard prevents matching inside snake_case identifiers
+    text = text.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    text = text.replace(/(?<![A-Za-z0-9])_([^_\n]+?)_(?![A-Za-z0-9])/g, '<em>$1</em>');
+
+    // hr
+    text = text.replace(/^---+$/gm, '<hr>');
+
+    // blockquote (raw > only — input is never pre-HTML-escaped)
+    text = text.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+
+    // lists — wrap in \n\n so the paragraph splitter sees them as isolated blocks
+    text = text.replace(/((?:^[ \t]*[-•*]\s.+\n?)+)/gm, m => {
+        const items = m.trim().split('\n').map(l => `<li>${l.replace(/^[ \t]*[-•*]\s/,'').trim()}</li>`).join('');
+        return `\n\n<ul>${items}</ul>\n\n`;
+    });
+    text = text.replace(/((?:^\d+\.\s.+\n?)+)/gm, m => {
+        const items = m.trim().split('\n').map(l => `<li>${l.replace(/^\d+\.\s/,'').trim()}</li>`).join('');
+        return `\n\n<ol>${items}</ol>\n\n`;
+    });
+
+    // paragraphs — split on double newlines
+    const blocks = text.split(/\n\n+/);
+    text = blocks.map(b => {
+        b = b.trim();
+        if (!b) return '';
+        if (/^(?:<(?:h[2-4]|ul|ol|hr|blockquote|div)|\x02)/.test(b)) return b;
+        b = b.replace(/\n/g, '<br>');
+        return `<p>${b}</p>`;
+    }).join('\n');
+
+    // Restore stashed inline code and code blocks
+    inlineCodes.forEach((html, i) => { text = text.replaceAll(`\x02IC${i}\x02`, html); });
+    codeBlocks.forEach((html, i) => { text = text.replaceAll(`\x02CB${i}\x02`, html); });
+
+    return text;
+}
+
+function copyCode(preId, btnId) {
+    const pre = document.getElementById(preId);
+    if (!pre) return;
+    navigator.clipboard.writeText(pre.innerText).then(() => {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+    });
+}
+
+/* ── MESSAGES ── */
+function appendMsg(content, isUser, skipBc = false) {
+    const wrap = document.getElementById('chat-messages');
+    const row  = document.createElement('div');
+    row.className = 'msg-row ' + (isUser ? 'user' : 'assistant');
+
+    const avatar = document.createElement('div');
+    avatar.className = 'msg-avatar';
+    avatar.textContent = isUser ? '👤' : '🤖';
+
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.innerHTML = isUser
+        ? content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')
+        : renderMd(content);
+
+    const ts = document.createElement('div');
+    ts.className = 'msg-timestamp';
+    ts.textContent = fmtTime(new Date());
+
+    body.appendChild(bubble);
+    body.appendChild(ts);
+    row.appendChild(avatar);
+    row.appendChild(body);
+    wrap.appendChild(row);
+    wrap.scrollTop = wrap.scrollHeight;
+
+    if (!skipBc) bc.postMessage({ type: 'new-message', content, isUser });
+}
+
+function syncMessages(messages) {
+    const wrap = document.getElementById('chat-messages');
+    wrap.innerHTML = '';
+    messages.forEach(m => appendMsg(m.content, m.isUser, true));
+}
+
+/* ── TYPING ── */
+function showTyping() {
+    const wrap = document.getElementById('chat-messages');
+    const row  = document.createElement('div');
+    row.id = 'typing-row'; row.className = 'msg-row assistant';
+    row.innerHTML = '<div class="msg-avatar">🤖</div><div class="msg-body"><div class="msg-bubble typing-bubble"><span></span><span></span><span></span></div></div>';
+    wrap.appendChild(row);
+    wrap.scrollTop = wrap.scrollHeight;
+}
+function hideTyping() {
+    const el = document.getElementById('typing-row');
+    if (el) el.remove();
+}
+
+/* ── CLEAR CHAT ── */
+function clearChat() {
+    if (!confirm('Clear all chat messages?')) return;
+    document.getElementById('chat-messages').innerHTML = '';
+    // Don't broadcast an empty sync — that would wipe the welcome message in peer windows.
+    // Peer windows keep their own state; each user can clear independently.
+}
+
+/* ── ASK SHORTCUT ── */
+function ask(q) {
+    document.getElementById('chat-input').value = q;
+    send();
+    showPanel('main');
+}
+
+/* ── SEND ── */
+async function send() {
+    const input = document.getElementById('chat-input');
+    const msg   = input.value.trim();
+    const sendBtn = document.getElementById('send-btn');
+
+    if (pendingFile) { await sendWithFile(input, msg, sendBtn); return; }
+    if (!msg) return;
+
+    appendMsg(msg, true);
+    input.value = ''; autoResize();
+    input.disabled = true; sendBtn.disabled = true;
+    showTyping();
+
+    try {
+        const r = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg })
         });
+        const d = await r.json();
+        hideTyping();
+        appendMsg(d.response || d.error || 'Sorry, something went wrong.', false);
+    } catch(e) {
+        hideTyping();
+        appendMsg('Connection error — please try again.', false);
     }
-    
-    function handleKeypress(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
+
+    input.disabled = false; sendBtn.disabled = false; input.focus();
+}
+
+/* ── AUTO-RESIZE TEXTAREA ── */
+const chatInput = document.getElementById('chat-input');
+function autoResize() {
+    chatInput.style.height = 'auto';
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 140) + 'px';
+}
+chatInput.addEventListener('input', autoResize);
+chatInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+/* ── FILE UPLOAD ── */
+let pendingFile = null;
+
+function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const ok = ['.log','.txt','.text','.csv','.out'];
+    if (!ok.includes('.' + file.name.split('.').pop().toLowerCase())) {
+        appendMsg('Unsupported file type. Use .log, .txt, or .csv.', false); return;
+    }
+    if (file.size > 20*1024*1024) {
+        appendMsg('File too large (max 20 MB). Please trim it first.', false); return;
+    }
+    pendingFile = file;
+    const banner = document.getElementById('upload-banner');
+    document.getElementById('upload-filename').textContent = `📎 ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+    banner.style.display = 'flex';
+    chatInput.placeholder = 'Ask about this log, or press Send to analyze…';
+    chatInput.focus();
+}
+
+function clearUpload() {
+    pendingFile = null;
+    document.getElementById('upload-banner').style.display = 'none';
+    document.getElementById('file-input').value = '';
+    chatInput.placeholder = 'Ask anything about your bot, trades, formats…';
+}
+
+async function sendWithFile(input, msg, sendBtn) {
+    const display = msg || `Analyze log: ${pendingFile.name}`;
+    appendMsg(display, true);
+    input.value = ''; autoResize();
+    input.disabled = true; sendBtn.disabled = true;
+    showTyping();
+    try {
+        const text = await pendingFile.text();
+        const r = await fetch('/api/chat/upload-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_content: text, query: msg, filename: pendingFile.name }),
+            credentials: 'include'
+        });
+        const d = await r.json();
+        hideTyping();
+        let reply = '';
+        if (d.stats) {
+            const s = d.stats;
+            reply = `📊 **Quick Stats:** ${s.entries||0} entries · ${s.exits||0} exits · ${s.errors||0} errors · ${s.rejections||0} rejections\n\n`;
         }
+        appendMsg(reply + (d.response || d.error || 'Could not analyze file.'), false);
+    } catch(e) {
+        hideTyping();
+        appendMsg('Error reading file: ' + e.message, false);
     }
-    
-    function askQuestion(question) {
-        document.getElementById('chat-input').value = question;
-        sendMessage();
-        showMainButtons();
-    }
-    
-    function showSubButtons(category) {
-        document.getElementById('main-suggestions').style.display = 'none';
-        document.querySelectorAll('.sub-suggestions').forEach(el => el.style.display = 'none');
-        const target = document.getElementById(category + '-suggestions');
-        if (target) target.style.display = 'flex';
-    }
-    
-    function showMainButtons() {
-        document.querySelectorAll('.sub-suggestions').forEach(el => el.style.display = 'none');
-        document.getElementById('main-suggestions').style.display = 'flex';
-    }
-    
-    function promptSymbolInvestigation() {
-        const symbol = prompt('Enter a ticker symbol to investigate (e.g. SPY, AAPL, QQQ):');
-        if (symbol && symbol.trim()) {
-            askQuestion('what happened with ' + symbol.trim().toUpperCase());
-        }
-    }
-    
-    function addMessageHTML(content, isUser) {
-        const messagesDiv = document.getElementById('chat-messages');
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `chat-message ${isUser ? 'user' : 'assistant'}`;
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'message-content';
-        contentDiv.innerHTML = formatMessage(content);
-        messageDiv.appendChild(contentDiv);
-        messagesDiv.appendChild(messageDiv);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
-    
-    function addMessage(content, isUser = false) {
-        addMessageHTML(content, isUser);
-        channel.postMessage({ type: 'new-message', content, isUser });
-    }
-    
-    function formatMessage(text) {
-        return text
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\n/g, '<br>')
-            .replace(/• /g, '&bull; ');
-    }
-    
-    function showTyping() {
-        const messagesDiv = document.getElementById('chat-messages');
-        const typingDiv = document.createElement('div');
-        typingDiv.id = 'typing-indicator';
-        typingDiv.className = 'chat-message assistant';
-        typingDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
-        messagesDiv.appendChild(typingDiv);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
-    
-    function hideTyping() {
-        const typing = document.getElementById('typing-indicator');
-        if (typing) typing.remove();
-    }
-    
-    let pendingLogFile = null;
+    clearUpload();
+    input.disabled = false; sendBtn.disabled = false; input.focus();
+}
 
-    function handleFileSelect(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        const allowed = ['.log', '.txt', '.text', '.csv', '.out'];
-        const ext = '.' + file.name.split('.').pop().toLowerCase();
-        if (!allowed.includes(ext)) {
-            addMessage(`Unsupported file type: ${ext}. Please use .log, .txt, or .csv files.`, false);
-            return;
-        }
-        if (file.size > 20 * 1024 * 1024) {
-            addMessage('File is too large (max 20MB). Please trim it to the relevant section.', false);
-            return;
-        }
-        pendingLogFile = file;
-        const banner = document.getElementById('log-upload-banner');
-        document.getElementById('log-upload-filename').textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-        banner.style.display = 'block';
-        document.getElementById('chat-input').placeholder = 'Ask about this log file (or press send to analyze)...';
-        document.getElementById('chat-input').focus();
-    }
+/* ── PASTE AREA ── */
+function togglePaste() {
+    const el = document.getElementById('paste-area');
+    const visible = el.style.display !== 'none' && el.style.display !== '';
+    el.style.display = visible ? 'none' : 'block';
+    if (!visible) document.getElementById('paste-text').focus();
+}
+function closePaste() {
+    document.getElementById('paste-area').style.display = 'none';
+    document.getElementById('paste-text').value = '';
+}
+async function submitPasted() {
+    const logText = document.getElementById('paste-text').value.trim();
+    if (!logText) { appendMsg('Please paste log content first.', false); return; }
+    const q = chatInput.value.trim();
+    appendMsg(q || 'Analyze pasted log', true);
+    chatInput.value = ''; closePaste(); showTyping();
+    try {
+        const r = await fetch('/api/chat/upload-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_content: logText, query: q }),
+            credentials: 'include'
+        });
+        const d = await r.json();
+        hideTyping();
+        appendMsg(d.response || d.error || 'Could not analyze log.', false);
+    } catch(e) { hideTyping(); appendMsg('Error: ' + e.message, false); }
+}
 
-    function clearLogUpload() {
-        pendingLogFile = null;
-        document.getElementById('log-upload-banner').style.display = 'none';
-        document.getElementById('log-file-input').value = '';
-        document.getElementById('chat-input').placeholder = 'Type your question...';
-    }
-
-    function togglePasteArea() {
-        const area = document.getElementById('paste-log-area');
-        area.style.display = area.style.display === 'none' ? 'block' : 'none';
-        if (area.style.display === 'block') {
-            document.getElementById('paste-log-text').focus();
-        }
-    }
-
-    function closePasteArea() {
-        document.getElementById('paste-log-area').style.display = 'none';
-        document.getElementById('paste-log-text').value = '';
-    }
-
-    async function submitPastedLog() {
-        const logText = document.getElementById('paste-log-text').value.trim();
-        if (!logText) {
-            addMessage('Please paste some log content first.', false);
-            return;
-        }
-
-        const query = document.getElementById('chat-input').value.trim();
-        addMessage(query || 'Analyze pasted log content', true);
-        document.getElementById('chat-input').value = '';
-        closePasteArea();
-        showTyping();
-
-        try {
-            const response = await fetch('/api/chat/upload-log', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ log_content: logText, query: query || '' }),
-                credentials: 'include'
-            });
-            if (!response.ok) {
-                const errText = await response.text().catch(() => '');
-                throw new Error(`Server returned ${response.status}. ${errText.substring(0, 200)}`);
-            }
-            const data = await response.json();
-            hideTyping();
-
-            if (data.response) {
-                let statsHeader = '';
-                if (data.stats) {
-                    const s = data.stats;
-                    statsHeader = `📊 **Quick Stats:** ${s.entries || 0} entries, ${s.exits || 0} exits, ${s.errors || 0} errors, ${s.rejections || 0} rejections\n\n`;
-                }
-                addMessage(statsHeader + data.response, false);
-            } else if (data.error) {
-                addMessage('Error: ' + data.error, false);
-            } else {
-                addMessage('Could not analyze the log. Please try again.', false);
-            }
-        } catch (error) {
-            hideTyping();
-            addMessage('Error analyzing log: ' + error.message, false);
-        }
-    }
-
-    // Drag and drop
-    let dragCounter = 0;
-    document.addEventListener('dragenter', (e) => {
-        e.preventDefault();
-        dragCounter++;
-        if (dragCounter === 1) {
-            let overlay = document.getElementById('drag-overlay');
-            if (!overlay) {
-                overlay = document.createElement('div');
-                overlay.id = 'drag-overlay';
-                overlay.className = 'drag-overlay';
-                overlay.innerHTML = '<div class="drag-overlay-content"><div class="icon">📄</div><div class="title">Drop Log File</div><div class="subtitle">.log, .txt, .csv supported</div></div>';
-                document.body.appendChild(overlay);
-            }
-            overlay.style.display = 'flex';
-        }
-    });
-    document.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dragCounter--;
-        if (dragCounter <= 0) {
-            dragCounter = 0;
-            const overlay = document.getElementById('drag-overlay');
-            if (overlay) overlay.style.display = 'none';
-        }
-    });
-    document.addEventListener('dragover', (e) => e.preventDefault());
-    document.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dragCounter = 0;
-        const overlay = document.getElementById('drag-overlay');
-        if (overlay) overlay.style.display = 'none';
-        if (e.dataTransfer.files.length > 0) {
-            const fakeEvent = { target: { files: e.dataTransfer.files } };
-            handleFileSelect(fakeEvent);
-        }
-    });
-
-    async function sendMessage() {
-        const input = document.getElementById('chat-input');
-        const message = input.value.trim();
-
-        if (pendingLogFile) {
-            const displayMsg = message || `Analyze log file: ${pendingLogFile.name}`;
-            addMessage(displayMsg, true);
-            input.value = '';
-            input.disabled = true;
-            document.getElementById('chat-send').disabled = true;
-            showTyping();
-
-            try {
-                const fileText = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = () => reject(new Error('Could not read file'));
-                    reader.readAsText(pendingLogFile);
-                });
-
-                const response = await fetch('/api/chat/upload-log', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ log_content: fileText, query: message || '', filename: pendingLogFile.name }),
-                    credentials: 'include'
-                });
-                if (!response.ok) {
-                    const errText = await response.text().catch(() => '');
-                    throw new Error(`Server returned ${response.status}: ${response.statusText}. ${errText.substring(0, 200)}`);
-                }
-                const data = await response.json();
-                hideTyping();
-
-                if (data.response) {
-                    let statsHeader = '';
-                    if (data.stats) {
-                        const s = data.stats;
-                        statsHeader = `📊 **Quick Stats:** ${s.entries || 0} entries, ${s.exits || 0} exits, ${s.errors || 0} errors, ${s.rejections || 0} rejections\n\n`;
-                    }
-                    addMessage(statsHeader + data.response, false);
-                } else if (data.error) {
-                    addMessage('Error: ' + data.error, false);
-                } else {
-                    addMessage('Could not analyze the log file. Please try a smaller file.', false);
-                }
-            } catch (error) {
-                hideTyping();
-                addMessage('Error uploading file: ' + error.message, false);
-            }
-
-            clearLogUpload();
-            input.disabled = false;
-            document.getElementById('chat-send').disabled = false;
-            input.focus();
-            return;
-        }
-
-        if (!message) return;
-        
-        addMessage(message, true);
-        input.value = '';
-        input.disabled = true;
-        document.getElementById('chat-send').disabled = true;
-        
-        showTyping();
-        
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message })
-            });
-            
-            const data = await response.json();
-            hideTyping();
-            
-            if (data.response) {
-                addMessage(data.response, false);
-            } else if (data.error) {
-                addMessage('Error: ' + data.error, false);
-            } else {
-                addMessage('Sorry, I had trouble understanding that. Please try rephrasing.', false);
-            }
-        } catch (error) {
-            hideTyping();
-            addMessage('Sorry, there was an error. Please try again.', false);
-        }
-        
-        input.disabled = false;
-        document.getElementById('chat-send').disabled = false;
-        input.focus();
-    }
-    </script>
+/* ── DRAG & DROP ── */
+let dragN = 0;
+document.addEventListener('dragenter', e => { e.preventDefault(); if (++dragN===1) document.getElementById('drag-overlay').style.display='flex'; });
+document.addEventListener('dragleave', e => { e.preventDefault(); if (--dragN<=0) { dragN=0; document.getElementById('drag-overlay').style.display='none'; } });
+document.addEventListener('dragover',  e => e.preventDefault());
+document.addEventListener('drop', e => {
+    e.preventDefault(); dragN=0;
+    document.getElementById('drag-overlay').style.display='none';
+    if (e.dataTransfer.files.length) handleFile({ target: { files: e.dataTransfer.files } });
+});
+</script>
 </body>
 </html>

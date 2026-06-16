@@ -2934,7 +2934,7 @@ def register_routes(app):
         
         # Map tabs to status filters
         if tab == 'live':
-            status = 'OPEN'
+            status = ['OPEN', 'CLOSING']
         elif tab == 'pending':
             status = 'PENDING'
         elif tab == 'filled':
@@ -3903,6 +3903,9 @@ def register_routes(app):
                         'equity': account_info.get('market_value', 0),
                         'unrealized_pnl': account_info.get('unrealized_pnl', 0),
                         'day_pnl': account_info.get('day_pnl', 0),
+                        'settled_cash': account_info.get('settled_cash', 0),
+                        'unsettled_cash': account_info.get('unsettled_cash', 0),
+                        'options_buying_power': account_info.get('option_buying_power', account_info.get('buying_power', 0)),
                         'positions': formatted_positions,
                         'status': 'connected'
                     }
@@ -9802,8 +9805,10 @@ def register_routes(app):
             if not enabled:
                 sentiment_enabled = False
 
-            valid_models = ['gpt-4o-mini', 'gpt-4o', 'gpt-5-mini', 'gpt-5', 'claude-haiku-4-5-20251001', 'gemini-3.5-flash']
-            if model and model not in valid_models:
+            # Accept any model whose prefix matches a known provider — avoids hard-coding every
+            # model name while still rejecting obvious garbage.
+            _VALID_PREFIXES = ('gpt-', 'o1', 'o3', 'o4', 'claude-', 'gemini-')
+            if model and not any(model.startswith(p) for p in _VALID_PREFIXES):
                 model = 'gpt-4o-mini'
 
             success = db.update_ai_settings(enabled, model, sentiment_enabled)
@@ -9907,7 +9912,8 @@ def register_routes(app):
                             try:
                                 from google import genai
                             except ImportError:
-                                error_msg = 'google-genai package not installed — update required'
+                                import sys
+                                error_msg = f'google-genai package not installed — run: {sys.executable} -m pip install google-genai'
                         elif provider == 'claude':
                             try:
                                 import anthropic
@@ -16752,11 +16758,29 @@ def register_routes(app):
                     if _bot_instance and hasattr(_bot_instance, 'loop'):
                         loop = _bot_instance.loop
 
-                    if loop and loop.is_running():
-                        future = asyncio.run_coroutine_threadsafe(broker.connect(), loop)
-                        connected = future.result(timeout=30)
-                    else:
-                        connected = asyncio.run(broker.connect())
+                    # connect() internally calls init_token() which may block up to 120s
+                    # waiting for mobile app approval. Use 125s timeout to cover full window.
+                    _connect_timeout = 125
+                    try:
+                        if loop and loop.is_running():
+                            future = asyncio.run_coroutine_threadsafe(broker.connect(), loop)
+                            connected = future.result(timeout=_connect_timeout)
+                        else:
+                            connected = asyncio.run(broker.connect())
+                    except (TimeoutError, Exception) as _conn_err:
+                        _conn_str = str(_conn_err)
+                        if 'approval timed out' in _conn_str or 'timed out' in _conn_str.lower():
+                            set_broker_status(broker_id, False, 'pending_approval', 'Waiting for mobile app approval')
+                            return jsonify({
+                                'success': False,
+                                'pending_approval': True,
+                                'error': (
+                                    '📱 Mobile approval required — open the Webull app, go to '
+                                    'Profile → Security → Approved Devices and approve the login request. '
+                                    'Then click Connect again (token is saved automatically once approved).'
+                                ),
+                            }), 202
+                        raise
 
                     if connected:
                         if loop and loop.is_running():
@@ -16796,6 +16820,17 @@ def register_routes(app):
                         error_msg = 'Authentication failed (401): Invalid App Key or App Secret — get credentials from developer.webull.com'
                     elif 'No accounts found' in err_str:
                         error_msg = err_str
+                    elif 'approval timed out' in err_str:
+                        set_broker_status(broker_id, False, 'pending_approval', 'Waiting for mobile app approval')
+                        return jsonify({
+                            'success': False,
+                            'pending_approval': True,
+                            'error': (
+                                '📱 Mobile approval required — open the Webull app, go to '
+                                'Profile → Security → Approved Devices and approve the login request. '
+                                'Then click Connect again (token is saved automatically once approved).'
+                            ),
+                        }), 202
                     else:
                         error_msg = f'Connection error: {err_str}'
                     set_broker_status(broker_id, False, 'error', error_msg)

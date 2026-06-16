@@ -62,6 +62,11 @@ from .abtrades_parser import (
     parse_abtrades_trim,
     parse_abtrades_exit,
 )
+from .eagle_options_parser import (
+    parse_eagle_mba_entry,
+    parse_eagle_nina_entry,
+    parse_eagle_options_exit,
+)
 
 __all__ = [
     'parse_option_signal',
@@ -109,4 +114,7 @@ __all__ = [
     'parse_abtrades_entry',
     'parse_abtrades_trim',
     'parse_abtrades_exit',
+    'parse_eagle_mba_entry',
+    'parse_eagle_nina_entry',
+    'parse_eagle_options_exit',
 ]

@@ -213,6 +213,19 @@ def get_discord_notifications() -> dict:
 # AI Provider settings
 AI_PROVIDERS = ['claude', 'openai', 'gemini', 'disabled']
 
+AI_PROVIDER_DEFAULT_MODELS = {
+    'claude': 'claude-haiku-4-5-20251001',
+    'gemini': 'gemini-2.0-flash',
+    'openai': 'gpt-4o-mini',
+}
+
+# Bare prefixes ('o1', 'o3', 'o4') already subsume hyphenated variants via startswith.
+AI_PROVIDER_MODEL_PREFIXES = {
+    'claude': ('claude-',),
+    'gemini': ('gemini-',),
+    'openai': ('gpt-', 'o1', 'o3', 'o4'),
+}
+
 def save_ai_provider(provider: str):
     if provider not in AI_PROVIDERS:
         provider = 'claude'

@@ -747,6 +747,11 @@ class UnifiedPriceHub:
                 elif hasattr(hub, 'subscribe_symbol') and hasattr(hub, '_streamer'):
                     hub.subscribe_symbol(sym)
                     subscribed_to.append(hub_key)
+                # Webull (legacy + WEBULL_OFFICIAL): forward to WebullDataHub.subscribe_symbol()
+                # which routes to the active WEBULL_OFFICIAL MQTT stream
+                elif hasattr(hub, 'subscribe_symbol') and hasattr(hub, '_subscribed_symbols'):
+                    hub.subscribe_symbol(sym)
+                    subscribed_to.append(hub_key)
             except Exception:
                 pass
 

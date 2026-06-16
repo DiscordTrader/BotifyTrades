@@ -18,6 +18,7 @@ class WebullMarketStream:
         self._mqtt_client = None
         self._callbacks: dict[str, list[Callable]] = {}
         self._subscribed_symbols: set[str] = set()
+        self._symbol_categories: dict[str, str] = {}  # symbol → "US_STOCK" | "US_OPTION"
         self.on_quote_callback: Optional[Callable] = None  # set by broker after init
 
     async def connect(self):
@@ -44,7 +45,7 @@ class WebullMarketStream:
         self._mqtt_client.loop_start()
         return True
 
-    async def subscribe(self, symbols: list[str], sub_types: list[str] = None):
+    async def subscribe(self, symbols: list[str], sub_types: list[str] = None, category: str = "US_STOCK"):
         if sub_types is None:
             sub_types = ["SNAPSHOT"]
 
@@ -54,12 +55,14 @@ class WebullMarketStream:
             body = {
                 "session_id": self._session_id,
                 "symbols": batch,
-                "category": "US_STOCK",
+                "category": category,
                 "sub_types": sub_types,
                 "grab": True,
             }
             await self._client.post("/openapi/market-data/streaming/subscribe", body)
             self._subscribed_symbols.update(batch)
+            for s in batch:
+                self._symbol_categories[s] = category
 
     async def unsubscribe(self, symbols: list[str]):
         body = {
@@ -70,6 +73,8 @@ class WebullMarketStream:
         }
         await self._client.post("/openapi/market-data/streaming/unsubscribe", body)
         self._subscribed_symbols -= set(symbols)
+        for s in symbols:
+            self._symbol_categories.pop(s, None)
 
     def on(self, event: str, callback: Callable):
         self._callbacks.setdefault(event, []).append(callback)
@@ -87,8 +92,32 @@ class WebullMarketStream:
             client.subscribe("snapshot")
             client.subscribe("quote")
             client.subscribe("notice")
+            # Re-subscribe all symbols after reconnect (session-side subscriptions are lost)
+            if self._subscribed_symbols:
+                import asyncio as _asyncio
+                try:
+                    loop = _asyncio.get_event_loop()
+                    loop.create_task(self._resubscribe_all())
+                except Exception as _e:
+                    log.warning(f"[WEBULL-OFF] Reconnect re-subscribe failed: {_e}")
         else:
             log.error(f"[WEBULL-OFF] MQTT connect failed: rc={rc}")
+
+    async def _resubscribe_all(self):
+        """Re-send all symbol subscriptions after MQTT reconnect."""
+        if not self._subscribed_symbols:
+            return
+        syms = list(self._subscribed_symbols)
+        cats = dict(self._symbol_categories)
+        self._subscribed_symbols.clear()
+        self._symbol_categories.clear()
+        by_cat: dict[str, list[str]] = {}
+        for s in syms:
+            cat = cats.get(s, "US_STOCK")
+            by_cat.setdefault(cat, []).append(s)
+        for cat, cat_syms in by_cat.items():
+            await self.subscribe(cat_syms, category=cat)
+        log.info(f"[WEBULL-OFF] Re-subscribed {len(syms)} symbols after reconnect ({list(by_cat.keys())})")
 
     def _on_message(self, client, userdata, msg):
         topic = msg.topic

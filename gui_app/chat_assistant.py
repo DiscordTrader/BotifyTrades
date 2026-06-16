@@ -1999,10 +1999,98 @@ def _get_event_summary() -> Dict:
         }
 
 
+def _handle_test_signal(signal_text: str) -> Dict:
+    """Run a signal through the live registry and show exactly what gets extracted."""
+    try:
+        from src.services.signal_format_registry import get_signal_format_registry
+        registry = get_signal_format_registry()
+        result = registry.parse(signal_text.strip())
+
+        if not result:
+            return {
+                "success": True,
+                "response": (
+                    f"**No Match** ❌\n\n"
+                    f"Signal: `{signal_text[:120]}`\n\n"
+                    f"No active format recognized this signal.\n\n"
+                    f"**Options:**\n"
+                    f"- `teach this format: {signal_text[:60]}` — teach it manually\n"
+                    f"- `show formats` — see what formats are active\n"
+                    f"- Run `analyze channel <id>` to auto-discover formats"
+                ),
+                "topic": "format_testing"
+            }
+
+        fmt_name = result.get('_format_name', 'unknown')
+        action   = result.get('action', '?')
+        symbol   = result.get('symbol', '?')
+        asset    = result.get('asset', '?')
+        strike   = result.get('strike')
+        opt_type = result.get('opt_type')
+        expiry   = result.get('expiry')
+        price    = result.get('price')
+        qty      = result.get('qty', 1)
+        qty_spec = result.get('qty_specified', False)
+        mkt      = result.get('is_market_order', False)
+        conf     = result.get('confidence', 0)
+        learned  = result.get('_learned_pattern', False)
+        approved = result.get('_admin_approved', False)
+        exec_ok  = result.get('_execution_allowed', False)
+
+        status_icon = '✅' if exec_ok else '⚠️'
+        conf_pct    = f"{int(conf * 100)}%" if conf else '?'
+
+        lines = [
+            f"**Signal Test Result** {status_icon}\n",
+            f"Signal: `{signal_text[:120]}`\n",
+            f"**Matched Format:** `{fmt_name}`  ({conf_pct} confidence)",
+            f"**Type:** {'Learned' if learned else 'Built-in'} | {'Admin-approved ✓' if approved else 'Pending approval'}",
+            "",
+            "**Extracted Fields:**",
+            f"  Action:   `{action}`",
+            f"  Symbol:   `{symbol}`",
+            f"  Asset:    `{asset}`",
+        ]
+        if asset == 'option':
+            lines.append(f"  Strike:   `{strike if strike is not None else '❌ missing'}`")
+            lines.append(f"  Opt Type: `{opt_type if opt_type else '❌ missing'}`")
+            lines.append(f"  Expiry:   `{expiry if expiry else '❌ missing'}`")
+        lines.append(f"  Price:    `{'market order' if mkt else (price if price is not None else '❌ missing')}`")
+        lines.append(f"  Qty:      `{qty}` {'(specified)' if qty_spec else '(default)'}")
+
+        missing = []
+        if asset == 'option':
+            if strike is None: missing.append('strike')
+            if not opt_type:   missing.append('opt_type')
+            if not expiry:     missing.append('expiry')
+        if price is None and not mkt:
+            missing.append('price')
+
+        lines.append("")
+        if missing:
+            lines.append(f"**⚠️ Missing fields:** {', '.join(missing)}")
+            lines.append("These will be blank when the trade executes — use `teach this format:` to fix.")
+        else:
+            lines.append("**All required fields extracted ✓** — this format is ready for live trading.")
+
+        if not exec_ok:
+            lines.append("\n⚠️ Execution is **not allowed** — format needs admin approval first.")
+
+        return {
+            "success": True,
+            "response": "\n".join(lines),
+            "topic": "format_testing"
+        }
+
+    except Exception as e:
+        return {"success": True, "response": f"**Error testing signal:** {e}", "topic": "format_testing"}
+
+
 def handle_format_commands(query: str) -> Optional[Dict]:
     """Handle format teaching and management commands.
-    
+
     Commands:
+    - "test signal: <signal>" - Test a signal against all active formats
     - "teach this format: <signal>" - Learn a new signal format
     - "show formats" / "list formats" - Show all learned formats
     - "delete format <name>" - Delete a learned format
@@ -2011,7 +2099,24 @@ def handle_format_commands(query: str) -> Optional[Dict]:
     - "scan channels" - List channels available for scanning
     """
     query_lower = query.lower().strip()
-    
+
+    # Test signal against live registry
+    if query_lower.startswith('test signal:') or query_lower.startswith('test format:'):
+        signal_part = query.split(':', 1)[1].strip() if ':' in query else ''
+        if not signal_part:
+            return {
+                "success": True,
+                "response": (
+                    "**Test a Signal**\n\n"
+                    "Paste any signal to see exactly what the bot would extract:\n\n"
+                    "`test signal: 7/3 RIVN 13.5C .32`\n"
+                    "`test signal: BTO AAPL 200C 12/20 @ 1.50`\n"
+                    "`test signal: All out SOFI 135% gains`"
+                ),
+                "topic": "format_testing"
+            }
+        return _handle_test_signal(signal_part)
+
     # Redirect Discord bot commands to chatbot equivalents
     if query_lower.startswith('!extractraw ') or query_lower.startswith('!extract '):
         channel_id = query.split()[-1].strip()
@@ -2069,7 +2174,26 @@ def handle_format_commands(query: str) -> Optional[Dict]:
     # Show formats command
     if query_lower in ['show formats', 'list formats', 'show learned formats', 'list learned formats', 'what formats do you know']:
         return list_learned_formats()
-    
+
+    # Show active patterns in the live registry (learned_patterns table + singleton state)
+    if any(query_lower == kw for kw in ['show active patterns', 'show registry', 'show trained formats',
+                                         'check formats', 'list active patterns', 'show approved patterns']):
+        return _handle_show_registry()
+
+    # Force hot-reload of singleton from DB
+    if query_lower in ['reload formats', 'reload patterns', 'refresh formats', 'refresh patterns']:
+        try:
+            from src.services.signal_format_registry import get_signal_format_registry
+            registry = get_signal_format_registry()
+            loaded = registry.reload_learned_patterns()
+            return {
+                "success": True,
+                "response": f"**Reloaded** ✅\n\n`{loaded}` learned patterns now active in the live bot singleton.\n\nUse `show active patterns` to see them all.",
+                "topic": "format_management"
+            }
+        except Exception as e:
+            return {"success": True, "response": f"**Error reloading:** {e}", "topic": "format_management"}
+
     # Delete format command
     if query_lower.startswith('delete format '):
         format_name = query[14:].strip()
@@ -2403,6 +2527,54 @@ def list_learned_formats() -> Dict:
             "response": f"**Error**\n\nCouldn't retrieve formats: {str(e)}",
             "topic": "format_management"
         }
+
+
+def _handle_show_registry() -> Dict:
+    """Show learned_patterns active in DB vs what's actually loaded in the live singleton."""
+    try:
+        from . import database as db
+        from src.services.signal_format_registry import get_signal_format_registry
+
+        db_patterns = db.get_active_learned_patterns()
+        registry = get_signal_format_registry()
+        live_names = [n for n in registry._formats if n.startswith('learned_')]
+
+        lines = [f"## Format Registry Status\n"]
+
+        if not db_patterns:
+            lines.append("**DB learned_patterns (active):** none\n\nNo formats have been approved yet.")
+            lines.append("\n**How to add patterns:**")
+            lines.append("1. `analyze channel <channel_id>` — scan channel history")
+            lines.append("2. `show candidates` — view discovered patterns")
+            lines.append("3. `approve format #N` — approve a candidate")
+        else:
+            lines.append(f"**DB active patterns:** {len(db_patterns)}")
+            lines.append(f"**Live singleton loaded:** {len(live_names)}\n")
+
+            db_names_set = {f"learned_{p['name']}" for p in db_patterns}
+            live_names_set = set(live_names)
+            if db_names_set != live_names_set:
+                lines.append("⚠️ **Mismatch** — live bot registry differs from DB.")
+                lines.append("Run `reload formats` to hot-reload them into the live bot.\n")
+            else:
+                lines.append("✅ **In sync** — all approved patterns are active in the live bot.\n")
+
+            for p in db_patterns:
+                pname = f"learned_{p['name']}"
+                in_live = pname in live_names
+                status_icon = '✅' if in_live else '❌'
+                lines.append(f"{status_icon} **{p['name']}** (#{p['id']})")
+                lines.append(f"   Pattern: `{p.get('pattern','?')[:70]}`")
+                lines.append(f"   Example: `{str(p.get('example_text',''))[:60]}`")
+                lines.append(f"   Action: `{p.get('action','?')}` | Asset: `{p.get('asset_type','?')}`")
+                lines.append(f"   Approved by: `{p.get('approved_by','?')}` | In live singleton: {status_icon}\n")
+
+        lines.append("\n**Commands:** `test signal: <signal>` · `approve format #N` · `reload formats`")
+
+        return {"success": True, "response": "\n".join(lines), "topic": "format_management"}
+
+    except Exception as e:
+        return {"success": True, "response": f"**Error checking registry:** {e}", "topic": "format_management"}
 
 
 def toggle_format(format_name: str, enabled: bool) -> Dict:
@@ -2757,17 +2929,19 @@ def _handle_approve_candidate(candidate_id_str: str) -> Dict:
         except Exception as e:
             print(f"[CHAT] Warning: approved format but failed to update channel allowed_signal_formats: {e}")
 
+        reload_warning = ""
         try:
-            from src.services.signal_format_registry import SignalFormatRegistry
-            registry = SignalFormatRegistry()
+            from src.services.signal_format_registry import get_signal_format_registry
+            registry = get_signal_format_registry()
             loaded = registry.reload_learned_patterns()
-            print(f"[CHAT] Hot-reloaded learned patterns: {loaded} active")
+            print(f"[CHAT] Hot-reloaded learned patterns into singleton: {loaded} active")
         except Exception as e:
             print(f"[CHAT] Warning: could not hot-reload patterns: {e}")
+            reload_warning = f"\n\n⚠️ **Note:** Live bot registry could not be updated ({e}). The format is saved in DB but the bot won't recognize it until restarted. Run `reload formats` to retry."
 
         return {
             "success": True,
-            "response": f"**Approved** ✓\n\nFormat **{candidate['format_name']}** (#{cid}) is now active for channel `{candidate['channel_id']}`.\n\nThe bot will now recognize this signal format and route matches through conditional orders.",
+            "response": f"**Approved** ✓\n\nFormat **{candidate['format_name']}** (#{cid}) is now active for channel `{candidate['channel_id']}`.\n\nThe bot will now recognize this signal format and route matches through conditional orders.{reload_warning}",
             "topic": "format_learning"
         }
 
@@ -3372,8 +3546,8 @@ def test_signal_parsing(query: str) -> Dict:
         if signal_match:
             signal_text = signal_match.group(1).strip()
 
-        from src.services.signal_format_registry import SignalFormatRegistry
-        reg = SignalFormatRegistry()
+        from src.services.signal_format_registry import get_signal_format_registry
+        reg = get_signal_format_registry()
         results = reg.parse_all(signal_text)
 
         if results:
@@ -3980,20 +4154,21 @@ def _generate_trade_summary(trades: List[Dict], positions: List[Dict]) -> str:
 
 _chat_ai_cache = {'client': None, 'provider': None, 'is_anthropic': False, 'is_gemini': False, 'model': None}
 
-_PROVIDER_DEFAULT_MODELS = {
-    'claude': 'claude-haiku-4-5-20251001',
-    'gemini': 'gemini-3.5-flash',
-    'openai': 'gpt-4o-mini',
-}
+from gui_app.config_service import (
+    AI_PROVIDER_DEFAULT_MODELS as _PROVIDER_DEFAULT_MODELS,
+    AI_PROVIDER_MODEL_PREFIXES as _PROVIDER_MODEL_PREFIXES,
+)
 
 def _get_model_for_provider(provider: str) -> str:
-    """Read model from ai_settings DB; fall back to provider default."""
+    """Read model from ai_settings DB; validate it belongs to provider, else fall back to default."""
     try:
         from . import database as _db
         settings = _db.get_ai_settings()
         model = settings.get('model', '')
         if model:
-            return model
+            prefixes = _PROVIDER_MODEL_PREFIXES.get(provider, ())
+            if any(model.startswith(p) for p in prefixes):
+                return model
     except Exception:
         pass
     return _PROVIDER_DEFAULT_MODELS.get(provider, 'gpt-4o-mini')
@@ -4051,7 +4226,8 @@ def _get_ai_client():
             try:
                 from google import genai as _genai
             except ImportError:
-                print("[CHAT] Google GenAI SDK not installed (pip install google-genai)")
+                import sys
+                print(f"[CHAT] Google GenAI SDK not installed — run: {sys.executable} -m pip install google-genai")
                 return None, False, None
             api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
             if not api_key:

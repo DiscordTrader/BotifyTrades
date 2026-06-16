@@ -103,7 +103,7 @@ class IBKRDataHub:
         # reqTickByTickData — bypasses IB internal aggregation for sub-ms delivery
         self._tick_by_tick_tickers: Dict[int, Any] = {}  # conId -> ib_insync Ticker
         self._tick_by_tick_count: int = 0
-        self._TICK_BY_TICK_LIMIT = 10
+        self._TICK_BY_TICK_LIMIT = 20
 
         self._reconnect_in_progress = False
         self._reconnect_lock = threading.Lock()

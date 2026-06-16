@@ -9,6 +9,7 @@ import hashlib
 import os
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+from .config_service import AI_PROVIDER_DEFAULT_MODELS, AI_PROVIDER_MODEL_PREFIXES
 
 
 class FormatTrainer:
@@ -138,21 +139,20 @@ class FormatTrainer:
     def _is_gemini_provider(self) -> bool:
         return getattr(self, '_cached_provider', None) == 'gemini'
 
-    _DEFAULT_MODELS = {
-        'claude': 'claude-haiku-4-5-20251001',
-        'gemini': 'gemini-3.5-flash',
-        'openai': 'gpt-4o-mini',
-    }
+    _DEFAULT_MODELS = AI_PROVIDER_DEFAULT_MODELS
+    _MODEL_PREFIXES = AI_PROVIDER_MODEL_PREFIXES
 
     def _get_model(self) -> str:
-        """Read model from ai_settings DB; fall back to provider default."""
+        """Read model from ai_settings DB; validate it belongs to provider, else fall back to default."""
         provider = getattr(self, '_cached_provider', 'openai') or 'openai'
         try:
             from . import database as _db
             settings = _db.get_ai_settings()
             model = settings.get('model', '')
             if model:
-                return model
+                prefixes = self._MODEL_PREFIXES.get(provider, ())
+                if any(model.startswith(p) for p in prefixes):
+                    return model
         except Exception:
             pass
         return self._DEFAULT_MODELS.get(provider, 'gpt-4o-mini')

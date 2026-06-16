@@ -55,10 +55,22 @@ def extract_history_to_db(bot_client, channel_id: int, limit: int = 1000) -> Dic
 
         async for msg in target_channel.history(limit=limit):
             count += 1
+            parts = []
             if msg.content and msg.content.strip():
+                parts.append(msg.content.strip())
+            for embed in getattr(msg, 'embeds', []):
+                if getattr(embed, 'title', None):
+                    parts.append(embed.title)
+                if getattr(embed, 'description', None):
+                    parts.append(embed.description)
+                for field in getattr(embed, 'fields', []):
+                    if getattr(field, 'value', None):
+                        parts.append(f"{field.name}: {field.value}")
+            combined = '\n'.join(parts).strip()
+            if combined:
                 ok = db.save_channel_message(
                     channel_id=str(channel_id),
-                    message_content=msg.content.strip(),
+                    message_content=combined,
                     channel_name=channel_name,
                     author_id=str(msg.author.id),
                     author_name=msg.author.name,
@@ -117,10 +129,22 @@ async def async_extract_history_to_db(bot_client, channel_id: int, limit: int = 
 
     async for msg in target_channel.history(limit=limit):
         count += 1
+        parts = []
         if msg.content and msg.content.strip():
+            parts.append(msg.content.strip())
+        for embed in getattr(msg, 'embeds', []):
+            if getattr(embed, 'title', None):
+                parts.append(embed.title)
+            if getattr(embed, 'description', None):
+                parts.append(embed.description)
+            for field in getattr(embed, 'fields', []):
+                if getattr(field, 'value', None):
+                    parts.append(f"{field.name}: {field.value}")
+        combined = '\n'.join(parts).strip()
+        if combined:
             ok = db.save_channel_message(
                 channel_id=str(channel_id),
-                message_content=msg.content.strip(),
+                message_content=combined,
                 channel_name=channel_name,
                 author_id=str(msg.author.id),
                 author_name=msg.author.name,

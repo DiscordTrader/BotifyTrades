@@ -397,6 +397,21 @@ class WebullDataHub:
             except Exception as e:
                 logger.warning(f"Orders refresh after order event failed: {e}")
 
+    def subscribe_symbol(self, symbol: str):
+        """Forward a symbol subscription request to the active WEBULL_OFFICIAL broker's MQTT stream.
+
+        Called by UnifiedPriceHub.subscribe_symbol() so that position-monitor and
+        conditional-order consumers can pull new symbols into WEBULL_OFFICIAL MQTT
+        without needing a direct reference to the broker.
+        """
+        try:
+            from src.brokers.webull_official.broker import WebullOfficialBroker as _WOB
+            broker = _WOB._active_instance if hasattr(_WOB, '_active_instance') else None
+            if broker and getattr(broker, '_stream', None):
+                broker.subscribe_symbol(symbol)
+        except Exception as e:
+            logger.debug(f"[WEBULL_HUB] subscribe_symbol({symbol}) skipped: {e}")
+
     def get_stats(self) -> Dict[str, Any]:
         with self._quotes_lock:
             quote_count = len(self._quotes)

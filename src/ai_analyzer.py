@@ -10,20 +10,33 @@ from typing import Dict, Optional, List
 from datetime import datetime
 
 
-_PROVIDER_DEFAULT_MODELS = {
-    'claude': 'claude-haiku-4-5-20251001',
-    'gemini': 'gemini-3.5-flash',
-    'openai': 'gpt-4o-mini',
-}
+try:
+    from gui_app.config_service import (
+        AI_PROVIDER_DEFAULT_MODELS as _PROVIDER_DEFAULT_MODELS,
+        AI_PROVIDER_MODEL_PREFIXES as _PROVIDER_MODEL_PREFIXES,
+    )
+except ImportError:
+    _PROVIDER_DEFAULT_MODELS = {
+        'claude': 'claude-haiku-4-5-20251001',
+        'gemini': 'gemini-2.0-flash',
+        'openai': 'gpt-4o-mini',
+    }
+    _PROVIDER_MODEL_PREFIXES = {
+        'claude': ('claude-',),
+        'gemini': ('gemini-',),
+        'openai': ('gpt-', 'o1', 'o3', 'o4'),
+    }
 
 def _resolve_model(provider: str) -> str:
-    """Read model from ai_settings DB; fall back to provider default."""
+    """Read model from ai_settings DB; validate it belongs to provider, else fall back to default."""
     try:
         from gui_app.database import get_ai_settings
         settings = get_ai_settings()
         model = settings.get('model', '')
         if model:
-            return model
+            prefixes = _PROVIDER_MODEL_PREFIXES.get(provider, ())
+            if any(model.startswith(p) for p in prefixes):
+                return model
     except Exception:
         pass
     return _PROVIDER_DEFAULT_MODELS.get(provider, 'gpt-4o-mini')

@@ -2418,7 +2418,13 @@ class BaseConditionalOrderService(ABC):
         counter = self._price_log_counters.get(order_id, 0) + 1
         self._price_log_counters[order_id] = counter
         last = order.get('_last_logged_price')
-        if last != price or counter <= 3 or counter % 10 == 0:
+
+        # Only log when close to trigger (within 10%) or as a low-frequency heartbeat.
+        # Suppresses wall-of-text for orders far from their trigger price.
+        _proximity_pct = abs(price - adjusted_trigger) / adjusted_trigger if adjusted_trigger else 1.0
+        _near_trigger = _proximity_pct <= 0.10
+        _should_log = counter == 1 or _near_trigger or counter % 50 == 0
+        if _should_log and (last != price or counter == 1):
             order['_last_logged_price'] = price
             self._log(f"Price update #{order_id} {symbol} @ {price:.2f} (trigger: {trigger_type} {adjusted_trigger})")
         

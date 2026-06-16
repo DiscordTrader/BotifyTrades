@@ -2048,6 +2048,14 @@ class RiskManager:
                     hub.request_subscribe_options(needed)
         except Exception:
             pass
+        try:
+            from src.brokers.webull_official.broker import WebullOfficialBroker
+            wo = WebullOfficialBroker._active_instance
+            if wo and getattr(wo, '_stream', None):
+                for sym in raw_symbols:
+                    wo.subscribe_symbol(sym, is_option=True)
+        except Exception:
+            pass
 
     async def _run_incremental_eval(self):
         if not getattr(self, '_first_sync_completed', False):
@@ -3965,21 +3973,29 @@ class RiskManager:
 
     async def _fetch_webull_official_positions(self) -> List[PositionSnapshot]:
         positions = []
-        if not self.webull_official_broker or not getattr(self.webull_official_broker, 'connected', False):
+        if not self.webull_official_broker:
             return positions
         try:
-            raw = await self.webull_official_broker.get_positions() or []
+            raw = await self.webull_official_broker.get_positions(max_age_seconds=15) or []
             broker_label = 'WEBULL_OFFICIAL_LIVE' if not getattr(self.webull_official_broker, 'paper_trade', True) else 'WEBULL_OFFICIAL_PAPER'
             for pos in raw:
                 asset = pos.get('asset', 'stock')
                 call_put = None
                 strike = None
                 expiry = None
+                raw_symbol = None
                 if asset == 'option':
                     ot = (pos.get('option_type') or '').upper()
                     call_put = 'C' if 'CALL' in ot else ('P' if 'PUT' in ot else None)
                     strike = float(pos.get('strike_price') or 0) or None
                     expiry = pos.get('expiry_date')
+                    if call_put and strike and expiry:
+                        try:
+                            exp = expiry.replace('-', '')[2:]
+                            strike_int = int(round(strike * 1000))
+                            raw_symbol = f"{pos.get('symbol', '').upper()}{exp}{call_put}{strike_int:08d}"
+                        except Exception:
+                            pass
                 positions.append(PositionSnapshot(
                     symbol=pos.get('symbol', ''),
                     quantity=abs(float(pos.get('quantity', 0))),
@@ -3989,7 +4005,8 @@ class RiskManager:
                     broker=broker_label,
                     strike=strike,
                     expiry=expiry,
-                    direction=call_put
+                    direction=call_put,
+                    raw_symbol=raw_symbol,
                 ))
         except Exception as e:
             print(f"[RISK] Error fetching Webull Official positions: {e}")
@@ -4590,8 +4607,19 @@ class RiskManager:
                 _ext_pos_key = f"{position.broker}_{position.symbol}_{position.asset}"
                 _rest_price = None
                 try:
-                    from src.services.webull_data_hub import get_webull_data_hub
-                    _hub = get_webull_data_hub()
+                    _broker_upper = (position.broker or '').upper()
+                    if 'IBKR' in _broker_upper:
+                        from src.services.ibkr_data_hub import get_ibkr_data_hub
+                        _hub = get_ibkr_data_hub()
+                    elif 'SCHWAB' in _broker_upper:
+                        from src.services.schwab_data_hub import get_schwab_data_hub
+                        _hub = get_schwab_data_hub()
+                    elif 'TASTYTRADE' in _broker_upper:
+                        from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                        _hub = get_tastytrade_data_hub()
+                    else:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        _hub = get_webull_data_hub()
                     if _hub:
                         _rest_price = _hub.get_quote_price(position.symbol)
                 except Exception:
@@ -7682,6 +7710,23 @@ class RiskManager:
             await self.order_queue.put(stc_signal)
             print(f"[RISK] STC order queued for {pos_key} via {position.broker} (queue_id={id(self.order_queue)}, qsize={self.order_queue.qsize()}): {stc_signal}")
 
+            # Immediately mark parent trade CLOSING so dashboard P/L freezes at the
+            # exit trigger price instead of tracking the live feed for 4+ minutes until
+            # broker_sync confirms the position is gone.
+            if origin_trade:
+                _pm_trade_id = origin_trade.get('id')
+                if _pm_trade_id:
+                    try:
+                        self.db_adapter.update_trade(
+                            _pm_trade_id,
+                            status='CLOSING',
+                            close_reason=f'risk_{decision.risk_trigger}',
+                            current_price=round(position.current_price, 4),
+                        )
+                        print(f"[RISK] ✓ Trade #{_pm_trade_id} marked CLOSING (trigger={decision.risk_trigger}, exit_price=${position.current_price:.4f})")
+                    except Exception as _mc_err:
+                        print(f"[RISK] ⚠️ Mark CLOSING failed for trade #{_pm_trade_id}: {_mc_err}")
+
             if _need_replace_stop and cache:
                 import time as _tmod
                 _replace_price = _old_stop_price if _old_stop_price and _old_stop_price > 0 else (cache.dynamic_sl_price if cache.dynamic_sl_price is not None else cache.early_stop_price if cache.early_stop_price is not None else cache.stop_loss_price) or 0
@@ -8193,15 +8238,23 @@ class RiskManager:
             except Exception:
                 pass
             
+            def _ibkr_broker_variants(broker: str):
+                """Return all broker label variants to check for IBKR (IBKR, IBKR_LIVE, IBKR_PAPER)."""
+                b = (broker or '').upper()
+                if b == 'IBKR':
+                    return ['IBKR', 'IBKR_LIVE', 'IBKR_PAPER']
+                return [b]
+
             best_orders = {}
             for order in executed_orders:
                 order_id = order['id']
                 symbol = order['symbol'].upper()
                 broker = order['broker_primary']
                 group_key = f"{broker}_{symbol}"
-                
-                has_open_trade = (symbol, (broker or '').upper()) in open_trade_symbols
-                
+
+                broker_variants = _ibkr_broker_variants(broker)
+                has_open_trade = any((symbol, v) in open_trade_symbols for v in broker_variants)
+
                 if group_key not in best_orders:
                     best_orders[group_key] = (order, has_open_trade)
                 else:
@@ -8211,7 +8264,7 @@ class RiskManager:
                     elif has_open_trade == existing_has_open:
                         if order_id > existing_order['id']:
                             best_orders[group_key] = (order, has_open_trade)
-            
+
             reconciled_count = 0
             for group_key, (order, has_open_trade) in best_orders.items():
                 order_id = order['id']
@@ -8219,14 +8272,23 @@ class RiskManager:
                 broker = order['broker_primary']
                 trigger_price = order['trigger_price']
 
+                broker_variants = _ibkr_broker_variants(broker)
+
                 if not has_open_trade:
-                    pos_key_stock = f"{broker}_{symbol}_stock"
-                    if self.cache.get(pos_key_stock):
-                        self.cache.remove(pos_key_stock)
-                        print(f"[RISK] 🧹 Cleaned stale cache for {symbol} (no open trade, order #{order_id})")
+                    for bv in broker_variants:
+                        pos_key_stock = f"{bv}_{symbol}_stock"
+                        if self.cache.get(pos_key_stock):
+                            self.cache.remove(pos_key_stock)
+                            print(f"[RISK] 🧹 Cleaned stale cache for {symbol} (no open trade, order #{order_id})")
                     continue
 
-                fill_price = open_trade_fill_prices.get(f"{(broker or '').upper()}_{symbol}", trigger_price)
+                fill_price = None
+                for bv in broker_variants:
+                    fill_price = open_trade_fill_prices.get(f"{bv}_{symbol}")
+                    if fill_price:
+                        break
+                if not fill_price:
+                    fill_price = trigger_price
                 base_price = fill_price if fill_price and fill_price > 0 else trigger_price
 
                 sl_pct = order['stop_loss_pct'] or order['stop_loss_value']
@@ -8260,11 +8322,30 @@ class RiskManager:
                 
                 if not sl_price and not pt_price:
                     continue
-                
-                pos_key_stock = f"{broker}_{symbol}_stock"
-                pos_key_simple = f"{broker}_{symbol}"
-                
-                cache_entry = self.cache.get(pos_key_stock) or self.cache.get(pos_key_simple)
+
+                # Search across all broker-label variants so 'IBKR' conditional orders
+                # find the 'IBKR_LIVE' or 'IBKR_PAPER' cache that position-monitor creates.
+                cache_entry = None
+                matched_pos_key_stock = None
+                for bv in broker_variants:
+                    _k = f"{bv}_{symbol}_stock"
+                    cache_entry = self.cache.get(_k)
+                    if cache_entry:
+                        matched_pos_key_stock = _k
+                        break
+                    _ks = f"{bv}_{symbol}"
+                    cache_entry = self.cache.get(_ks)
+                    if cache_entry:
+                        matched_pos_key_stock = _ks
+                        break
+                # When no existing cache entry found, use the broker variant that
+                # actually has the open trade (e.g. 'IBKR_LIVE' not raw 'IBKR')
+                # so the new entry is written at the same key the position monitor uses.
+                if not matched_pos_key_stock:
+                    _live_bv = next((v for v in broker_variants if (symbol, v) in open_trade_symbols), broker_variants[0])
+                    matched_pos_key_stock = f"{_live_bv}_{symbol}_stock"
+                pos_key_stock = matched_pos_key_stock
+
                 if cache_entry:
                     is_new_instance = (
                         cache_entry.source_order_id is None or
@@ -8307,17 +8388,18 @@ class RiskManager:
                         print(f"[RISK] 🔗 Linked {symbol} to conditional order #{order_id} "
                               f"(SL: {sl_display}, PT: {pt_display})")
                 else:
+                    _entry_broker = pos_key_stock.split(f'_{symbol}')[0]
                     self.cache._cache[pos_key_stock] = PositionCacheEntry(
-                        entry_price=trigger_price or 0,
-                        highest_price=trigger_price or 0,
+                        entry_price=base_price or 0,
+                        highest_price=base_price or 0,
                         stop_loss_price=sl_price,
                         profit_target_price=pt_price,
-                        broker=broker,
+                        broker=_entry_broker,
                         source_order_id=order_id,
                         seed_time=dt.now().isoformat()
                     )
                     reconciled_count += 1
-                    print(f"[RISK] ✨ Created cache entry for {symbol} from conditional order #{order_id}")
+                    print(f"[RISK] ✨ Created cache entry for {symbol} from conditional order #{order_id} @ ${base_price:.2f} [key={pos_key_stock}]")
             
             terminal_cleaned = self._cleanup_terminal_order_cache(conn)
             if terminal_cleaned > 0:
@@ -9182,14 +9264,31 @@ class RiskManager:
             hub = get_webull_data_hub()
             if hub.is_streaming():
                 for pos in positions:
-                    if pos.broker != 'Webull':
+                    is_webull_official = 'WEBULL_OFFICIAL' in pos.broker.upper()
+                    if pos.broker != 'Webull' and not is_webull_official:
                         continue
+                    _resolved_hub_key = None
                     if pos.asset == 'option':
                         price = None
+                        _resolved_hub_key = pos.raw_symbol
                         if pos.raw_symbol:
                             price = self._get_fresh_hub_price(hub, pos.raw_symbol)
+                        if not price and is_webull_official:
+                            tid = hub.get_option_ticker_id(
+                                pos.symbol,
+                                pos.strike or 0,
+                                pos.expiry or '',
+                                pos.direction or '',
+                            )
+                            if tid:
+                                # get_symbol_by_ticker_id resolves tid→OCC symbol via _ticker_id_reverse
+                                # (populated when hub.update_positions processes REST position data)
+                                occ_sym = hub.get_symbol_by_ticker_id(tid)
+                                _hub_key = occ_sym or str(tid)
+                                price = self._get_fresh_hub_price(hub, _hub_key)
+                                _resolved_hub_key = _hub_key
                         if not price:
-                            lk_check = pos.raw_symbol
+                            lk_check = _resolved_hub_key
                             if lk_check and hub.get_quote_price(lk_check):
                                 stale_skipped += 1
                             continue
@@ -9215,7 +9314,8 @@ class RiskManager:
                                     print(f"[RISK] ⚠️ HUB {_guard_type}: {_sym} hub price ${price:.2f} is {_hub_ratio:.0f}x entry ${pos.avg_cost:.2f} "
                                           f"— likely underlying index price leaked into option quote. Rejecting hub price.")
                                 continue
-                        _hub_ts = self._get_hub_quote_ts(hub, pos.symbol)
+                        _hub_lookup = _resolved_hub_key or pos.raw_symbol or pos.symbol
+                        _hub_ts = self._get_hub_quote_ts(hub, _hub_lookup)
                         _rk = self._pos_tracking_key(pos)
                         if self._is_rest_repair_active(pos, hub_quote_ts=_hub_ts):
                             repair = self._rest_repaired_prices[_rk]

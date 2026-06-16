@@ -25,8 +25,21 @@ def _token_file_path() -> Path:
     return base / "webull_official_token.json"
 
 
+def _build_occ_symbol(symbol: str, expiry_date: str, call_put: str, strike) -> str:
+    """Build compact OCC symbol: QQQ250620C00745000"""
+    try:
+        exp = expiry_date.replace('-', '')[2:]  # "2025-06-20" → "250620"
+        strike_int = int(round(float(strike) * 1000))
+        return f"{symbol.upper()}{exp}{call_put.upper()}{strike_int:08d}"
+    except Exception:
+        return ""
+
+
 class WebullOfficialBroker:
+    _active_instance: Optional["WebullOfficialBroker"] = None
+
     def __init__(self, loop=None, name="WEBULL_OFFICIAL", paper_trade=False, credentials: dict = None):
+        WebullOfficialBroker._active_instance = self
         self.name = name
         self.loop = loop
         self.paper_trade = paper_trade
@@ -143,6 +156,8 @@ class WebullOfficialBroker:
         if self._client:
             await self._client.close()
         self.connected = False
+        if WebullOfficialBroker._active_instance is self:
+            WebullOfficialBroker._active_instance = None
         print(f"[{self.name}] Disconnected")
 
     async def get_account_info(self, max_age_seconds: float = 30.0) -> dict:
@@ -180,7 +195,7 @@ class WebullOfficialBroker:
     async def get_positions(self, max_age_seconds: float = 30.0) -> list:
         import time as _time
         if not self.connected:
-            return []
+            return self._positions_cache if self._positions_cache else []
         now = _time.monotonic()
         if self._positions_cache_ts > 0 and (now - self._positions_cache_ts) < max_age_seconds:
             return self._positions_cache
@@ -236,6 +251,22 @@ class WebullOfficialBroker:
 
         tif_map = {"DAY": "DAY", "GTC": "GTC", "IOC": "IOC"}
         tif = tif_map.get(duration.upper(), "DAY")
+
+        if side == "BUY":
+            try:
+                acct = await self.get_account_info(max_age_seconds=60)
+                bp = float(acct.get('buying_power', 0) or 0)
+                if bp <= 0:
+                    print(f"[{self.name}] ❌ FUNDS: No buying power available (${bp:.2f})", flush=True)
+                    return OrderResult(success=False, message=f"Insufficient buying power: ${bp:.2f} available", symbol=symbol, action=action, quantity=quantity)
+                if price is not None:
+                    order_cost = quantity * price
+                    if order_cost > bp:
+                        print(f"[{self.name}] ❌ FUNDS: Stock order cost ${order_cost:.2f} > buying power ${bp:.2f}", flush=True)
+                        return OrderResult(success=False, message=f"Insufficient buying power: ${bp:.2f} available, ${order_cost:.2f} needed", symbol=symbol, action=action, quantity=quantity)
+                print(f"[{self.name}] ✓ FUNDS: Stock buying power OK — ${bp:.2f} available", flush=True)
+            except Exception as _fe:
+                print(f"[{self.name}] ⚠️ FUNDS: Could not verify buying power: {_fe}", flush=True)
 
         try:
             result = await self._orders.place_stock_order(
@@ -349,6 +380,25 @@ class WebullOfficialBroker:
 
         side = "BUY" if action.upper() in ("BTO", "BTC") else "SELL"
         otype = "CALL" if option_type and option_type.upper().startswith("C") else "PUT"
+
+        if side == "BUY":
+            try:
+                acct = await self.get_account_info(max_age_seconds=60)
+                settled = float(acct.get('settled_cash', 0) or 0)
+                bp = float(acct.get('buying_power', 0) or 0)
+                # Options require settled cash in cash accounts; fall back to buying_power if not set
+                effective_funds = settled if settled > 0 else bp
+                if effective_funds <= 0:
+                    print(f"[{self.name}] ❌ FUNDS: No settled cash available — settled=${settled:.2f}, BP=${bp:.2f}", flush=True)
+                    return OrderResult(success=False, message=f"Insufficient settled cash: ${settled:.2f} available", symbol=symbol, action=action, quantity=quantity)
+                if effective_limit is not None:
+                    order_cost = quantity * effective_limit * 100
+                    if order_cost > effective_funds:
+                        print(f"[{self.name}] ❌ FUNDS: Option order cost ${order_cost:.2f} > settled cash ${effective_funds:.2f} (settled=${settled:.2f}, BP=${bp:.2f})", flush=True)
+                        return OrderResult(success=False, message=f"Insufficient settled cash: ${effective_funds:.2f} available, ${order_cost:.2f} needed", symbol=symbol, action=action, quantity=quantity)
+                print(f"[{self.name}] ✓ FUNDS: Options settled cash OK — ${settled:.2f} settled, ${bp:.2f} BP", flush=True)
+            except Exception as _fe:
+                print(f"[{self.name}] ⚠️ FUNDS: Could not verify settled cash: {_fe}", flush=True)
 
         # Sell-side options only support DAY time-in-force per Webull Official API
         tif = "DAY" if side == "SELL" else "DAY"
@@ -526,14 +576,57 @@ class WebullOfficialBroker:
         except Exception as e:
             print(f"[WEBULL_OFF] ⚠️ MQTT quote handler error: {e}")
 
+    def subscribe_symbol(self, symbol: str, is_option: bool = None):
+        """Subscribe a symbol to MQTT streaming. Schedules an async task on the running loop."""
+        if not self._stream:
+            return
+        if is_option is None:
+            is_option = len(symbol) > 10 and any(c.isdigit() for c in symbol)
+        category = "US_OPTION" if is_option else "US_STOCK"
+        try:
+            import asyncio as _asyncio
+            loop = _asyncio.get_event_loop()
+            loop.create_task(self._stream.subscribe([symbol], category=category))
+        except Exception as e:
+            log.warning(f"[{self.name}] subscribe_symbol({symbol}) failed: {e}")
+
     async def start_streaming(self, symbols: list[str] = None):
         if not self._stream:
             self._stream = WebullMarketStream(self._config, self._client)
             self._stream.on_quote_callback = self._on_mqtt_quote
 
         connected = await self._stream.connect()
-        if connected and symbols:
-            await self._stream.subscribe(symbols)
+        if connected:
+            if symbols:
+                await self._stream.subscribe(symbols)
+            # Auto-subscribe current positions so MQTT prices flow immediately
+            try:
+                pos_list = await self.get_positions(max_age_seconds=0)
+                stock_syms, opt_syms = [], []
+                for p in pos_list:
+                    sym = p.get('symbol', '')
+                    if not sym:
+                        continue
+                    if p.get('asset') == 'option':
+                        occ = _build_occ_symbol(
+                            sym,
+                            p.get('expiry_date', ''),
+                            'C' if 'CALL' in (p.get('option_type') or '').upper() else 'P',
+                            p.get('strike_price', 0),
+                        )
+                        if occ:
+                            opt_syms.append(occ)
+                        stock_syms.append(sym)
+                    else:
+                        stock_syms.append(sym)
+                if stock_syms:
+                    await self._stream.subscribe(list(set(stock_syms)), category="US_STOCK")
+                if opt_syms:
+                    await self._stream.subscribe(list(set(opt_syms)), category="US_OPTION")
+                if stock_syms or opt_syms:
+                    print(f"[{self.name}] ✓ MQTT subscribed {len(stock_syms)} stocks, {len(opt_syms)} options", flush=True)
+            except Exception as _se:
+                log.warning(f"[{self.name}] Auto-subscribe positions failed: {_se}")
 
         if not self._event_poller:
             self._event_poller = TradeEventPoller(self._client, self.account_id)

@@ -2603,7 +2603,10 @@ document.getElementById('connect-webull-official').addEventListener('click', asy
         const response = await fetch('/api/brokers/connect/webull_official', { method: 'POST' });
         const result = await response.json();
 
-        if (result.success) {
+        if (result.pending_approval) {
+            updateConnectionStatus('webull-official-connection-status', 'pending', '📱 Waiting for mobile approval...');
+            showMessage('info', result.error);
+        } else if (result.success) {
             updateConnectionStatus('webull-official-connection-status', 'connected', 'Connected', result.account);
             updateStatusBadge('webull_official', { status: 'connected' });
             showMessage('success', result.message);
@@ -3221,7 +3224,7 @@ document.getElementById('submit-schwab-code').addEventListener('click', async ()
 
 const AI_PROVIDER_MODELS = {
     'claude': { model: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', cost: 'Paid — ~$0.25/1M tokens' },
-    'gemini': { model: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', cost: 'Free — 1,500 requests/day' },
+    'gemini': { model: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', cost: 'Free — 1,500 requests/day' },
     'openai': { model: 'gpt-4o-mini', label: 'GPT-4o Mini', cost: 'Paid — ~$0.15/1M tokens' },
     'disabled': { model: '', label: 'None', cost: '' }
 };

@@ -1,5 +1,122 @@
 # BotifyTrades Progress Log
 
+## Session: June 15, 2026 — Code review #3: 3 bugs fixed across 2 files
+
+### Code Review Findings (7 angles, Phase 2 verification)
+
+**CONFIRMED BUG #1: WEBULL_OFFICIAL option ticker_id fallback — dead code** (`position_monitor.py`)
+- `_get_fresh_hub_price(hub, str(tid))` always returned None for WEBULL_OFFICIAL options. `hub.get_quote(str(tid))` tries `_ticker_id_reverse.get(str(tid))` to resolve the OCC symbol, but option ticker_ids are only in `_option_id_cache` (set by `price_monitor_service`), not in `_ticker_id_reverse` (only populated for equities via `hub.update_positions`).
+- **Fix:** Call `hub.get_symbol_by_ticker_id(tid)` explicitly to resolve OCC symbol from the reverse map. Falls back to `str(tid)` if unresolved. Introduces `_resolved_hub_key` to track the effective lookup key.
+
+**CONFIRMED BUG #2: WEBULL_OFFICIAL option REST repair permanently suppressed** (`position_monitor.py`)
+- `_hub_lookup = pos.raw_symbol or pos.symbol` resolved to `'QQQ'` (equity) for WEBULL_OFFICIAL options with no `raw_symbol`. `_get_hub_quote_ts(hub, 'QQQ')` returned equity quote timestamp (always fresh), so `_is_rest_repair_active` was always cleared immediately — REST repair never triggered for any WEBULL_OFFICIAL option.
+- **Fix:** `_hub_lookup = _resolved_hub_key or pos.raw_symbol or pos.symbol` — uses the actual key the price came from (OCC symbol or ticker_id string).
+
+**CONFIRMED BUG #3: `ai_analyzer.py` bare top-level import silently disables AI** (`src/ai_analyzer.py`)
+- Unconditional `from gui_app.config_service import ...` at line 13 raised `ImportError` in any headless/CI/test context where `gui_app` is not on sys.path. `selfbot_webull.py` swallows it with `except ImportError: AI_IMPORTS_AVAILABLE = False` and prints misleading "openai package not installed" message.
+- `ai_signal_parser.py` already used try/except pattern for the same import — this was an oversight.
+- **Fix:** Wrapped in try/except with hardcoded fallback dicts (same values as config_service).
+
+**REFUTED: `reload_warning` breaks approve_all counter** — `_handle_approve_all_candidates` checks `'Approved' in response` string (not `success` flag), so counter is unaffected.
+
+---
+
+## Session: June 15, 2026 — AI Chatbot UI overhaul + Format Registry fixes (6 bugs)
+
+### Bugs Fixed
+
+**CRITICAL: Approved formats never loaded into live bot** (`gui_app/chat_assistant.py`)
+- `_handle_approve_candidate` was calling `SignalFormatRegistry()` (bare constructor → throwaway instance) then `reload_learned_patterns()` on it. The live singleton was never updated. Every approved/trained format was dead in memory until bot restart.
+- Fixed: changed to `get_signal_format_registry()` so reload happens on the actual singleton.
+- Same fix applied to `test_signal_parsing()` which also used bare constructor.
+
+**BroadcastChannel echo loop** (`chat_popout.html:572`)
+- `bc.onmessage 'new-message'` called `appendMsg` without `skipBc=true`. With 2 popout windows open, messages echoed infinitely.
+- Fixed: added `true` as third arg.
+
+**renderMd italic regex corrupts code-block HTML** (`chat_popout.html`)
+- `/_(.+?)_/g` ran on the full string AFTER code-block HTML was emitted, matching underscores in `id="btn_xxx"` attributes and breaking the copy button on every code block.
+- Also: same regex italicized snake_case identifiers like `stop_loss_pct` in plain prose.
+- Fixed: stash code blocks and inline code as placeholder tokens (`\x02CB0\x02`) BEFORE all inline regex passes, restore after. Added `(?<![A-Za-z0-9])` word-boundary guard to italic regex.
+
+**`<p><ul>` invalid HTML** (`chat_popout.html`)
+- When AI response had prose + list with no blank line between (e.g. "Here are options:\n- item"), the list `<ul>` ended up wrapped inside a `<p>` tag.
+- Fixed: list replacement now emits `\n\n<ul>…</ul>\n\n` so paragraph splitter isolates it as its own block.
+
+**clearChat wiped peer windows** (`chat_popout.html`)
+- `clearChat()` broadcast `sync-messages:[]` to peer windows, permanently erasing their welcome message (baked in static HTML, not in the messages array).
+- Fixed: clearChat only clears local window's DOM.
+
+### New Features
+- `show active patterns` / `check formats` command: shows `learned_patterns` DB vs live singleton state, highlights sync mismatches
+- `reload formats` command: force hot-reloads singleton from DB without restart
+- Both commands available as quick-action chips in the chatbot Format Tools panel
+
+---
+
+## Session: June 15, 2026 — RGNT Dynamic SL -1% bug (3 fixes)
+
+### Bug Fixed: Dynamic SL fires at -1% loss when channel has 10% SL (IBKR_LIVE/IBKR mismatch)
+
+**Root Cause Chain:**
+1. `conditional_orders.broker_primary = 'IBKR'` but trades table uses `broker = 'IBKR_LIVE'`
+2. `_reconcile_conditional_orders` checks `has_open_trade = (symbol, 'IBKR') in open_trade_symbols` → always False (set has 'IBKR_LIVE') → skips SL seeding for all IBKR conditional orders
+3. `fill_price` lookup also uses 'IBKR' key, falls back to `trigger_price = 7.490163`
+4. New cache entries for IBKR positions created with `entry_price = trigger_price` (line 8328)
+5. PT1 fires (3% above 7.49 = 7.71); `calculate_dynamic_sl(7.49, standard, pt1_sl_pct=0)` → `dynamic_sl = 7.49` (breakeven of wrong entry)
+6. RGNT drops to 7.40 → `7.40 <= 7.49` → Dynamic SL fires at -1.1% loss
+
+**Duplicate trade side-effect:** broker_sync couldn't find 'IBKR_LIVE' trade for existing 'IBKR' positions → created duplicate IBKR_LIVE trades (#439, #441) with wrong `executed_price` from portfolio `averageCost` snapshot.
+
+**Fixes (3 files):**
+- `src/risk/position_monitor.py` — `_reconcile_conditional_orders`: added `_ibkr_broker_variants()` helper that expands 'IBKR' → ['IBKR', 'IBKR_LIVE', 'IBKR_PAPER'] for `has_open_trade`, `fill_price` lookup, cache key search, and stale-cache cleanup. Also fixed `entry_price = trigger_price` → `base_price` (fill_price or trigger_price) in new cache creation.
+- `src/services/broker_sync_service.py` — duplicate detection: added `_ibkr_family()` normalizer so 'IBKR', 'IBKR_LIVE', 'IBKR_PAPER' all match each other, preventing duplicate IBKR_LIVE trade records.
+- `src/selfbot_webull.py` — For `exit_strategy_mode='risk'`, channel SL now passes percentage only (`stop_loss_pct`); absolute price NOT seeded from `triggered_price` (risk engine owns all exits and recalculates from actual fill).
+
+---
+
+## Session: June 15, 2026 — CLOSING status / dashboard P&L freeze fix
+
+### Bug Fixed: Dashboard shows -30% P&L for 4+ minutes after SL exit (RGNT)
+
+**Root Cause:** Risk engine queues STC at `position_monitor.py:7682` but parent BTO trade stays `OPEN` in DB. `broker_sync` takes 4+ minutes to confirm the position is gone (8× IBKR cycles × ~30s). During that window, `api_refresh_prices` updates `current_price` from the live feed — so a dropping stock like RGNT showed P&L based on the live price ($3.87) vs entry ($5.526) = -30%, when actual exit was at SL price ($4.90) = -11%.
+
+**Fix (4 files):**
+- `src/risk/position_monitor.py` — After queueing STC at line 7682, immediately `update_trade(id, status='CLOSING', close_reason='risk_<trigger>', current_price=<sl_trigger_price>)`. Freezes DB price at the SL trigger level.
+- `gui_app/database.py` — `get_trades()` now accepts list/tuple for `status` param (e.g. `['OPEN', 'CLOSING']`), building `IN (?,?)` query.
+- `gui_app/routes.py` — Live tab fetches `status=['OPEN','CLOSING']` so CLOSING trades remain visible in the positions dashboard.
+- `src/services/broker_sync_service.py` — Pulls CLOSING trades in reconciliation loop; uses only 2 confirmation cycles for CLOSING (vs 8 for IBKR OPEN) since STC was already submitted; age guard only applies to OPEN (not CLOSING).
+
+**Result:** Dashboard P&L freezes at the SL trigger price within milliseconds. Broker_sync closes the trade in ~60s (2 cycles) instead of 4+ minutes.
+
+---
+
+## Session: June 14, 2026 — Eagle Options Chat Parser (v12.0.0+)
+
+### Feature: 🦅options-chat Signal Recognition
+
+Analyzed 348 messages from the channel. Two traders post bot-parseable text signals:
+
+**MBA (mbatrades)** — `SYMBOL STRIKEC MONTH DAY [YEAR]`  
+**Nina (ninag_27842)** — `$SYMBOL STRIKE CALL/PUT MONTH DAY[ORDINAL]`
+
+### Files Created/Modified
+- `src/signals/eagle_options_parser.py` — NEW: `EAGLE_MBA_ENTRY`, `EAGLE_NINA_ENTRY`, `EAGLE_EXIT` patterns + 3 parse functions
+- `src/signals/__init__.py` — exports for new parse functions
+- `src/services/signal_format_registry.py` — registered at priority 88 (Nina), 89 (MBA), 92 (exit)
+
+### Key Design Decisions
+- Expiry uses `normalize_expiry_iso()` with ordinal suffix stripping (`15TH` → `15`)
+- `_is_swing=True` flag set when "swing" or "look for entry" appears in message
+- No price in signal → `is_market_order=True` (execute at market)
+- mm2319/M&M signals are image-only → intentionally NOT parseable (~60% of channel volume)
+- MBA: default opt_type=C when no C/P suffix (e.g. `BYND $3 Jan 27`)
+
+### Tested against real examples
+All 9 MBA cases and 6/7 Nina cases parse correctly. 1 miss (terpytoes `EFOR call $25 Jun 15` — different word order, low-volume trader, acceptable).
+
+---
+
 ## Session: June 12, 2026 — v11.2.9: Persistent Session + "Error loading trades" Fix
 
 ### Root Cause
@@ -204,6 +321,41 @@ Multi-agent review of all changes (UPH, IBKR hub, broker, conditional orders, ri
 **Expected latency improvement**
 - Before: IB batches ticks ~200-300ms → tick_pump yields every 200ms → risk eval debounce 20ms = ~2500ms avg observed
 - After: IB delivers each tick ~100-300µs → tick_pump yields every 10ms → update_quote fires immediately → risk eval debounce 20ms = ~30ms typical path
+
+---
+
+## Session: June 14-15, 2026 — 3 Live Bugs Fixed (Risk, Dashboard Balance, Conditional Orders)
+
+### Bug 1: INLF position not monitored by risk engine (Temple of Boom channel)
+
+**Root cause:** Schwab was not authenticated (`[SCHWAB AUTH] No existing tokens`). `_fetch_schwab_positions()` in `position_monitor.py:3762` calls `schwab_broker.get_positions_detailed()` which returns empty when unauthenticated. INLF (trade #409, source='discord', channel_id='1330126014533079072') never entered the monitoring loop — not a config problem.
+
+**Evidence:** DB confirmed: trade #409 `broker=SCHWAB`, `source=discord`, `channel='1330126014533079072'` — all correct. Log: `[SCHWAB AUTH] No existing tokens, auto-refresh not started`.
+
+**Resolution:** No code change needed. Fix: Admin GUI → Settings → Re-authenticate with Schwab. After auth, log shows `[RISK] ✓ Schwab REST: 1 positions found (INLF)`.
+
+### Bug 2: Webull Official Dashboard balance card missing Settled/Unsettled Cash + no pre-trade funds check
+
+**Root cause (2 parts):**
+1. `/api/webull_official/balance` route in `gui_app/routes.py` manually built `result_data` and omitted `settled_cash`, `unsettled_cash`, `options_buying_power` — dashboard cards showed zeros.
+2. `place_stock_order()` and `place_option_order()` in `src/brokers/webull_official/broker.py` went straight to API with no balance pre-check (unlike legacy Webull which had `[FUNDS]` checks for stocks and settled_cash for options).
+
+**Fixes:**
+- `gui_app/routes.py` — added `settled_cash`, `unsettled_cash`, `options_buying_power` to balance endpoint dict. Note: broker returns `option_buying_power` (singular) → dashboard expects `options_buying_power` (plural); mapped with fallback.
+- `src/brokers/webull_official/broker.py` — added `[FUNDS]` check in `place_stock_order()` (checks `buying_power`) and `place_option_order()` (checks `settled_cash`, falls back to `buying_power`). Uses 60s `get_account_info()` cache — zero extra API calls on back-to-back orders.
+
+### Bug 3: JRSH conditional order triggered in Schwab but not IBKR (cross-broker price divergence)
+
+**Root cause:** In `src/services/conditional_orders/us_service.py:79`, the P0 (UPH unified price) selection was gated on `_uph.is_streaming()`. When both Schwab and IBKR are in REST-poll mode (not streaming), `is_streaming()` returned False → P0 skipped → each conditional order used its own broker's separate REST feed. Schwab REST and IBKR REST returned slightly different prices for the same stock, causing one order to trigger and the other not.
+
+**Fix:** Removed `is_streaming()` requirement from P0 check — UPH is now used as the unified price source whenever `_poll_running` is True, regardless of streaming state. `StreamingPriceMonitor` degrades gracefully when UPH has no cached data (falls through to per-hub then REST polling). Added `'uph_rest'` vs `'uph_stream'` distinction in data_source label for observability.
+
+Files changed:
+- `src/brokers/webull_official/broker.py`
+- `gui_app/routes.py`
+- `src/services/conditional_orders/us_service.py`
+
+All 3 files passed `ast.parse()` syntax check.
 
 ---
 
@@ -1343,3 +1495,55 @@ P&L reports (`SYMBOL LOW-HIGH 🔥`) guarded by the pink_flame check. Found 5 re
 - `SYMBOL +X% 🔥` — percentage gain reports
 - `SYMBOL all PTs hit 🔥` — target confirmation messages
 - Commentary, swing update ranges, news reactions
+
+---
+
+## Session: June 16, 2026 — WEBULL_OFFICIAL_LIVE deep review: 8 gaps fixed
+
+### Goal
+Make WEBULL_OFFICIAL_LIVE fully independent of legacy Webull as the price source for the risk engine and conditional order pipelines — MQTT-driven for both stocks and options.
+
+### Root Cause Analysis
+The WEBULL_OFFICIAL MQTT pipeline had 8 compounding gaps that together meant option prices came from 5s REST polling instead of MQTT streaming:
+
+### Gap 1: `get_positions()` returned `[]` on disconnect (FIXED — `broker.py`)
+- Brief `rc=16` MQTT reconnects set `connected=False` for 1-2s. `get_positions()` returned `[]` immediately, wiping all WEBULL_OFFICIAL positions from risk monitoring during the reconnect window.
+- Fix: Return `_positions_cache` when disconnected (non-empty cache survives brief disconnects).
+
+### Gap 2: No symbols subscribed at boot (FIXED — `broker.py`)
+- `start_streaming()` was called with `symbols=None` from selfbot. MQTT connected to the broker but no symbols were subscribed via the Webull REST subscription API (`/openapi/market-data/streaming/subscribe`). No quotes could ever arrive.
+- Fix: `start_streaming()` now fetches current positions and auto-subscribes their symbols (stocks as `US_STOCK`, options as `US_OPTION` with OCC format).
+
+### Gap 3: `subscribe()` hardcoded `"US_STOCK"` category (FIXED — `streaming.py`)
+- Every subscription used `"category": "US_STOCK"` regardless of asset type. Option subscriptions sent with wrong category would be silently ignored or return equity ticks.
+- Fix: Added `category` parameter to `subscribe()`, defaulting to `"US_STOCK"`. Option subscriptions use `"US_OPTION"`.
+
+### Gap 4: Subscriptions lost after `rc=16` reconnect (FIXED — `streaming.py`)
+- paho-mqtt auto-reconnects after `rc=16`, restoring the TCP connection and MQTT topics (`snapshot`, `quote`). But Webull's API-side symbol subscriptions are session-scoped — they're lost on reconnect. After every 60-70s reconnect, MQTT received no quotes until symbols were re-subscribed.
+- Fix: `_on_connect` now schedules `_resubscribe_all()` after reconnect, which re-sends all previously subscribed symbols with their correct categories. Added `_symbol_categories` dict to track per-symbol categories.
+
+### Gap 5: `raw_symbol` not populated for WEBULL_OFFICIAL options (FIXED — `position_monitor.py`)
+- `_fetch_webull_official_positions()` didn't populate `raw_symbol` (OCC symbol) in `PositionSnapshot`. Without it, `_update_monitored_symbols()` never added the OCC symbol to `_monitored_symbols`. MQTT option ticks (arriving under OCC key like `QQQ250620C00745000`) were silently dropped at the dirty-symbol filter.
+- Fix: Construct OCC symbol from REST position fields (`symbol + expiry_date + option_type + strike_price`) and populate `raw_symbol`. E.g. `QQQ250620C00745000` from QQQ, 2025-06-20, CALL, 745.0.
+
+### Gap 6: `max_age_seconds=5` caused 1100ms REST cycles (FIXED — `position_monitor.py`)
+- REST `get_positions` called every 5s from risk engine, causing `[RISK] ⏱ Cycle #121: 1107ms` spikes. With MQTT providing live prices, position structure (avg_cost, qty) changes slowly — 15s is correct.
+- Fix: Changed to `max_age_seconds=15`. Also removed the early `not connected` guard (get_positions now handles cache correctly).
+
+### Gap 7: No `subscribe_symbol()` on `WebullOfficialBroker` (FIXED — `broker.py`)
+- Conditional orders and UPH couldn't push new symbols to WEBULL_OFFICIAL MQTT. The fallback path in `_try_subscribe_streaming()` needed `broker_instance.subscribe_symbol()`.
+- Fix: Added `subscribe_symbol(symbol, is_option=None)` to broker. Auto-detects option by length+digit heuristic if `is_option` not specified. Schedules async `_stream.subscribe()` task.
+
+### Gap 8: UPH's `subscribe_symbol()` skipped WebullDataHub (FIXED — `unified_price_hub.py` + `webull_data_hub.py`)
+- UPH routing only handled Schwab, IBKR, Tastytrade. WebullDataHub didn't match any known pattern.
+- Fix: Added `subscribe_symbol()` to `WebullDataHub` that routes via `WebullOfficialBroker._active_instance`. Added Webull detection in UPH routing (`hasattr(hub, '_subscribed_symbols')` distinguishes it from others). Added `_active_instance` class variable to `WebullOfficialBroker` (set at `__init__`, cleared at `disconnect()`). Also extended `_request_cross_broker_option_subscriptions()` in position_monitor to directly push option OCC symbols to WEBULL_OFFICIAL broker.
+
+### Files Changed
+- `src/brokers/webull_official/broker.py` — `_active_instance`, cache-on-disconnect, `subscribe_symbol()`, auto-subscribe in `start_streaming()`, `_build_occ_symbol()` helper
+- `src/brokers/webull_official/streaming.py` — `category` param in `subscribe()`, `_symbol_categories` tracking, `_resubscribe_all()` on reconnect
+- `src/risk/position_monitor.py` — `raw_symbol` population, `max_age_seconds=15`, option OCC subscription in `_request_cross_broker_option_subscriptions()`
+- `src/services/webull_data_hub.py` — `subscribe_symbol()` method
+- `src/services/unified_price_hub.py` — Webull hub path in `subscribe_symbol()` routing
+
+### Note on Option MQTT Format
+The Webull Official API option subscription uses OCC-style symbols with `category=US_OPTION`. If MQTT ticks return the OCC symbol in the `symbol` field, the full pipeline works end-to-end. If Webull uses a proprietary format, `_on_mqtt_quote()` may need adjustment after observing actual tick payloads.

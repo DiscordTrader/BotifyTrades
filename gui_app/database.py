@@ -601,7 +601,15 @@ def init_db():
         cursor.execute('ALTER TABLE channels ADD COLUMN breakout_reset_enabled INTEGER DEFAULT 1')
         conn.commit()
         print("[DATABASE] ✓ Added breakout_reset_enabled column to channels")
-    
+
+    # Migrate: Add per-channel typo/symbol correction toggle
+    try:
+        cursor.execute('SELECT typo_correction_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN typo_correction_enabled INTEGER DEFAULT 1')
+        conn.commit()
+        print("[DATABASE] ✓ Added typo_correction_enabled column to channels")
+
     # ============================================
     # OMS/RMS COLUMNS - Signal Update Automation & Risk Management
     # ============================================
@@ -1293,11 +1301,14 @@ def init_db():
     ''')
     
     cursor.execute('''
-        INSERT OR IGNORE INTO ai_settings 
+        INSERT OR IGNORE INTO ai_settings
         (id, enabled, model, sentiment_enabled)
         VALUES (1, 1, 'gpt-4o-mini', 0)
     ''')
-    
+    cursor.execute(
+        "UPDATE ai_settings SET model = 'gemini-2.0-flash' WHERE model = 'gemini-3.5-flash'"
+    )
+
     # Trading settings
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS trading_settings (
@@ -2926,7 +2937,8 @@ def update_channel(channel_id: int, **kwargs):
                    'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
                    'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled', 'entry_chase_enabled',
-                   'ticker_filter_mode', 'ticker_filter_list', 'sizing_mode', 'broker_bracket_mode', 'allowed_signal_formats']:
+                   'ticker_filter_mode', 'ticker_filter_list', 'sizing_mode', 'broker_bracket_mode', 'allowed_signal_formats',
+                   'typo_correction_enabled']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
@@ -3535,20 +3547,25 @@ def get_trades(status: Optional[str] = None, broker: Optional[str] = None, limit
     params = []
     
     if status:
-        query += ' AND t.status = ?'
-        params.append(status)
-    
+        if isinstance(status, (list, tuple)):
+            placeholders = ','.join('?' * len(status))
+            query += f' AND t.status IN ({placeholders})'
+            params.extend(status)
+        else:
+            query += ' AND t.status = ?'
+            params.append(status)
+
     if broker:
         # Case-insensitive broker matching (Webull vs WEBULL, ALPACA_PAPER vs alpaca_paper)
         query += ' AND LOWER(t.broker) = LOWER(?)'
         params.append(broker)
-    
+
     # Filter out trades marked as hidden
     query += ' AND (t.hide_in_ui IS NULL OR t.hide_in_ui = 0)'
-    
+
     query += ' ORDER BY t.executed_at DESC LIMIT ?'
     params.append(limit)
-    
+
     cursor.execute(query, params)
     return [dict(row) for row in cursor.fetchall()]
 

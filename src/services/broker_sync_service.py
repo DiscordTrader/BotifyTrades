@@ -1347,8 +1347,9 @@ class BrokerSyncService:
         """Update status of existing database trades based on broker state"""
         
         open_trades = self.db.get_trades(status='OPEN', limit=5000)
+        closing_trades = self.db.get_trades(status='CLOSING', limit=500)
         pending_trades = self.db.get_trades(status='PENDING', limit=5000)
-        db_trades = open_trades + pending_trades
+        db_trades = open_trades + closing_trades + pending_trades
         
         active_trades = []
         for t in db_trades:
@@ -1378,7 +1379,7 @@ class BrokerSyncService:
         pending_by_symbol = {o['symbol']: o for o in normalized_data.get('pending_orders', [])}
         
         has_pending_trades = any(t['status'] == 'PENDING' for t in active_trades)
-        has_open_trades = any(t['status'] == 'OPEN' for t in active_trades)
+        has_open_trades = any(t['status'] in ('OPEN', 'CLOSING') for t in active_trades)
         broker_returned_empty = not positions_by_key and not pending_by_order_id and not pending_by_symbol
         fetch_error = normalized_data.get('_fetch_error', False)
         
@@ -2004,22 +2005,23 @@ class BrokerSyncService:
                             pass
                     except Exception as cache_err:
                         print(f"[SYNC] Warning: Could not clean up cache: {cache_err}")
-                elif current_status == 'OPEN':
+                elif current_status in ('OPEN', 'CLOSING'):
                     order_id_val = trade.get('order_id', '') or ''
                     if order_id_val.startswith('PAPER_SIM'):
                         continue
 
                     _trade_age_guard = False
-                    try:
-                        _exec_at = trade.get('executed_at') or trade.get('created_at') or ''
-                        if _exec_at:
-                            _exec_dt = datetime.fromisoformat(_exec_at.replace('Z', '+00:00'))
-                            _age_minutes = (datetime.now() - _exec_dt.replace(tzinfo=None)).total_seconds() / 60
-                            if _age_minutes < 2:
-                                print(f"[SYNC] ⚠️ RECENT TRADE GUARD: Trade #{trade_id} ({symbol}) opened {_age_minutes:.1f}min ago — skipping closure (protect <2min trades)")
-                                _trade_age_guard = True
-                    except Exception as _age_err:
-                        print(f"[SYNC] ⚠️ Trade age check error: {_age_err}")
+                    if current_status == 'OPEN':
+                        try:
+                            _exec_at = trade.get('executed_at') or trade.get('created_at') or ''
+                            if _exec_at:
+                                _exec_dt = datetime.fromisoformat(_exec_at.replace('Z', '+00:00'))
+                                _age_minutes = (datetime.now() - _exec_dt.replace(tzinfo=None)).total_seconds() / 60
+                                if _age_minutes < 2:
+                                    print(f"[SYNC] ⚠️ RECENT TRADE GUARD: Trade #{trade_id} ({symbol}) opened {_age_minutes:.1f}min ago — skipping closure (protect <2min trades)")
+                                    _trade_age_guard = True
+                        except Exception as _age_err:
+                            print(f"[SYNC] ⚠️ Trade age check error: {_age_err}")
                     if _trade_age_guard:
                         continue
 
@@ -2027,9 +2029,15 @@ class BrokerSyncService:
                         self._consecutive_empty_counts = {}
                     _empty_key = f"{broker_name}_{trade_id}"
                     self._consecutive_empty_counts[_empty_key] = self._consecutive_empty_counts.get(_empty_key, 0) + 1
-                    _REQUIRED_CONFIRMATIONS = 8 if broker_name.startswith('IBKR') else 4
+                    # CLOSING = risk engine already submitted STC; broker just needs to confirm gone
+                    if current_status == 'CLOSING':
+                        _REQUIRED_CONFIRMATIONS = 2
+                    elif broker_name.startswith('IBKR'):
+                        _REQUIRED_CONFIRMATIONS = 8
+                    else:
+                        _REQUIRED_CONFIRMATIONS = 4
                     if self._consecutive_empty_counts[_empty_key] < _REQUIRED_CONFIRMATIONS:
-                        print(f"[SYNC] ⏳ Trade #{trade_id} ({symbol}) not in {broker_name} positions ({self._consecutive_empty_counts[_empty_key]}/{_REQUIRED_CONFIRMATIONS} confirmations)")
+                        print(f"[SYNC] ⏳ Trade #{trade_id} ({symbol}) not in {broker_name} positions ({self._consecutive_empty_counts[_empty_key]}/{_REQUIRED_CONFIRMATIONS} confirmations) status={current_status}")
                         continue
 
                     # Extract bracket order IDs from risk cache BEFORE cleanup
@@ -2875,13 +2883,21 @@ class BrokerSyncService:
                         pass
 
                 # Check 2: Symbol + broker match (OPEN/PENDING only)
+                # For IBKR, also treat 'IBKR', 'IBKR_LIVE', 'IBKR_PAPER' as the same broker
+                # to prevent broker_sync from creating duplicate trades when the conditional-order
+                # path already created an 'IBKR' record for the same position.
+                def _ibkr_family(b: str) -> str:
+                    return 'IBKR' if b.upper() in ('IBKR', 'IBKR_LIVE', 'IBKR_PAPER') else b.upper()
+
                 if not has_duplicate:
                     existing_trades = self.db.get_trades(status='OPEN', limit=1000) + self.db.get_trades(status='PENDING', limit=500)
                     for existing in existing_trades:
                         existing_broker = (existing.get('broker') or '').upper()
-                        if existing['symbol'] == symbol and existing_broker == trade_broker:
+                        brokers_match = (existing_broker == trade_broker or
+                                         _ibkr_family(existing_broker) == _ibkr_family(trade_broker))
+                        if existing['symbol'] == symbol and brokers_match:
                             if asset_type == 'stock':
-                                print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} already has OPEN/PENDING position (ID={existing['id']}, status={existing.get('status')}, broker={trade_broker})")
+                                print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} already has OPEN/PENDING position (ID={existing['id']}, status={existing.get('status')}, broker={existing_broker} ≈ {trade_broker})")
                                 has_duplicate = True
                                 break
                             elif asset_type == 'option':

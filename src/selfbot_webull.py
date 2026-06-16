@@ -11213,10 +11213,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif channel_settings and channel_settings.get('stop_loss_pct'):
                             ch_sl_pct = channel_settings['stop_loss_pct']
                             signal['stop_loss_pct'] = ch_sl_pct
-                            ch_sl_price = triggered_price * (1 - ch_sl_pct / 100)
-                            _ch_sl_dec = 4 if triggered_price < 1.0 else 2
-                            signal['stop_loss_price'] = round(ch_sl_price, _ch_sl_dec)
-                            print(f"[CONDITIONAL] Using channel SL: {ch_sl_pct}% = ${signal['stop_loss_price']:.{_ch_sl_dec}f}", flush=True)
+                            if _ch_exit_mode != 'risk':
+                                # For risk mode the engine owns all exits; don't seed an absolute SL
+                                # price from triggered_price — broker_sync will recalculate it from
+                                # the actual fill price once the order is confirmed.
+                                ch_sl_price = triggered_price * (1 - ch_sl_pct / 100)
+                                _ch_sl_dec = 4 if triggered_price < 1.0 else 2
+                                signal['stop_loss_price'] = round(ch_sl_price, _ch_sl_dec)
+                                print(f"[CONDITIONAL] Using channel SL: {ch_sl_pct}% = ${signal['stop_loss_price']:.{_ch_sl_dec}f}", flush=True)
+                            else:
+                                print(f"[CONDITIONAL] Risk mode: SL {ch_sl_pct}% passed as pct only (absolute recalculated from fill)", flush=True)
                         
                         # Profit Targets: Signal prices first, then channel percentage settings
                         if has_signal_targets:
@@ -12632,6 +12638,45 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'asset': 'option',
                             }
                             print(f"[JPM] ✓ Converted to routing format: {routing_parsed}")
+                        elif is_phoenix_registry and _phoenix_registry_result and _phoenix_registry_result.get('asset') == 'option' and _phoenix_registry_result.get('_format_name', '').startswith('eagle_'):
+                            _eg_r = _phoenix_registry_result
+                            _eg_r_sym = _eg_r.get('symbol', '')
+                            _eg_r_strike = _eg_r.get('strike') or 0
+                            _eg_r_opt = _eg_r.get('opt_type', 'C') or 'C'
+                            _eg_r_exp = _eg_r.get('expiry', '') or ''
+                            if _eg_r.get('action') == 'STC' and not _eg_r_strike:
+                                try:
+                                    from gui_app.database import get_connection
+                                    conn = get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute('''
+                                        SELECT symbol, strike, call_put, expiry
+                                        FROM trades
+                                        WHERE channel_id = ? AND symbol = ?
+                                        AND direction = 'BTO'
+                                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                                        ORDER BY created_at DESC LIMIT 1
+                                    ''', (str(message.channel.id), _eg_r_sym))
+                                    open_pos = cursor.fetchone()
+                                    if open_pos:
+                                        _eg_r_strike = open_pos['strike'] or 0
+                                        _eg_r_opt = open_pos['call_put'] or _eg_r_opt
+                                        _eg_r_exp = open_pos['expiry'] or _eg_r_exp
+                                except Exception:
+                                    pass
+                            routing_parsed = {
+                                'action': _eg_r.get('action', 'BTO'),
+                                'symbol': _eg_r_sym,
+                                'strike': _eg_r_strike,
+                                'opt_type': _eg_r_opt,
+                                'expiry': _eg_r_exp,
+                                'price': _eg_r.get('price', 0),
+                                'qty': 1,
+                                'is_trim': _eg_r.get('is_trim', False),
+                                'is_full_exit': _eg_r.get('is_full_exit', False),
+                                'asset': 'option',
+                            }
+                            print(f"[EAGLE-OPTIONS] ✓ Converted to routing format: {routing_parsed}")
                         elif is_namrood and namrood_signals:
                             first_nr = namrood_signals[0]
                             nr_sym = first_nr.get('symbol', '') or ''
@@ -13996,8 +14041,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             try:
                                 from src.services.signal_correction import get_signal_correction_service, has_exit_intent
                                 _corr_enabled = True
-                                if channel_info and hasattr(channel_info, 'typo_correction_enabled'):
-                                    _corr_enabled = channel_info.typo_correction_enabled
+                                if channel_info:
+                                    _corr_enabled = bool(channel_info.get('typo_correction_enabled', 1))
                                 if has_exit_intent(combined_content) and _corr_enabled:
                                     _corr_svc = get_signal_correction_service()
                                     _corr_result = await _corr_svc.ai_correct(combined_content, _ch_id_str, _corr_enabled)
@@ -14054,8 +14099,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         from src.services.signal_correction import get_signal_correction_service
                                         _corr_svc = get_signal_correction_service()
                                         _corr_enabled = True
-                                        if channel_info and hasattr(channel_info, 'typo_correction_enabled'):
-                                            _corr_enabled = channel_info.typo_correction_enabled
+                                        if channel_info:
+                                            _corr_enabled = bool(channel_info.get('typo_correction_enabled', 1))
                                         _fuzzy = await _corr_svc.fuzzy_correct(
                                             _ai_result['symbol'], _ch_id_str, combined_content, _corr_enabled
                                         )
@@ -15165,6 +15210,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 }
                 _ab_fmt = _ab.get('_format_name', 'abtrades')
                 print(f"[ABTRADES] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ {opt['price']} ({_ab_fmt})")
+            elif _phoenix_registry_result and _phoenix_registry_result.get('asset') == 'option' and _phoenix_registry_result.get('_format_name', '').startswith('eagle_'):
+                _eg = _phoenix_registry_result
+                _eg_sym = _eg.get('symbol', '')
+                _eg_strike = _eg.get('strike') or 0
+                _eg_opt = _eg.get('opt_type', 'C') or 'C'
+                _eg_exp = _eg.get('expiry', '') or ''
+                if _eg.get('action') == 'STC' and not _eg_strike:
+                    try:
+                        _eg_pos = get_open_position_for_symbol(_eg_sym, str(message.channel.id))
+                        if _eg_pos:
+                            _eg_strike = _eg_pos.get('strike') or 0
+                            _eg_opt = _eg_pos.get('call_put') or _eg_pos.get('opt_type') or _eg_opt
+                            _eg_exp = _eg_pos.get('expiry') or _eg_exp
+                    except Exception:
+                        pass
+                opt = {
+                    'action': _eg.get('action', 'BTO'),
+                    'symbol': _eg_sym,
+                    'strike': _eg_strike,
+                    'opt_type': _eg_opt,
+                    'expiry': _eg_exp,
+                    'price': _eg.get('price'),
+                    'qty': _eg.get('qty', 1),
+                    'asset': 'option',
+                    'is_market_order': _eg.get('is_market_order', True),
+                    'is_trim': _eg.get('is_trim', False),
+                    'is_full_exit': _eg.get('is_full_exit', False),
+                    'stop_loss': _eg.get('stop_loss'),
+                    '_eagle_options': True,
+                }
+                _eg_fmt = _eg.get('_format_name', 'eagle')
+                print(f"[EAGLE-OPTIONS] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ {opt['price']} ({_eg_fmt})")
             elif is_jpm and jpm_signals:
                 _jpm = jpm_signals[0]
                 _jpm_sym = _jpm.get('symbol', '')
@@ -15756,17 +15833,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # If signal asks for less than position sizing allows, respect signal intent
                     # If signal asks for more than position sizing allows, cap to position sizing
                     signal_qty_val = opt.get('qty')
+                    qty_actually_from_signal = opt.get('qty_specified', opt.get('_qty_from_signal', False))
                     opt['_position_size_pct'] = float(channel_position_size_pct)
                     opt['_pct_from_channel'] = True
                     opt['_calculate_qty'] = True
-                    
-                    if signal_qty_val and signal_qty_val > 0:
-                        # Signal has qty - will use MIN(signal_qty, calculated_max) in worker
+
+                    if signal_qty_val and signal_qty_val > 0 and qty_actually_from_signal:
+                        # Trader explicitly specified a qty — cap our calculated qty at this value
                         opt['_signal_qty_to_cap'] = signal_qty_val
-                        opt['qty'] = signal_qty_val  # Start with signal qty, may be capped down
+                        opt['qty'] = signal_qty_val
                         print(f"[POSITION SIZE] ✓ Signal qty={signal_qty_val} with channel {channel_position_size_pct}% limit (will use MIN)")
                     else:
-                        # No signal qty - use full channel percentage
+                        # No explicit qty in signal — full channel % calculation, no cap
                         opt['qty'] = 1  # Placeholder - will be recalculated by worker
                         print(f"[POSITION SIZE] ✓ Using channel position_size_pct: {channel_position_size_pct}% (will calculate from buying power)")
                 elif signal_qty:
@@ -18083,8 +18161,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     
                                     if calculate_qty or pct_from_signal or pct_from_channel:
                                         if pct_qty == 0 and affordable_qty >= 1:
-                                            channel_max_qty = min(original_qty, affordable_qty)
-                                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 contract (${actual_cost:.0f}), using buying power instead")
+                                            signal_qty_to_cap_check = signal.get('_signal_qty_to_cap')
+                                            if not signal_qty_to_cap_check:
+                                                # No explicit signal qty — use full affordable qty (original_qty is just placeholder=1)
+                                                channel_max_qty = affordable_qty
+                                            else:
+                                                channel_max_qty = min(original_qty, affordable_qty)
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 contract (${actual_cost:.0f}), using buying power instead (affordable={affordable_qty})")
                                         else:
                                             channel_max_qty = min(pct_qty, affordable_qty)
                                         
@@ -18620,10 +18703,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     _original_print(f"[{broker_name}] ⚡ Conditional option: price ${order_price:.2f} is stock trigger, switching to MARKET ORDER")
                     order_price = None
 
-                # ── Central slippage wait (non-Webull conditional orders) ──────────────
-                # Webull handles this internally; all other brokers run through here.
+                # ── Central slippage wait (non-legacy-Webull conditional orders) ──────────────
+                # Legacy Webull handles slippage internally in place_option_order.
+                # Webull Official does not — it goes through this path.
                 _cond_id = signal.get('_conditional_order_id')
-                if (_cond_id and order_price is not None and 'WEBULL' not in broker_upper
+                _is_legacy_webull_cond = 'WEBULL' in broker_upper and 'OFFICIAL' not in broker_upper
+                if (_cond_id and order_price is not None and not _is_legacy_webull_cond
                         and signal.get('action', '').upper() in ('BTO', 'BTC')):
                     _slippage_cfg = get_effective_slippage_settings(signal.get('channel_id'))
                     if _slippage_cfg.get('enabled'):
@@ -18963,10 +19048,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         stock_order_price = signal['_limit_price']
                         _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${stock_order_price:.4f} (max allowed)")
 
-                # ── Central slippage wait for stock orders (non-Webull conditional) ──
-                # Webull handles stock slippage internally in its place_stock_order.
+                # ── Central slippage wait for stock orders (non-legacy-Webull conditional) ──
+                # Legacy Webull handles stock slippage internally in place_stock_order.
+                # Webull Official does not — it goes through this path.
                 _cond_id_s = signal.get('_conditional_order_id')
-                if (_cond_id_s and stock_order_price is not None and 'WEBULL' not in broker_upper
+                _is_legacy_webull_stk = 'WEBULL' in broker_upper and 'OFFICIAL' not in broker_upper
+                if (_cond_id_s and stock_order_price is not None and not _is_legacy_webull_stk
                         and signal.get('action', '').upper() in ('BTO', 'BTC')):
                     _slippage_cfg_s = get_effective_slippage_settings(signal.get('channel_id'))
                     if _slippage_cfg_s.get('enabled'):
@@ -21207,7 +21294,48 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         _original_print(f"[LIVE TRADE] India broker - defaulting to 1 lot")
                             else:
                                 order_kwargs['qty'] = signal['qty']
-                            
+
+                            # Per-channel slippage protection for non-legacy-Webull live option entries.
+                            # Legacy Webull handles slippage internally in place_option_order.
+                            # Webull Official does not — it must be checked here.
+                            _lt_action = signal.get('action', '').upper()
+                            _lt_opt_price = order_kwargs.get('limit_price')
+                            _lt_is_legacy_wb = 'WEBULL' in broker_name_used.upper() and 'OFFICIAL' not in broker_name_used.upper()
+                            if (not use_market_order and _lt_opt_price and _lt_action in ('BTO', 'BTC')
+                                    and not _lt_is_legacy_wb):
+                                _lt_slip_cfg = get_effective_slippage_settings(signal.get('channel_id'))
+                                if _lt_slip_cfg.get('enabled'):
+                                    async def _lt_get_opt_q():
+                                        try:
+                                            if hasattr(live_broker, 'get_option_quote'):
+                                                q = await live_broker.get_option_quote(
+                                                    signal['symbol'], signal.get('strike'),
+                                                    signal.get('expiry'), signal.get('opt_type'))
+                                                if isinstance(q, dict):
+                                                    return q.get('last') or q.get('ask') or q.get('mark') or q.get('price')
+                                                if isinstance(q, (int, float)):
+                                                    return float(q)
+                                        except Exception:
+                                            pass
+                                        return None
+                                    _lt_cur_opt = await _lt_get_opt_q()
+                                    _lt_decision, _lt_slip_pct = _evaluate_slippage_check(
+                                        float(_lt_opt_price), _lt_cur_opt,
+                                        threshold_override=_lt_slip_cfg['threshold_percent'])
+                                    if _lt_decision == SlippageDecision.ABORT:
+                                        _lt_eff_w = _lt_slip_cfg.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
+                                        _original_print(f"[{broker_name_used}] [SLIPPAGE] ⏳ Live option - price-wait {_lt_eff_w:.1f} min (slippage {_lt_slip_pct:.2f}%)")
+                                        _lt_ws = {'price': _lt_opt_price, 'symbol': signal['symbol']}
+                                        _lt_fd, _lt_fp = await self._wait_for_better_price(
+                                            _lt_ws, _lt_get_opt_q, wait_minutes=_lt_eff_w)
+                                        if _lt_fd == SlippageDecision.ABORT:
+                                            _original_print(f"[{broker_name_used}] [SLIPPAGE] ❌ Slippage too high after wait — skipping option order")
+                                            self.order_queue.task_done()
+                                            continue
+                                        if _lt_fp and _lt_fp > 0:
+                                            order_kwargs['limit_price'] = _lt_fp
+                                            _original_print(f"[{broker_name_used}] [SLIPPAGE] Updated option limit price → ${_lt_fp:.4f}")
+
                             # Retry loop for transient errors
                             for attempt in range(max_retries):
                                 resp = await live_broker.place_option_order(**order_kwargs)
@@ -21237,7 +21365,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if use_market_order:
                                 _original_print(f"[LIVE TRADE] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')} (risk: {signal.get('risk_trigger', 'N/A')}, fallback=${_worker_stk_fallback})", flush=True)
                             _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_stock_order()...", flush=True)
-                            is_webull_broker = broker_name_used and 'WEBULL' in broker_name_used.upper()
+                            # Only legacy Webull uses qty/limit_price/channel_id kwargs and handles slippage internally.
+                            # Webull Official uses the standard symbol/action/quantity/price kwargs and needs external slippage check.
+                            is_webull_broker = (broker_name_used and 'WEBULL' in broker_name_used.upper()
+                                                and 'OFFICIAL' not in broker_name_used.upper())
                             if is_webull_broker:
                                 _wb_stk_kwargs = dict(
                                     action=signal['action'],
@@ -21251,6 +21382,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     _wb_stk_kwargs['_signal_price_fallback'] = _worker_stk_fallback
                                 resp = await live_broker.place_stock_order(**_wb_stk_kwargs)
                             else:
+                                # Per-channel slippage protection for non-Webull live stock entries
+                                # Webull handles slippage internally in its place_stock_order.
+                                _lt_stk_action = signal.get('action', '').upper()
+                                if (not use_market_order and stock_price and _lt_stk_action in ('BTO',)):
+                                    _lt_stk_slip_cfg = get_effective_slippage_settings(signal.get('channel_id'))
+                                    if _lt_stk_slip_cfg.get('enabled'):
+                                        async def _lt_get_stk_q():
+                                            try:
+                                                if hasattr(live_broker, 'get_quote'):
+                                                    p = await live_broker.get_quote(signal['symbol'])
+                                                    if p:
+                                                        return float(p)
+                                            except Exception:
+                                                pass
+                                            return None
+                                        _lt_stk_cur = await _lt_get_stk_q()
+                                        _lt_stk_decision, _lt_stk_pct = _evaluate_slippage_check(
+                                            float(stock_price), _lt_stk_cur,
+                                            threshold_override=_lt_stk_slip_cfg['threshold_percent'])
+                                        if _lt_stk_decision == SlippageDecision.ABORT:
+                                            _lt_stk_eff_w = _lt_stk_slip_cfg.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
+                                            _original_print(f"[{broker_name_used}] [SLIPPAGE] ⏳ Live stock - price-wait {_lt_stk_eff_w:.1f} min (slippage {_lt_stk_pct:.2f}%)")
+                                            _lt_stk_ws = {'price': stock_price, 'symbol': signal['symbol']}
+                                            _lt_stk_fd, _lt_stk_fp = await self._wait_for_better_price(
+                                                _lt_stk_ws, _lt_get_stk_q, wait_minutes=_lt_stk_eff_w)
+                                            if _lt_stk_fd == SlippageDecision.ABORT:
+                                                _original_print(f"[{broker_name_used}] [SLIPPAGE] ❌ Slippage too high after wait — skipping stock order")
+                                                self.order_queue.task_done()
+                                                continue
+                                            if _lt_stk_fp and _lt_stk_fp > 0:
+                                                stock_price = _lt_stk_fp
+                                                _original_print(f"[{broker_name_used}] [SLIPPAGE] Updated stock limit price → ${_lt_stk_fp:.4f}")
                                 resp = await live_broker.place_stock_order(
                                     symbol=signal['symbol'],
                                     action=signal['action'],

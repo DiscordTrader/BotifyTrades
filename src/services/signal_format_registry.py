@@ -2126,6 +2126,61 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE,
         )
 
+        # =====================================================================
+        # EAGLE OPTIONS CHAT FORMATS (🦅options-chat, priority 88-92)
+        # =====================================================================
+        from src.signals.eagle_options_parser import (
+            parse_eagle_mba_entry,
+            parse_eagle_nina_entry,
+            parse_eagle_options_exit,
+            EAGLE_NINA_ENTRY,
+            EAGLE_MBA_ENTRY,
+            EAGLE_EXIT,
+        )
+
+        self.register(
+            name="eagle_nina_entry",
+            description="Eagle options Nina format: $SYMBOL STRIKE CALL/PUT MONTH DAY",
+            priority=88,
+            pattern=EAGLE_NINA_ENTRY.pattern,
+            parser=parse_eagle_nina_entry,
+            examples=[
+                "$RGTI 22 CALL MAY 8",
+                "$GME 28 CALL MAY 8TH",
+                "$POET 20 CALL JUNE 18TH",
+                "$OPEN 6.50 CALL MAY 15TH",
+                "$SMR $20 CALL NOV 20TH",
+            ],
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
+        self.register(
+            name="eagle_mba_entry",
+            description="Eagle options MBA format: SYMBOL STRIKEC MONTH DAY [YEAR]",
+            priority=89,
+            pattern=EAGLE_MBA_ENTRY.pattern,
+            parser=parse_eagle_mba_entry,
+            examples=[
+                "AMZN 280C JUNE 18",
+                "MSFT 800C JAN 15",
+                "MARA 25C Jan 15 27",
+                "NIO 7C Jan 15 2027",
+                "$IMSR 15C JULY 17",
+                "BYND $3 Jan 27",
+            ],
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
+        self.register(
+            name="eagle_options_exit",
+            description="Eagle options exit: Sold SYMBOL",
+            priority=92,
+            pattern=EAGLE_EXIT.pattern,
+            parser=parse_eagle_options_exit,
+            examples=["Sold QCOM", "Sold AMZN"],
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
         # Load learned patterns from database
         self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
         self._load_learned_patterns()
@@ -4440,54 +4495,104 @@ class SignalFormatRegistry:
     def _parse_learned_pattern_with_metadata(self, match: re.Match, text: str, pattern_name: str) -> Optional[Dict]:
         """Parse signals using learned patterns with database metadata."""
         import re as _re
-        groups = match.groups()
-        symbol = None
-        price = None
-        strike = None
-        opt_type = None
-        expiry = None
-        
+        groups = list(match.groups())
+
         metadata = self._learned_pattern_metadata.get(pattern_name, {})
         action = metadata.get('action', 'BTO')
         asset_type = metadata.get('asset_type', 'stock')
         confidence = metadata.get('confidence', 0.85)
         admin_approved = metadata.get('admin_approved', False)
-        
-        for g in groups:
+
+        symbol = None
+        strike = None
+        opt_type = None
+        price = None
+        expiry = None
+        opt_type_idx = -1
+        numerics = []  # list of (group_index, float_value)
+
+        _RESERVED = {'HERE', 'MORE', 'NOW', 'ON', 'THE', 'MY', 'OF', 'WITH', 'ALL',
+                     'HALF', 'REST', 'SOME', 'AREA', 'OUT', 'TRIM', 'SELL', 'BUY',
+                     'STC', 'BTO', 'HEREWI'}
+
+        for i, g in enumerate(groups):
             if not g:
                 continue
             g_stripped = g.strip()
-            
-            if g_stripped.isalpha() and len(g_stripped) <= 6:
-                upper_g = g_stripped.upper()
-                _RESERVED_WORDS = {'HERE', 'MORE', 'NOW', 'ON', 'THE', 'MY', 'OF', 'WITH', 'ALL', 'HALF', 'REST', 'SOME', 'AREA', 'HEREWI'}
-                if not symbol and upper_g not in _RESERVED_WORDS:
-                    symbol = upper_g
-            elif _re.match(r'^(\d+(?:\.\d+)?)\s*([CcPp])$', g_stripped):
-                m = _re.match(r'^(\d+(?:\.\d+)?)\s*([CcPp])$', g_stripped)
-                strike = float(m.group(1))
-                opt_type = m.group(2).upper()
+
+            # Combined strike+opt_type in one group e.g. "13.5C"
+            m2 = _re.match(r'^(\d+(?:\.\d+)?)\s*([CcPp])$', g_stripped)
+            if m2:
+                strike = float(m2.group(1))
+                opt_type = m2.group(2).upper()
+                opt_type_idx = i
                 asset_type = 'option'
-            elif _re.match(r'^(\d+(?:\.\d+)?)\s+([CcPp])$', g_stripped):
-                m = _re.match(r'^(\d+(?:\.\d+)?)\s+([CcPp])$', g_stripped)
-                strike = float(m.group(1))
-                opt_type = m.group(2).upper()
+                continue
+
+            # Single C or P → opt_type (separate group)
+            if g_stripped.upper() in ('C', 'P') and len(g_stripped) == 1:
+                opt_type = g_stripped.upper()
+                opt_type_idx = i
                 asset_type = 'option'
-            elif g_stripped.replace('.', '').isdigit():
+                continue
+
+            # Date MM/DD or MM/DD/YY
+            if _re.match(r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?$', g_stripped):
+                expiry = g_stripped
+                continue
+
+            # Pure numeric (including leading-dot decimals like ".32")
+            if _re.match(r'^\.?\d+(?:\.\d+)?$', g_stripped):
                 try:
-                    val = float(g_stripped)
-                    if price is None:
-                        price = val
+                    numerics.append((i, float(g_stripped)))
                 except ValueError:
                     pass
-            elif _re.match(r'^\d+(?:\.\d+)?%$', g_stripped):
-                pass
-            elif _re.match(r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?$', g_stripped):
-                expiry = g_stripped
-        
+                continue
+
+            # Percentage — skip
+            if _re.match(r'^\d+(?:\.\d+)?%$', g_stripped):
+                continue
+
+            # Alpha word → symbol candidate
+            if g_stripped.isalpha() and 1 < len(g_stripped) <= 6:
+                upper_g = g_stripped.upper()
+                if not symbol and upper_g not in _RESERVED:
+                    symbol = upper_g
+
+        # Assign numerics using positional context relative to opt_type group
+        if opt_type and not strike and numerics:
+            if opt_type_idx >= 0:
+                before = [(i, v) for i, v in numerics if i < opt_type_idx]
+                after  = [(i, v) for i, v in numerics if i > opt_type_idx]
+                if before:
+                    strike = before[-1][1]
+                if after:
+                    price = after[0][1]
+            if strike is None and numerics:
+                strike = numerics[0][1]
+        elif not opt_type and numerics:
+            price = numerics[0][1]
+
+        # Last-resort: if we have numerics and still no price, use last one
+        if price is None and numerics:
+            price = numerics[-1][1]
+
+        # Scan full text for expiry when regex didn't capture it
+        if not expiry:
+            exp_m = _re.search(r'\b(\d{1,2}/\d{1,2}(?:/\d{2,4})?)\b', text)
+            if exp_m:
+                expiry = exp_m.group(1)
+
+        # Scan full text for opt_type when regex didn't capture it
+        if not opt_type:
+            ot_m = _re.search(r'\b\d+(?:\.\d+)?\s*([CcPp])\b', text)
+            if ot_m:
+                opt_type = ot_m.group(1).upper()
+                asset_type = 'option'
+
         if not symbol:
             return None
-        
+
         return {
             "asset": asset_type,
             "action": action,

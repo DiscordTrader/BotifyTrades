@@ -26,6 +26,15 @@ except ImportError:
     print("[AI_PARSER] OpenAI not available")
 
 try:
+    from gui_app.config_service import (
+        AI_PROVIDER_DEFAULT_MODELS as _PROVIDER_DEFAULTS_SHARED,
+        AI_PROVIDER_MODEL_PREFIXES as _PROVIDER_PREFIXES_SHARED,
+    )
+except ImportError:
+    _PROVIDER_DEFAULTS_SHARED = None
+    _PROVIDER_PREFIXES_SHARED = None
+
+try:
     from anthropic import AsyncAnthropic
     ANTHROPIC_AVAILABLE = True
 except ImportError:
@@ -98,6 +107,17 @@ class AISignalParser:
     - Confidence scoring
     """
     
+    _PROVIDER_DEFAULTS = _PROVIDER_DEFAULTS_SHARED or {
+        'openai': 'gpt-4o-mini',
+        'claude': 'claude-haiku-4-5-20251001',
+        'gemini': 'gemini-2.0-flash',
+    }
+    _PROVIDER_PREFIXES = _PROVIDER_PREFIXES_SHARED or {
+        'openai': ('gpt-', 'o1', 'o3', 'o4'),
+        'claude': ('claude-',),
+        'gemini': ('gemini-',),
+    }
+
     def __init__(self, max_concurrent: int = 3):
         self._client: Optional[AsyncOpenAI] = None
         self._anthropic_client = None
@@ -105,10 +125,25 @@ class AISignalParser:
         self._cache = AISignalParserCache()
         self._model = "gpt-4o-mini"
         self._anthropic_model = "claude-haiku-4-5-20251001"
+        self._gemini_model = "gemini-2.0-flash"
         self._provider = None
         self._initialized = False
         self._few_shot_examples: List[Dict] = []
         self._load_few_shot_examples()
+
+    def _resolve_model(self, provider: str) -> str:
+        """Read model from ai_settings, validate it belongs to this provider."""
+        try:
+            from gui_app.database import get_ai_settings
+            settings = get_ai_settings()
+            model = settings.get('model', '')
+            if model:
+                prefixes = self._PROVIDER_PREFIXES.get(provider, ())
+                if any(model.startswith(p) for p in prefixes):
+                    return model
+        except Exception:
+            pass
+        return self._PROVIDER_DEFAULTS.get(provider, 'gpt-4o-mini')
 
     def _get_provider(self) -> str:
         try:
@@ -170,6 +205,7 @@ class AISignalParser:
                 api_key=api_key,
                 base_url=base_url if base_url else None
             )
+            self._model = self._resolve_model('openai')
             print(f"[AI_PARSER] ✓ Initialized OpenAI with model: {self._model}")
             return True
         except Exception as e:
@@ -196,6 +232,7 @@ class AISignalParser:
 
         try:
             self._anthropic_client = AsyncAnthropic(api_key=api_key)
+            self._anthropic_model = self._resolve_model('claude')
             print(f"[AI_PARSER] ✓ Initialized Claude with model: {self._anthropic_model}")
             return True
         except Exception as e:
@@ -224,7 +261,7 @@ class AISignalParser:
 
         try:
             self._gemini_client = _genai.Client(api_key=api_key)
-            self._gemini_model = "gemini-3.5-flash"
+            self._gemini_model = self._resolve_model('gemini')
             print(f"[AI_PARSER] ✓ Initialized Gemini with model: {self._gemini_model}")
             return True
         except Exception as e:
@@ -237,8 +274,8 @@ class AISignalParser:
         self._registry_examples_str = None
 
         try:
-            from src.services.signal_format_registry import SignalFormatRegistry
-            reg = SignalFormatRegistry()
+            from src.services.signal_format_registry import get_signal_format_registry
+            reg = get_signal_format_registry()
             raw_examples = []
             for fmt in reg._sorted_formats:
                 for ex in fmt.examples:

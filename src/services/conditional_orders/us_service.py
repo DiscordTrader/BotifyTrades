@@ -66,14 +66,19 @@ class USConditionalOrderService(BaseConditionalOrderService):
         async def price_callback(sym: str, price: float):
             await self._on_price_update(order['id'], sym, price)
 
-        # P0: UPH — unified hub aggregating ALL broker streaming sources (MQTT, WebSocket, DXLink)
-        # Uses whichever broker hub is streaming; tag reflects the actual source hub inside UPH.
+        # P0: UPH — unified hub aggregating ALL broker price sources.
+        # Required when multiple brokers monitor the same symbol: using a single
+        # price source ensures all conditional orders see the same price and trigger
+        # at the same level, preventing one broker from firing while another doesn't
+        # due to REST feed divergence (e.g. Schwab REST vs IBKR REST differing by cents).
+        # StreamingPriceMonitor degrades gracefully when UPH has no cached data for a
+        # symbol — it falls through to _try_any_streaming_hub() then REST polling.
         try:
             from src.services.unified_price_hub import get_unified_price_hub
             _uph = get_unified_price_hub()
-            if _uph and _uph._poll_running and _uph.is_streaming():
-                data_source = 'uph_stream'
-                self._log(f"[P0] UPH for {symbol} (unified — all streaming hubs)")
+            if _uph and _uph._poll_running:
+                data_source = 'uph_stream' if _uph.is_streaming() else 'uph_rest'
+                self._log(f"[P0] UPH for {symbol} ({'streaming' if _uph.is_streaming() else 'REST-poll'} — unified price source)")
                 # _try_subscribe_streaming() needs a broker_instance to subscribe the symbol
                 # so ticks flow into UPH. Prefer the order's own broker.
                 # Fallback order: MQTT/WebSocket client (Webull/Schwab), then IBKR (ib_insync).
