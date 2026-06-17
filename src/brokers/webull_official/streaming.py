@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import threading
 import uuid
 from typing import Callable, Optional
 
@@ -20,6 +21,9 @@ class WebullMarketStream:
         self._subscribed_symbols: set[str] = set()
         self._symbol_categories: dict[str, str] = {}  # symbol → "US_STOCK" | "US_OPTION"
         self.on_quote_callback: Optional[Callable] = None  # set by broker after init
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None  # captured at connect()
+        self._reconnect_timer: Optional[threading.Timer] = None
+        self._reconnect_delay: float = 2.0
 
     async def connect(self):
         try:
@@ -27,6 +31,8 @@ class WebullMarketStream:
         except ImportError:
             log.warning("[WEBULL-OFF] paho-mqtt not installed, streaming disabled")
             return False
+
+        self._main_loop = asyncio.get_running_loop()
 
         self._mqtt_client = mqtt.Client(
             client_id=self._session_id,
@@ -41,6 +47,7 @@ class WebullMarketStream:
         self._mqtt_client.connect_async(
             self._config.mqtt_host,
             self._config.mqtt_port,
+            keepalive=30,
         )
         self._mqtt_client.loop_start()
         return True
@@ -88,36 +95,39 @@ class WebullMarketStream:
 
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
+            self._reconnect_delay = 2.0
             log.info("[WEBULL-OFF] MQTT connected")
             client.subscribe("snapshot")
             client.subscribe("quote")
             client.subscribe("notice")
             # Re-subscribe all symbols after reconnect (session-side subscriptions are lost)
-            if self._subscribed_symbols:
-                import asyncio as _asyncio
+            if self._subscribed_symbols and self._main_loop and self._main_loop.is_running():
                 try:
-                    loop = _asyncio.get_event_loop()
-                    loop.create_task(self._resubscribe_all())
+                    asyncio.run_coroutine_threadsafe(self._resubscribe_all(), self._main_loop)
                 except Exception as _e:
                     log.warning(f"[WEBULL-OFF] Reconnect re-subscribe failed: {_e}")
         else:
             log.error(f"[WEBULL-OFF] MQTT connect failed: rc={rc}")
 
     async def _resubscribe_all(self):
-        """Re-send all symbol subscriptions after MQTT reconnect."""
         if not self._subscribed_symbols:
             return
         syms = list(self._subscribed_symbols)
         cats = dict(self._symbol_categories)
-        self._subscribed_symbols.clear()
-        self._symbol_categories.clear()
         by_cat: dict[str, list[str]] = {}
         for s in syms:
-            cat = cats.get(s, "US_STOCK")
-            by_cat.setdefault(cat, []).append(s)
+            by_cat.setdefault(cats.get(s, "US_STOCK"), []).append(s)
+        failed = []
         for cat, cat_syms in by_cat.items():
-            await self.subscribe(cat_syms, category=cat)
-        log.info(f"[WEBULL-OFF] Re-subscribed {len(syms)} symbols after reconnect ({list(by_cat.keys())})")
+            try:
+                await self.subscribe(cat_syms, category=cat)
+            except Exception as _e:
+                log.warning(f"[WEBULL-OFF] Re-subscribe failed for {len(cat_syms)} {cat} symbols: {_e}")
+                failed.extend(cat_syms)
+        if failed:
+            log.warning(f"[WEBULL-OFF] {len(failed)} symbols not re-subscribed after reconnect: {failed}")
+        else:
+            log.info(f"[WEBULL-OFF] Re-subscribed {len(syms)} symbols after reconnect ({list(by_cat.keys())})")
 
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
@@ -141,6 +151,27 @@ class WebullMarketStream:
     def _on_disconnect(self, client, userdata, rc):
         log.warning(f"[WEBULL-OFF] MQTT disconnected: rc={rc}")
         self._emit("disconnect", rc)
+        if rc != 0 and self._mqtt_client:
+            self._schedule_reconnect()
+
+    def _schedule_reconnect(self):
+        if self._reconnect_timer and self._reconnect_timer.is_alive():
+            return
+        delay = min(self._reconnect_delay, 60.0)
+        self._reconnect_delay = min(self._reconnect_delay * 2, 60.0)
+        log.warning(f"[WEBULL-OFF] Reconnecting in {delay:.0f}s...")
+        self._reconnect_timer = threading.Timer(delay, self._do_reconnect)
+        self._reconnect_timer.daemon = True
+        self._reconnect_timer.start()
+
+    def _do_reconnect(self):
+        if not self._mqtt_client:
+            return
+        try:
+            self._mqtt_client.reconnect()
+            self._reconnect_delay = 2.0
+        except Exception as _e:
+            log.warning(f"[WEBULL-OFF] Reconnect attempt failed: {_e}")
 
     async def disconnect(self):
         if self._mqtt_client:

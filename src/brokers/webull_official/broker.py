@@ -691,10 +691,14 @@ class WebullOfficialBroker:
         if is_option is None:
             is_option = len(symbol) > 10 and any(c.isdigit() for c in symbol)
         category = "US_OPTION" if is_option else "US_STOCK"
+        loop = getattr(self._stream, '_main_loop', None)
+        if not loop or not loop.is_running():
+            log.warning(f"[{self.name}] subscribe_symbol({symbol}) skipped — stream not ready (loop={loop})")
+            return
         try:
-            import asyncio as _asyncio
-            loop = _asyncio.get_event_loop()
-            loop.create_task(self._stream.subscribe([symbol], category=category))
+            asyncio.run_coroutine_threadsafe(
+                self._stream.subscribe([symbol], category=category), loop
+            )
         except Exception as e:
             log.warning(f"[{self.name}] subscribe_symbol({symbol}) failed: {e}")
 

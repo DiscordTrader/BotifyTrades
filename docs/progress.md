@@ -1547,3 +1547,31 @@ The WEBULL_OFFICIAL MQTT pipeline had 8 compounding gaps that together meant opt
 
 ### Note on Option MQTT Format
 The Webull Official API option subscription uses OCC-style symbols with `category=US_OPTION`. If MQTT ticks return the OCC symbol in the `symbol` field, the full pipeline works end-to-end. If Webull uses a proprietary format, `_on_mqtt_quote()` may need adjustment after observing actual tick payloads.
+
+---
+
+## 2026-06-17 — v12.1.4: WEBULL_OFFICIAL Streaming Lag Fix
+
+**Symptoms reported:** Streaming lag, risk engine not getting every tick price update for live WEBULL_OFFICIAL positions. Every risk cycle showing `⚠️ SLOW` (1100ms–4381ms). `ticks=0` always. `StreamTicks: 0`, `Updates: 0` in UPH stats.
+
+**Root causes identified from log analysis:**
+
+1. **Wrong event loop in MQTT callbacks (CRITICAL)** — `asyncio.get_event_loop()` called from paho-mqtt's internal background thread returned a different loop than the bot's main asyncio loop. `WebullMarketStream.subscribe()` uses `asyncio.locks.Event` objects bound to the main loop → `RuntimeError: bound to different event loop`. Subscribe silently failed. ELTX was never subscribed to MQTT → zero streaming ticks → 100% REST fallback → 1100ms/call.
+
+   Same bug in two places:
+   - `streaming.py:_on_connect()` reconnect re-subscribe handler
+   - `broker.py:subscribe_symbol()` when called from non-asyncio context
+
+2. **No MQTT keepalive configured** — `connect_async()` used paho default 60s keepalive. Webull server timed out connections → `rc=16` disconnect every ~60s.
+
+3. **No auto-reconnect on disconnect** — `_on_disconnect` emitted event but never called `reconnect()`.
+
+**Fixes applied:**
+
+- `streaming.py`: `_main_loop = asyncio.get_running_loop()` captured in `connect()` (runs in async context)
+- `streaming.py`: `_on_connect` reconnect re-subscribe uses `asyncio.run_coroutine_threadsafe(..., self._main_loop)` instead of `get_event_loop().create_task()`
+- `streaming.py`: `connect_async()` now passes `keepalive=30`
+- `streaming.py`: `_on_disconnect` calls `client.reconnect()` on non-clean disconnect (rc != 0)
+- `broker.py`: `subscribe_symbol()` uses `run_coroutine_threadsafe` with `stream._main_loop` when available
+
+**Expected result after fix:** `ticks>0` in risk cycles, `StreamTicks` incrementing in UPH stats, risk eval dropping from ~1100ms to <5ms, no more ⚠️ SLOW cycles.
