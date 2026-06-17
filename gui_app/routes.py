@@ -3876,6 +3876,10 @@ def register_routes(app):
                     )
                     account_info = balance_future.result(timeout=10)
 
+                    # Fall back to last-known-good only on exact $0 (transient API glitch), not negative BP
+                    if float(account_info.get('buying_power') or 0) == 0 and hasattr(broker, '_get_account_info_for_sizing'):
+                        account_info = broker._get_account_info_for_sizing() or account_info
+
                     positions_future = asyncio.run_coroutine_threadsafe(
                         broker.get_positions(),
                         _bot_instance.loop
@@ -3913,17 +3917,51 @@ def register_routes(app):
                     return jsonify(result_data)
                 except Exception as e:
                     print(f"[API] Error fetching Webull Official balance: {e}")
+                    # Try last-known-good cache before returning $0
+                    fallback = getattr(broker, '_last_known_good_balance', None) or getattr(broker, '_account_info_cache', None)
+                    if fallback and float(fallback.get('buying_power') or 0) > 0:
+                        return jsonify({
+                            'buying_power': fallback.get('buying_power', 0),
+                            'cash_balance': fallback.get('cash_balance', 0),
+                            'net_liquidation': fallback.get('portfolio_value', 0),
+                            'equity': fallback.get('market_value', 0),
+                            'unrealized_pnl': fallback.get('unrealized_pnl', 0),
+                            'day_pnl': fallback.get('day_pnl', 0),
+                            'settled_cash': fallback.get('settled_cash', 0),
+                            'unsettled_cash': fallback.get('unsettled_cash', 0),
+                            'options_buying_power': fallback.get('option_buying_power', fallback.get('buying_power', 0)),
+                            'positions': [],
+                            'status': 'cached'
+                        })
                     return jsonify({
                         'buying_power': 0, 'cash_balance': 0,
                         'net_liquidation': 0, 'equity': 0,
-                        'unrealized_pnl': 0,
+                        'unrealized_pnl': 0, 'settled_cash': 0, 'unsettled_cash': 0,
                         'status': 'error', 'error': str(e)
                     })
             else:
+                # Disconnected — serve cached balance if available
+                cached = None
+                if broker:
+                    cached = getattr(broker, '_last_known_good_balance', None) or getattr(broker, '_account_info_cache', None)
+                if cached and (float(cached.get('buying_power') or 0) > 0 or float(cached.get('portfolio_value') or 0) > 0):
+                    return jsonify({
+                        'buying_power': cached.get('buying_power', 0),
+                        'cash_balance': cached.get('cash_balance', 0),
+                        'net_liquidation': cached.get('portfolio_value', 0),
+                        'equity': cached.get('market_value', 0),
+                        'unrealized_pnl': cached.get('unrealized_pnl', 0),
+                        'day_pnl': cached.get('day_pnl', 0),
+                        'settled_cash': cached.get('settled_cash', 0),
+                        'unsettled_cash': cached.get('unsettled_cash', 0),
+                        'options_buying_power': cached.get('option_buying_power', cached.get('buying_power', 0)),
+                        'positions': [],
+                        'status': 'cached'
+                    })
                 return jsonify({
                     'buying_power': 0, 'cash_balance': 0,
                     'net_liquidation': 0, 'equity': 0,
-                    'unrealized_pnl': 0,
+                    'unrealized_pnl': 0, 'settled_cash': 0, 'unsettled_cash': 0,
                     'status': 'disconnected',
                     'error': 'Webull Official broker not connected'
                 })

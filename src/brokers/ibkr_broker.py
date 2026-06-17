@@ -320,7 +320,10 @@ class IBKRBroker(BrokerInterface):
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         try:
             trade = None
-            open_trades = await asyncio.to_thread(self.ib.openTrades)
+            # Call ib_insync sync methods directly — asyncio.to_thread hands them a
+            # threadpool thread with no event loop, causing "There is no current event
+            # loop in thread 'asyncio_N'" errors inside ib_insync internals.
+            open_trades = self.ib.openTrades()
             for t in open_trades:
                 if str(t.order.orderId) == str(order_id):
                     trade = t
@@ -328,8 +331,16 @@ class IBKRBroker(BrokerInterface):
             if not trade:
                 return {'success': False, 'msg': f'Order {order_id} not found in open trades'}
 
-            await asyncio.to_thread(self.ib.cancelOrder, trade.order)
-            print(f"[{self.name}] ✓ Cancelled order {order_id}")
+            self.ib.cancelOrder(trade.order)
+            # Wait for TWS to acknowledge the cancel — ib_insync cancelOrder() is
+            # fire-and-forget (no blocking wait). Poll trade.isDone() so the caller
+            # doesn't place a replacement order before the original is cancelled at the exchange.
+            _deadline = asyncio.get_event_loop().time() + 3.0
+            while asyncio.get_event_loop().time() < _deadline:
+                if trade.isDone():
+                    break
+                await asyncio.sleep(0.1)
+            print(f"[{self.name}] ✓ Cancelled order {order_id} (status: {trade.orderStatus.status if trade.orderStatus else 'unknown'})")
             return {'success': True, 'order_id': order_id}
         except Exception as e:
             print(f"[{self.name}] Cancel order {order_id} error: {e}")
@@ -340,7 +351,7 @@ class IBKRBroker(BrokerInterface):
         try:
             if not self.ib.isConnected():
                 return []
-            trades = await asyncio.to_thread(self.ib.openTrades)
+            trades = self.ib.openTrades()
             pending = []
             for trade in trades:
                 order = trade.order
@@ -376,7 +387,7 @@ class IBKRBroker(BrokerInterface):
                 'PendingSubmit': 'PENDING', 'PendingCancel': 'PENDING_CANCEL',
                 'ApiCancelled': 'CANCELLED'
             }
-            for trade in await asyncio.to_thread(self.ib.openTrades):
+            for trade in self.ib.openTrades():
                 if str(trade.order.orderId) == str(order_id):
                     status = trade.orderStatus.status if trade.orderStatus else 'Unknown'
                     filled_qty = int(trade.orderStatus.filled) if trade.orderStatus else 0
@@ -391,7 +402,7 @@ class IBKRBroker(BrokerInterface):
                         'avg_fill_price': avg_price,
                         'raw_status': status
                     }
-            for trade in await asyncio.to_thread(self.ib.trades):
+            for trade in self.ib.trades():
                 if str(trade.order.orderId) == str(order_id):
                     status = trade.orderStatus.status if trade.orderStatus else 'Unknown'
                     filled_qty = int(trade.orderStatus.filled) if trade.orderStatus else 0
@@ -409,6 +420,29 @@ class IBKRBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error getting order status for {order_id}: {e}")
             return None
+
+    async def modify_order(self, order_id: int, stop_price: float = None, limit_price: float = None) -> dict:
+        try:
+            if not self.ib.isConnected():
+                return {'success': False, 'error': 'not connected'}
+            _existing_trade = None
+            for t in self.ib.openTrades():
+                if str(t.order.orderId) == str(order_id):
+                    _existing_trade = t
+                    break
+            if not _existing_trade:
+                return {'success': False, 'error': f'order {order_id} not found in open trades'}
+            if stop_price is not None:
+                _existing_trade.order.auxPrice = stop_price
+            if limit_price is not None:
+                _existing_trade.order.lmtPrice = limit_price
+            self.ib.placeOrder(_existing_trade.contract, _existing_trade.order)
+            await asyncio.sleep(0.5)
+            print(f"[{self.name}] ✓ Modified order {order_id} stop={stop_price} lmt={limit_price}")
+            return {'success': True, 'order_id': order_id}
+        except Exception as e:
+            print(f"[{self.name}] modify_order error: {e}")
+            return {'success': False, 'error': str(e)}
 
     async def get_positions_detailed(self) -> list:
         """Get detailed positions matching Schwab/live_snapshot field contract."""

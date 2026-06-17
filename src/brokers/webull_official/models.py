@@ -28,6 +28,9 @@ class WebullBalance:
 
     @classmethod
     def from_api(cls, data: dict) -> "WebullBalance":
+        # Webull API sometimes wraps the payload in one or more {"data": ...} envelopes
+        while isinstance(data, dict) and "account_currency_assets" not in data and "data" in data:
+            data = data["data"]
         currency_assets = data.get("account_currency_assets", [])
         usd = currency_assets[0] if currency_assets else {}
         return cls(

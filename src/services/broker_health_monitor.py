@@ -102,6 +102,22 @@ BROKER_BUYING_POWER_FIELDS = {
         'options': ['buying_power', 'cash'],
         'stocks': ['buying_power', 'cash'],
         'fallback': 'buying_power'
+    },
+    'WEBULL_OFFICIAL': {
+        # Cash accounts: buying_power=effective_bp (option_buying_power or settled_cash)
+        'options': ['option_buying_power', 'buying_power', 'settled_cash', 'cash_balance'],
+        'stocks': ['buying_power', 'settled_cash', 'cash_balance'],
+        'fallback': 'buying_power'
+    },
+    'WEBULL_OFFICIAL_LIVE': {
+        'options': ['option_buying_power', 'buying_power', 'settled_cash', 'cash_balance'],
+        'stocks': ['buying_power', 'settled_cash', 'cash_balance'],
+        'fallback': 'buying_power'
+    },
+    'WEBULL_OFFICIAL_PAPER': {
+        'options': ['option_buying_power', 'buying_power', 'settled_cash', 'cash_balance'],
+        'stocks': ['buying_power', 'settled_cash', 'cash_balance'],
+        'fallback': 'buying_power'
     }
 }
 
@@ -561,7 +577,8 @@ class BrokerHealthMonitor:
         # SETTLED CASH VALIDATION FOR ALL BROKERS
         # Good faith violations can occur on any broker when trading with unsettled funds
         # Brokers with settled cash tracking: WEBULL, ALPACA, ALPACA_PAPER, ROBINHOOD, SCHWAB
-        brokers_with_settled_cash = ['WEBULL', 'ALPACA', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB']
+        brokers_with_settled_cash = ['WEBULL', 'ALPACA', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB',
+                                     'WEBULL_OFFICIAL', 'WEBULL_OFFICIAL_LIVE', 'WEBULL_OFFICIAL_PAPER']
         
         if broker_key in brokers_with_settled_cash:
             settled_cash = cached_info.get('settled_cash', 0)
@@ -573,21 +590,31 @@ class BrokerHealthMonitor:
             
             if has_settled_cash_data:
                 print(f"[HEALTH] {broker_key} validation: SettledCash=${settled_cash:.2f}, UnsettledCash=${unsettled_cash:.2f}, BP=${buying_power:.2f}, Required=${required_amount:.2f}")
-                
-                # Block if settled cash is negative or zero
+
                 if settled_cash <= 0:
-                    reason = f"{broker_key}: Settled cash is ${settled_cash:.2f} (negative or zero) - cannot trade to avoid good faith violation"
-                    print(f"[HEALTH] ❌ {reason}")
-                    return False, reason
-                
-                # Block if settled cash is less than required
-                if settled_cash < required_amount:
-                    reason = f"{broker_key}: Insufficient settled cash: need ${required_amount:.2f}, have ${settled_cash:.2f} (BP=${buying_power:.2f} but unsettled)"
-                    print(f"[HEALTH] ❌ {reason}")
-                    return False, reason
-                
-                print(f"[HEALTH] ✓ {broker_key} settled cash validation passed: ${settled_cash:.2f} >= ${required_amount:.2f}")
-                return True, ""
+                    if buying_power <= 0:
+                        # Both zero — hard block regardless of broker
+                        reason = f"{broker_key}: Settled cash is ${settled_cash:.2f} (negative or zero) - cannot trade to avoid good faith violation"
+                        print(f"[HEALTH] ❌ {reason}")
+                        return False, reason
+                    # WEBULL_OFFICIAL cash accounts report transient settled_cash=0 from the API
+                    # while real funds exist in option_buying_power/settled_cash fields — fall through.
+                    # All other brokers (SCHWAB, ALPACA, WEBULL, ROBINHOOD) must hard-block here:
+                    # settled_cash=0 with buying_power>0 means T+1 unsettled proceeds — trading
+                    # against them is a good-faith violation.
+                    if broker_key not in ('WEBULL_OFFICIAL', 'WEBULL_OFFICIAL_LIVE', 'WEBULL_OFFICIAL_PAPER'):
+                        reason = f"{broker_key}: Settled cash is ${settled_cash:.2f} (negative or zero) - cannot trade to avoid good faith violation"
+                        print(f"[HEALTH] ❌ {reason}")
+                        return False, reason
+                    print(f"[HEALTH] {broker_key}: settled_cash=0 but buying_power=${buying_power:.2f}, falling through to BP check")
+                else:
+                    # Block if settled cash is less than required
+                    if settled_cash < required_amount:
+                        reason = f"{broker_key}: Insufficient settled cash: need ${required_amount:.2f}, have ${settled_cash:.2f} (BP=${buying_power:.2f} but unsettled)"
+                        print(f"[HEALTH] ❌ {reason}")
+                        return False, reason
+                    print(f"[HEALTH] ✓ {broker_key} settled cash validation passed: ${settled_cash:.2f} >= ${required_amount:.2f}")
+                    return True, ""
             else:
                 # Fallback to buying power if settled_cash not available in cache
                 print(f"[HEALTH] {broker_key}: No settled_cash data available, falling back to buying_power check")

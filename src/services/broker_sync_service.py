@@ -1238,7 +1238,25 @@ class BrokerSyncService:
                             'availableBalance': float(raw['data'].get('availableBalance', 0) or 0),
                             'allocatedBalance': float(raw['data'].get('allocatedBalance', 0) or 0)
                         }
-            
+
+            elif broker_name.startswith('WEBULL_OFFICIAL'):
+                if hasattr(broker_instance, 'get_account_info'):
+                    raw = await broker_instance.get_account_info()
+                    if raw:
+                        account_info = {
+                            'portfolio_value': float(raw.get('portfolio_value', 0) or 0),
+                            'buying_power': float(raw.get('buying_power', 0) or 0),
+                            'option_buying_power': float(raw.get('option_buying_power', 0) or raw.get('buying_power', 0) or 0),
+                            'options_buying_power': float(raw.get('option_buying_power', 0) or raw.get('buying_power', 0) or 0),
+                            'cash_balance': float(raw.get('cash_balance', 0) or 0),
+                            'settled_cash': float(raw.get('settled_cash', 0) or 0),
+                            'unsettled_cash': float(raw.get('unsettled_cash', 0) or 0),
+                            'market_value': float(raw.get('market_value', 0) or 0),
+                            'account_type': raw.get('account_type', ''),
+                            'account_id': raw.get('account_id', ''),
+                        }
+                        print(f"[SYNC] {broker_name} account info: buying_power=${account_info['buying_power']:.2f}, option_bp=${account_info['option_buying_power']:.2f}, settled=${account_info['settled_cash']:.2f}, portfolio=${account_info['portfolio_value']:.2f}")
+
             return account_info
             
         except Exception as e:
@@ -3027,9 +3045,9 @@ class BrokerSyncService:
                         seen_order_ids = set()
 
                         def _ibkr_add_entry(order_id, action, contract, filled_qty, avg_price, filled_time):
-                            if order_id in seen_order_ids or filled_qty <= 0 or avg_price <= 0:
+                            if str(order_id) in seen_order_ids or filled_qty <= 0 or avg_price <= 0:
                                 return
-                            seen_order_ids.add(order_id)
+                            seen_order_ids.add(str(order_id))
                             side = 'BTO' if action == 'BUY' else 'STC'
                             asset_type = 'option' if contract.secType == 'OPT' else 'stock'
                             entry = {
@@ -3052,7 +3070,10 @@ class BrokerSyncService:
                             filled_orders.append(entry)
 
                         # Primary: ib.trades() — in-memory, fast, covers current session
-                        for trade in await asyncio.to_thread(ib.trades):
+                        # Must call directly — asyncio.to_thread gives ib_insync a threadpool
+                        # thread with no event loop, causing "no current event loop" crash that
+                        # silently swallows the entire block including the orphan cleanup below.
+                        for trade in ib.trades():
                             if not trade.orderStatus or trade.orderStatus.status != 'Filled':
                                 continue
                             order = trade.order
@@ -3082,6 +3103,47 @@ class BrokerSyncService:
                                 _ibkr_add_entry(ex.orderId, mapped_action, contract, filled_qty, avg_price, str(ft) if ft else None)
                         except Exception as _exec_e:
                             print(f"[SYNC] IBKR reqExecutionsAsync warning: {_exec_e}")
+
+                        # Reconcile orphaned PENDING orders: any order in the DB that is
+                        # neither filled (seen_order_ids) nor still active in TWS (openTrades)
+                        # must have been cancelled or expired at the exchange.
+                        # Guard: skip if we reconnected recently — TWS replays open orders
+                        # asynchronously after connectAsync(), so openTrades() may still be
+                        # empty for a few seconds, causing live orders to be falsely cancelled.
+                        try:
+                            import time as _t
+                            _reconnect_ts = getattr(broker_instance, '_last_reconnect_ts', 0.0)
+                            if _t.time() - _reconnect_ts < 5.0:
+                                print(f"[SYNC] IBKR skipping orphan cleanup — reconnected {_t.time() - _reconnect_ts:.1f}s ago, order replay in progress")
+                            else:
+                                active_ids = {str(t.order.orderId) for t in ib.openTrades()}
+                                from gui_app.database import update_pending_order_status, get_connection as _gc
+                                _conn = _gc()
+                                _cur = _conn.cursor()
+                                _cur.execute(
+                                    "SELECT broker_order_id, symbol FROM pending_order_metadata "
+                                    "WHERE broker='IBKR' AND status='PENDING'"
+                                )
+                                for _row in _cur.fetchall():
+                                    _oid = str(_row['broker_order_id'])
+                                    if _oid in seen_order_ids or _oid in active_ids:
+                                        continue
+                                    print(f"[SYNC] IBKR order {_oid} ({_row['symbol']}) gone from TWS — marking CANCELLED")
+                                    update_pending_order_status('IBKR', _oid, 'CANCELLED')
+                                    _cur.execute(
+                                        "UPDATE execution_lots SET status='CANCELLED', remaining_qty=0 "
+                                        "WHERE broker='IBKR' AND broker_order_id=? AND status='OPEN'",
+                                        (_oid,)
+                                    )
+                                    _cur.execute(
+                                        "UPDATE trades SET status='CANCELLED', "
+                                        "close_reason='Order cancelled or expired at broker' "
+                                        "WHERE broker='IBKR' AND order_id=? AND status='PENDING'",
+                                        (_oid,)
+                                    )
+                                _conn.commit()
+                        except Exception as _cleanup_err:
+                            print(f"[SYNC] IBKR orphan cleanup error: {_cleanup_err}")
 
                     except Exception as e:
                         print(f"[SYNC] IBKR filled orders error: {e}")

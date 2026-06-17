@@ -9225,6 +9225,9 @@ class SelfClient(discord.Client):
                 brokers_to_warm.append(('ALPACA_PAPER', self.paper_broker))
             if self.robinhood_broker and getattr(self.robinhood_broker, 'connected', False):
                 brokers_to_warm.append(('ROBINHOOD', self.robinhood_broker))
+            if getattr(self, 'webull_official_broker', None) and getattr(self.webull_official_broker, 'connected', False):
+                _wo_key = 'WEBULL_OFFICIAL_PAPER' if getattr(self.webull_official_broker, 'paper_trade', False) else 'WEBULL_OFFICIAL_LIVE'
+                brokers_to_warm.append((_wo_key, self.webull_official_broker))
             
             warmed = 0
             for broker_name, broker_instance in brokers_to_warm:
@@ -19016,6 +19019,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         matched_qty = int(matched_qty_raw) if matched_qty_raw >= 1 else (1 if matched_qty_raw > 0 else 0)
                         
+                        if matched_qty <= 0 and 'IBKR' in broker_upper:
+                            # IBKR: a BTO may be Submitted/PreSubmitted (at exchange, not yet confirmed).
+                            # Check openTrades() for a working BUY before blocking the STC.
+                            try:
+                                pending_orders = await broker_instance.get_pending_orders()
+                                for _po in pending_orders:
+                                    if (_po.get('symbol', '').upper() == sig_symbol
+                                            and _po.get('action', '').upper() in ('BUY', 'BTO')):
+                                        matched_qty = int(_po.get('quantity', 0))
+                                        if matched_qty > 0:
+                                            _original_print(f"[{broker_name}] ⚠️ No confirmed position for {sig_symbol} but BTO order {_po.get('order_id','')} is working — STC will proceed with qty {matched_qty}")
+                                            break
+                            except Exception as _po_err:
+                                _original_print(f"[{broker_name}] get_pending_orders check failed: {_po_err}")
+
                         if matched_qty <= 0:
                             if is_risk_stc:
                                 _original_print(f"[{broker_name}] ⚠️ RISK STC: No stock position found for {sig_symbol} via REST — proceeding anyway (broker will reject if truly empty)")

@@ -5983,6 +5983,52 @@ class RiskManager:
                 except Exception as e:
                     print(f"[RISK] ⚠️ Robinhood initial bracket error: {e}")
 
+            elif 'WEBULL_OFFICIAL' in broker_name and broker_instance:
+                try:
+                    if sl_price and sl_price > 0 and not is_option:
+                        _sl_price_r = round(sl_price, 4 if sl_price < 1.0 else 2)
+                        sl_result = await broker_instance.place_stop_order(
+                            symbol=symbol, quantity=qty, stop_price=_sl_price_r, side='sell'
+                        )
+                        if sl_result and sl_result.success and sl_result.order_id:
+                            cache.broker_stop_order_id = str(sl_result.order_id)
+                            print(f"[RISK] ✅ Broker SL placed: Webull Official stop #{sl_result.order_id} at ${sl_price:.2f}")
+                        else:
+                            msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                            print(f"[RISK] ⚠️ Webull Official SL order failed: {msg}")
+                    elif sl_price and sl_price > 0 and is_option:
+                        print(f"[RISK] ⚠️ Webull Official does not support stop orders for options — SL monitored locally")
+
+                    if pt1_price and pt1_price > 0 and pt1_qty > 0:
+                        if is_option:
+                            pt_result = await broker_instance.place_option_order(
+                                symbol=position.symbol,
+                                strike=position.strike,
+                                expiry=position.expiry or '',
+                                option_type=position.direction or 'C',
+                                action='STC',
+                                quantity=pt1_qty,
+                                price=pt1_price,
+                            )
+                        else:
+                            _pt_price_r = round(pt1_price, 4 if pt1_price < 1.0 else 2)
+                            pt_result = await broker_instance.place_stock_order(
+                                symbol=symbol, quantity=pt1_qty, action='STC',
+                                order_type='LIMIT', price=_pt_price_r, duration='GTC',
+                            )
+                        if pt_result and pt_result.success and pt_result.order_id:
+                            cache.broker_pt_order_id = str(pt_result.order_id)
+                            cache.broker_pt_tier = _target_tier
+                            print(f"[RISK] ✅ Broker PT1 placed: Webull Official limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                            await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                        else:
+                            msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
+                            print(f"[RISK] ⚠️ Webull Official PT1 order failed: {msg}")
+
+                    cache.broker_orders_placed = bool(cache.broker_stop_order_id or cache.broker_pt_order_id)
+                except Exception as e:
+                    print(f"[RISK] ⚠️ Webull Official initial bracket error: {e}")
+
             elif 'WEBULL' in broker_name and broker_instance:
                 try:
                     _wb_client = getattr(broker_instance, '_client', None) or getattr(broker_instance, 'wb', None)
@@ -6430,7 +6476,7 @@ class RiskManager:
         elif 'ROBINHOOD' in broker_name:
             return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, price=price)
         elif 'WEBULL_OFFICIAL' in broker_name:
-            return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, order_type='LIMIT', limit_price=price)
+            return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, order_type='LIMIT', price=price, duration='GTC')
         elif 'WEBULL' in broker_name:
             _wb_c = getattr(broker_instance, '_client', None) or getattr(broker_instance, 'wb', None)
             if not _wb_c:
@@ -6470,7 +6516,7 @@ class RiskManager:
             quantity=qty,
             price=price
         )
-        if 'WEBULL' in broker_name:
+        if 'WEBULL_OFFICIAL' not in broker_name and 'WEBULL' in broker_name:
             _wb_opt_id = self._resolve_webull_option_id(broker_instance, position)
             if not _wb_opt_id:
                 print(f"[RISK] ⚠️ Webull PT cascade skipped — could not resolve option_id for {position.symbol}")
@@ -6921,6 +6967,24 @@ class RiskManager:
                         msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
                         print(f"[RISK] ⚠️ Robinhood stop sync failed: {msg}")
 
+                elif 'WEBULL_OFFICIAL' in broker_name and broker_instance:
+                    if _is_opt:
+                        print(f"[RISK] ⚠️ Webull Official options don't support stop orders — dynamic SL monitored locally")
+                        return
+                    if cache.broker_stop_order_id:
+                        await broker_instance.cancel_order_by_id(cache.broker_stop_order_id)
+                        cache.broker_stop_order_id = None
+                    _stp_r = round(new_stop_price, 4 if new_stop_price < 1.0 else 2)
+                    sl_result = await broker_instance.place_stop_order(
+                        symbol=symbol, quantity=qty, stop_price=_stp_r, side='sell'
+                    )
+                    if sl_result and sl_result.success and sl_result.order_id:
+                        cache.broker_stop_order_id = str(sl_result.order_id)
+                        print(f"[RISK] ✅ Broker stop synced: Webull Official stop #{sl_result.order_id} at ${new_stop_price:.2f}")
+                    else:
+                        msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                        print(f"[RISK] ⚠️ Webull Official stop sync failed: {msg}")
+
                 elif 'WEBULL' in broker_name:
                     if _is_opt:
                         print(f"[RISK] ⚠️ Webull options don't support stop orders — dynamic SL monitored locally")
@@ -7106,8 +7170,8 @@ class RiskManager:
                     return False
 
                 pt_order_id = int(cache.broker_pt_order_id)
-                from ib_insync import LimitOrder as _IBLimitPT, Stock as _IBStockPT, Option as _IBOptionPT
-                _is_opt = '_option' in position_key
+                from ib_insync import Stock as _IBStockPT, Option as _IBOptionPT
+                _is_opt = getattr(cache, 'asset', '') == 'option'
                 if _is_opt:
                     print(f"[RISK PT REPLACE] ⚠️ IBKR option PT modify not yet supported")
                     return False
@@ -7115,7 +7179,7 @@ class RiskManager:
                 await self.ibkr_broker.ib.qualifyContractsAsync(contract)
 
                 _existing_trade = None
-                for t in await asyncio.to_thread(self.ibkr_broker.ib.openTrades):
+                for t in self.ibkr_broker.ib.openTrades():
                     if t.order.orderId == pt_order_id:
                         _existing_trade = t
                         break
@@ -7125,7 +7189,7 @@ class RiskManager:
                     return False
 
                 _existing_trade.order.lmtPrice = new_pt_price
-                await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, contract, _existing_trade.order)
+                self.ibkr_broker.ib.placeOrder(contract, _existing_trade.order)
                 await asyncio.sleep(1)
                 print(f"[RISK PT REPLACE] ✅ IBKR PT #{pt_order_id} modified: new limit ${new_pt_price:.2f}")
                 cache.broker_oco_pt_price = new_pt_price
@@ -7133,6 +7197,49 @@ class RiskManager:
 
             except Exception as e:
                 print(f"[RISK PT REPLACE] ⚠️ IBKR error: {e}")
+                return False
+
+        elif 'WEBULL_OFFICIAL' in broker_name and self.webull_official_broker:
+            try:
+                if not cache.broker_pt_order_id:
+                    print(f"[RISK PT REPLACE] ⏭️ No Webull Official PT order to replace for {position_key}")
+                    return False
+
+                _old_pt_id = cache.broker_pt_order_id
+                cancel_ok = await self.webull_official_broker.cancel_order_by_id(_old_pt_id)
+                if not cancel_ok:
+                    print(f"[RISK PT REPLACE] ⚠️ Webull Official cancel PT #{_old_pt_id} failed — aborting replace")
+                    return False
+
+                _is_opt = getattr(cache, 'asset', '') == 'option'
+                _new_pt_r = round(new_pt_price, 4 if new_pt_price < 1.0 else 2)
+                if _is_opt:
+                    pt_result = await self.webull_official_broker.place_option_order(
+                        symbol=symbol,
+                        strike=cache.channel_settings and getattr(cache.channel_settings, 'strike', 0) or 0,
+                        expiry='',
+                        option_type='C',
+                        action='STC',
+                        quantity=cache.original_qty or 1,
+                        price=_new_pt_r,
+                    )
+                else:
+                    pt_result = await self.webull_official_broker.place_stock_order(
+                        symbol=symbol, quantity=cache.original_qty or 1,
+                        action='STC', order_type='LIMIT', price=_new_pt_r, duration='GTC',
+                    )
+                if pt_result and pt_result.success and pt_result.order_id:
+                    cache.broker_pt_order_id = str(pt_result.order_id)
+                    cache.broker_oco_pt_price = new_pt_price
+                    print(f"[RISK PT REPLACE] ✅ Webull Official PT replaced: #{pt_result.order_id} at ${new_pt_price:.2f}")
+                    return True
+                else:
+                    msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
+                    print(f"[RISK PT REPLACE] ⚠️ Webull Official new PT order failed: {msg}")
+                    return False
+
+            except Exception as e:
+                print(f"[RISK PT REPLACE] ⚠️ Webull Official error: {e}")
                 return False
 
         else:

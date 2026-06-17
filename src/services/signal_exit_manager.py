@@ -111,13 +111,11 @@ class SignalExitManager:
         'alpaca': {'supports_replace': True, 'rate_limit_per_min': 200},
         'schwab': {'supports_replace': True, 'rate_limit_per_min': 120},
         'ibkr': {'supports_replace': True, 'rate_limit_per_min': 50},
+        'webull_official': {'supports_replace': True, 'rate_limit_per_min': 60},
         'robinhood': {'supports_replace': False, 'rate_limit_per_min': 60},
         'webull': {'supports_replace': False, 'rate_limit_per_min': 60},
         'tastytrade': {'supports_replace': False, 'rate_limit_per_min': 100},
         'questrade': {'supports_replace': True, 'rate_limit_per_min': 60},
-        'dhan': {'supports_replace': False, 'rate_limit_per_min': 30},
-        'upstox': {'supports_replace': False, 'rate_limit_per_min': 30},
-        'zerodha': {'supports_replace': False, 'rate_limit_per_min': 30},
     }
     
     def __init__(self):
@@ -594,11 +592,14 @@ class SignalExitManager:
                 
                 elif broker == 'ibkr':
                     if hasattr(broker_instance, 'modify_order'):
-                        result = await loop.run_in_executor(None, lambda: broker_instance.modify_order(
-                            order_id, stop_price=new_sl_price
-                        ))
+                        result = await broker_instance.modify_order(order_id, stop_price=new_sl_price)
                         return {'success': True, 'method': 'replace', 'result': result}
-                
+
+                elif broker == 'webull_official':
+                    if hasattr(broker_instance, 'modify_order'):
+                        result = await broker_instance.modify_order(order_id, stop_price=new_sl_price)
+                        return {'success': result.get('success', False), 'method': 'replace', 'result': result}
+
                 return {'success': True, 'method': 'replace', 'simulated': True}
             
             else:
@@ -608,8 +609,19 @@ class SignalExitManager:
                 new_order_id = None
                 
                 if hasattr(broker_instance, 'cancel_order'):
-                    cancel_result = await loop.run_in_executor(None, lambda: broker_instance.cancel_order(order_id))
-                    cancel_success = cancel_result if isinstance(cancel_result, bool) else True
+                    _cr = broker_instance.cancel_order(order_id)
+                    if asyncio.iscoroutine(_cr):
+                        cancel_result = await _cr
+                    else:
+                        cancel_result = await loop.run_in_executor(None, lambda: _cr)
+                    if isinstance(cancel_result, dict):
+                        cancel_success = cancel_result.get('success', False)
+                    elif isinstance(cancel_result, bool):
+                        cancel_success = cancel_result
+                    elif hasattr(cancel_result, 'success'):
+                        cancel_success = bool(cancel_result.success)
+                    else:
+                        cancel_success = False
                     
                     if cancel_success and symbol and quantity:
                         await asyncio.sleep(0.2)

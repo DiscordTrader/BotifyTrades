@@ -139,8 +139,31 @@ class WebullOfficialBroker:
 
             balance = await self._accounts.get_balance(self.account_id)
             self.connected = True
+            import time as _t
+            _raw_bp = {"buying_power": float(balance.buying_power or 0), "option_buying_power": float(balance.option_buying_power or 0), "settled_cash": float(balance.settled_cash or 0)}
+            effective_bp = self._effective_buying_power(_raw_bp)
+            acct_seed = {
+                "account_id": self.account_id,
+                "account_number": self.account_number,
+                "account_type": self.account_type,
+                "cash_balance": balance.total_cash_balance,
+                "buying_power": effective_bp,
+                "portfolio_value": balance.total_net_liquidation,
+                "market_value": balance.total_market_value,
+                "unrealized_pnl": balance.total_unrealized_pnl,
+                "day_pnl": balance.total_day_pnl,
+                "settled_cash": balance.settled_cash,
+                "unsettled_cash": balance.unsettled_cash,
+                "day_trades_left": balance.day_trades_left,
+                "option_buying_power": balance.option_buying_power,
+                "options_buying_power": balance.option_buying_power,
+            }
+            self._account_info_cache = acct_seed
+            self._account_info_cache_ts = _t.monotonic()
+            if effective_bp > 0:
+                self._last_known_good_balance = acct_seed
             print(f"[{self.name}] ✅ Connected — Account: {self.account_id}, "
-                  f"Balance: ${balance.total_net_liquidation:,.2f}")
+                  f"Balance: ${balance.total_net_liquidation:,.2f} BP: ${effective_bp:,.2f} (settled=${balance.settled_cash:,.2f})")
             return True
 
         except Exception as e:
@@ -160,6 +183,17 @@ class WebullOfficialBroker:
             WebullOfficialBroker._active_instance = None
         print(f"[{self.name}] Disconnected")
 
+    @staticmethod
+    def _effective_buying_power(balance_dict: dict) -> float:
+        """Effective buying power: cash accounts report buying_power=0; use option_buying_power or settled_cash."""
+        bp = float(balance_dict.get('buying_power') or 0)
+        if bp > 0:
+            return bp
+        obp = float(balance_dict.get('option_buying_power') or 0)
+        if obp > 0:
+            return obp
+        return float(balance_dict.get('settled_cash') or 0)
+
     async def get_account_info(self, max_age_seconds: float = 30.0) -> dict:
         import time as _time
         if not self.connected:
@@ -170,12 +204,14 @@ class WebullOfficialBroker:
         try:
             balance = await self._accounts.get_balance(self.account_id)
             self._cached_balance = balance
+            _raw_bp = {"buying_power": float(balance.buying_power or 0), "option_buying_power": float(balance.option_buying_power or 0), "settled_cash": float(balance.settled_cash or 0)}
+            effective_bp = self._effective_buying_power(_raw_bp)
             result = {
                 "account_id": self.account_id,
                 "account_number": self.account_number,
                 "account_type": self.account_type,
                 "cash_balance": balance.total_cash_balance,
-                "buying_power": balance.buying_power,
+                "buying_power": effective_bp,
                 "portfolio_value": balance.total_net_liquidation,
                 "market_value": balance.total_market_value,
                 "unrealized_pnl": balance.total_unrealized_pnl,
@@ -184,11 +220,11 @@ class WebullOfficialBroker:
                 "unsettled_cash": balance.unsettled_cash,
                 "day_trades_left": balance.day_trades_left,
                 "option_buying_power": balance.option_buying_power,
+                "options_buying_power": balance.option_buying_power,
             }
             self._account_info_cache = result
             self._account_info_cache_ts = now
-            # Only update last-known-good when balance has real buying power
-            if float(balance.buying_power or 0) > 0:
+            if effective_bp > 0:
                 self._last_known_good_balance = result
             return result
         except Exception as e:
@@ -198,11 +234,12 @@ class WebullOfficialBroker:
     def _get_account_info_for_sizing(self) -> dict:
         """Return best available balance for position sizing — prefers live, falls back to last known good."""
         cache = self._account_info_cache or {}
-        if float(cache.get('buying_power') or 0) > 0:
+        if self._effective_buying_power(cache) > 0:
             return cache
         fallback = getattr(self, '_last_known_good_balance', None)
-        if fallback and float(fallback.get('buying_power') or 0) > 0:
-            log.warning(f"[{self.name}] Live balance returned $0 — using last known good balance (BP=${fallback['buying_power']:.2f})")
+        if fallback and self._effective_buying_power(fallback) > 0:
+            bp = self._effective_buying_power(fallback)
+            log.warning(f"[{self.name}] Live balance returned $0 — using last known good balance (BP=${bp:.2f})")
             return fallback
         return cache
 
@@ -270,7 +307,7 @@ class WebullOfficialBroker:
             try:
                 await self.get_account_info(max_age_seconds=60)
                 acct = self._get_account_info_for_sizing()
-                bp = float(acct.get('buying_power', 0) or 0)
+                bp = self._effective_buying_power(acct)
                 if bp <= 0:
                     print(f"[{self.name}] ❌ FUNDS: No buying power available (${bp:.2f})", flush=True)
                     return OrderResult(success=False, message=f"Insufficient buying power: ${bp:.2f} available", symbol=symbol, action=action, quantity=quantity)
@@ -504,6 +541,62 @@ class WebullOfficialBroker:
         except Exception as e:
             print(f"[{self.name}] Cancel failed: {e}")
             return False
+
+    async def get_order_status(self, client_order_id: str) -> Optional[dict]:
+        if not self.connected:
+            return None
+        try:
+            order = await self._orders.get_order_detail(self.account_id, client_order_id)
+            if not order:
+                return None
+            status_map = {
+                'FILLED': 'FILLED',
+                'PARTIAL_FILLED': 'PARTIAL',
+                'WORKING': 'WORKING',
+                'SUBMITTING': 'WORKING',
+                'SUBMITTED': 'WORKING',
+                'PENDING_NEW': 'WORKING',
+                'CANCELLED': 'CANCELLED',
+                'CANCELING': 'CANCELLED',
+                'REJECTED': 'CANCELLED',
+                'EXPIRED': 'CANCELLED',
+            }
+            return {
+                'order_id': order.client_order_id,
+                'status': status_map.get(order.status, order.status),
+                'filled_qty': int(order.filled_quantity),
+                'filled_quantity': int(order.filled_quantity),
+                'remaining_quantity': max(0, int(order.quantity - order.filled_quantity)),
+                'avg_fill_price': float(order.filled_price),
+                'raw_status': order.status,
+            }
+        except Exception as e:
+            log.error(f"[{self.name}] get_order_status error: {e}")
+            return None
+
+    async def place_stop_order(self, symbol: str, quantity: int, stop_price: float, side: str = 'sell') -> 'OrderResult':
+        action = 'STC' if side.lower() in ('sell', 'stc') else 'BTO'
+        return await self.place_stock_order(
+            symbol=symbol,
+            quantity=quantity,
+            action=action,
+            order_type='STOP',
+            stop_price=stop_price,
+            duration='GTC',
+        )
+
+    async def modify_order(self, client_order_id: str, stop_price: float = None, limit_price: float = None) -> dict:
+        try:
+            await self._orders.replace_order(
+                self.account_id,
+                client_order_id,
+                stop_price=stop_price,
+                limit_price=limit_price,
+            )
+            return {'success': True, 'order_id': client_order_id}
+        except Exception as e:
+            log.error(f"[{self.name}] modify_order error: {e}")
+            return {'success': False, 'error': str(e)}
 
     async def get_pending_orders(self) -> list:
         if not self.connected:
