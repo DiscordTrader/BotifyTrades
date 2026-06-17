@@ -964,8 +964,11 @@ def register_routes(app):
         
         # Check consent after authentication (but allow consent-related routes)
         if not check_consent_accepted():
-            if request.path.startswith('/api/consent'):
+            if request.path.startswith('/api/consent') or request.path == '/api/consent/status':
                 return None  # Allow consent API
+            if request.path.startswith('/api/'):
+                # Return JSON 401 so fetch() gets parseable JSON instead of an HTML redirect
+                return jsonify({'success': False, 'error': 'Consent required', 'consent_required': True}), 401
             if request.path not in ['/consent', '/consent/declined', '/logout']:
                 return redirect(url_for('consent_page'))
         
@@ -8064,15 +8067,22 @@ def register_routes(app):
                     print(f"[API] Webull orders fetch error: {e}")
 
             ibkr_pending_orders = []
-            if not broker_filter_upper or 'IBKR' in broker_filter_upper:
+            # Only fetch IBKR pending orders when the PENDING tab is requested — the LIVE tab
+            # never uses them (see the status_filter == 'PENDING' guard below). Skipping this
+            # for OPEN/LIVE requests prevents the 10-second blocking call from stalling the
+            # Flask thread and causing "Connecting to bot…" on the dashboard.
+            if (not status_filter or status_filter == 'PENDING') and (not broker_filter_upper or 'IBKR' in broker_filter_upper):
                 try:
                     ibkr_broker = getattr(_bot_instance, 'ibkr_broker', None)
-                    if ibkr_broker and getattr(ibkr_broker, 'ib', None) and ibkr_broker.ib.isConnected():
+                    _loop = getattr(_bot_instance, 'loop', None)
+                    if (ibkr_broker and getattr(ibkr_broker, 'ib', None)
+                            and ibkr_broker.ib.isConnected()
+                            and _loop and _loop.is_running()):
                         future = asyncio.run_coroutine_threadsafe(
                             ibkr_broker.get_pending_orders(),
-                            _bot_instance.loop
+                            _loop
                         )
-                        ibkr_pending_orders = future.result(timeout=10) or []
+                        ibkr_pending_orders = future.result(timeout=3) or []
                 except Exception as e:
                     print(f"[API] IBKR pending orders fetch error: {e}")
             

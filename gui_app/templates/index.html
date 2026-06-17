@@ -1958,17 +1958,33 @@ async function loadTrades() {
         const response = await _tabFetch(url);
         if (response.status === 401) {
             if (_isFirstLoad) {
+                let msg401 = 'Session expired';
+                let sub401 = `Please <a href="/login" style="color: var(--accent);">log in</a> to view positions.`;
+                try {
+                    const body401 = await response.clone().json();
+                    if (body401 && body401.consent_required) {
+                        msg401 = 'Agreement acceptance required';
+                        sub401 = `Please <a href="/consent" style="color: var(--accent);">accept the user agreement</a> to continue.`;
+                    }
+                } catch (_) {}
                 container.innerHTML = `
                     <div style="text-align: center; padding: 40px;">
-                        <div style="color: var(--error);">Session expired</div>
-                        <div style="color: var(--text-secondary); margin-top: 8px;">Please <a href="/login" style="color: var(--accent);">log in</a> to view positions.</div>
+                        <div style="color: var(--error);">${msg401}</div>
+                        <div style="color: var(--text-secondary); margin-top: 8px;">${sub401}</div>
                     </div>`;
                 _isFirstLoad = false;
             }
             return;
         }
         const mergedResponse = await response.json();
-        let filteredTrades = mergedResponse.trades || [];
+        if (!mergedResponse) {
+            // Server returned JSON null — treat as empty, not error
+            _isFirstLoad = false;
+            _tabHasData[currentTab] = true;
+            container.innerHTML = `<div class="empty-positions"><div class="empty-icon">📊</div><div class="empty-text">No ${currentTab} positions</div></div>`;
+            return;
+        }
+        let filteredTrades = (mergedResponse && mergedResponse.trades) || [];
         
         const count = filteredTrades.length;
         const totalPnl = filteredTrades.reduce((sum, t) => sum + (parseFloat(t.pnl) || 0), 0);
@@ -1994,6 +2010,7 @@ async function loadTrades() {
                 </div>
             `;
             _isFirstLoad = false;
+            _tabHasData[currentTab] = true;
             return;
         }
         
