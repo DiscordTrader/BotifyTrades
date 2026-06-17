@@ -123,6 +123,16 @@ class ChannelRiskSettings:
     early_trailing_activation_pct: float = 5.0  # Move to breakeven at this % gain
     early_trailing_step_pct: float = 3.0  # Lock profit in this % increments
 
+    # PT Near-Lock: Protect profit when approaching a target that isn't hit
+    # Solves: price runs to 8-9% (PT1=10%), reverses, hits -10% SL — missed profit
+    # Solution: when within X% of PT1, trail tightly from high; optional auto-partial
+    enable_pt_near_lock: bool = False
+    pt_near_lock_threshold_pct: float = 80.0   # Activate when price reaches this % of nearest PT distance (e.g. 80% of 10% = 8%)
+    pt_near_lock_trail_pct: float = 3.0         # Trail within this absolute % from highest price while active
+    pt_near_lock_soft_exit: bool = False        # Also auto-sell partial when approaching PT
+    pt_near_lock_soft_threshold_pct: float = 90.0  # Activate soft partial at this % of PT (e.g. 90% of 10% = 9%)
+    pt_near_lock_soft_trim_pct: float = 25.0   # % of remaining position to auto-sell at soft threshold
+
     escalation_only_mode: bool = False
 
     typo_correction_enabled: bool = True  # Layer 1+2 ticker typo correction for exit signals
@@ -183,6 +193,8 @@ class ChannelRiskSettings:
             self.giveback_allowed_pct, self.dynamic_sl_profile,
             self.enable_early_trailing, self.early_trailing_activation_pct,
             self.early_trailing_step_pct,
+            self.enable_pt_near_lock, self.pt_near_lock_threshold_pct, self.pt_near_lock_trail_pct,
+            self.pt_near_lock_soft_exit, self.pt_near_lock_soft_threshold_pct, self.pt_near_lock_soft_trim_pct,
             self.trim_order_mode, self.trim_limit_offset_mode, self.trim_limit_offset_pct,
             self.sl_order_mode, self.sl_limit_offset,
             self.ema_risk_enabled, self.ema_period, self.ema_timeframe_minutes,
@@ -323,6 +335,10 @@ class PositionCacheEntry:
     early_stop_price: Optional[float] = None  # Current early trailing stop price
     early_steps_locked: int = 0  # Number of profit steps locked (0=breakeven, 1=+step%, 2=+2*step%, ...)
 
+    # PT Near-Lock state
+    pt_near_lock_active: bool = False       # True once near-lock trail is engaged
+    pt_near_lock_soft_done: bool = False    # True after soft partial has executed (one-time)
+
     # EMA Risk state (position-level tracking, EMA value lives in CandlePreWarmService)
     ema_no_trend_count: int = 0
     ema_last_cross_state: str = 'unknown'
@@ -386,6 +402,8 @@ class PositionCacheEntry:
             'early_trailing_active': self.early_trailing_active,
             'early_stop_price': self.early_stop_price,
             'early_steps_locked': self.early_steps_locked,
+            'pt_near_lock_active': self.pt_near_lock_active,
+            'pt_near_lock_soft_done': self.pt_near_lock_soft_done,
             'manual_sl_price': self.manual_sl_price,
             'manual_sl_pct': self.manual_sl_pct,
             'manual_pt_targets': self.manual_pt_targets,

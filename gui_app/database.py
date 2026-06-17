@@ -724,6 +724,19 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added per-tier trim percentage columns to channels")
 
+    # Migrate: Add PT Near-Lock columns (profit protection when approaching but not hitting a target)
+    try:
+        cursor.execute('SELECT enable_pt_near_lock FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN enable_pt_near_lock INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN pt_near_lock_threshold_pct REAL DEFAULT 80.0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN pt_near_lock_trail_pct REAL DEFAULT 3.0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN pt_near_lock_soft_exit INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN pt_near_lock_soft_threshold_pct REAL DEFAULT 90.0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN pt_near_lock_soft_trim_pct REAL DEFAULT 25.0')
+        conn.commit()
+        print("[DATABASE] ✓ Added PT Near-Lock columns: enable, threshold, trail, soft_exit, soft_threshold, soft_trim")
+
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -1827,6 +1840,12 @@ def init_db():
         ('pt2_trim_pct', 'REAL DEFAULT NULL'),
         ('pt3_trim_pct', 'REAL DEFAULT NULL'),
         ('pt4_trim_pct', 'REAL DEFAULT NULL'),
+        ('enable_pt_near_lock', 'INTEGER DEFAULT 0'),
+        ('pt_near_lock_threshold_pct', 'REAL DEFAULT 80.0'),
+        ('pt_near_lock_trail_pct', 'REAL DEFAULT 3.0'),
+        ('pt_near_lock_soft_exit', 'INTEGER DEFAULT 0'),
+        ('pt_near_lock_soft_threshold_pct', 'REAL DEFAULT 90.0'),
+        ('pt_near_lock_soft_trim_pct', 'REAL DEFAULT 25.0'),
     ]
     for col_name, col_type in migration_columns:
         try:
@@ -2935,6 +2954,8 @@ def update_channel(channel_id: int, **kwargs):
                    'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                    'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
                    'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
+                   'enable_pt_near_lock', 'pt_near_lock_threshold_pct', 'pt_near_lock_trail_pct',
+                   'pt_near_lock_soft_exit', 'pt_near_lock_soft_threshold_pct', 'pt_near_lock_soft_trim_pct',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
                    'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled', 'entry_chase_enabled',
                    'ticker_filter_mode', 'ticker_filter_list', 'sizing_mode', 'broker_bracket_mode', 'allowed_signal_formats',
@@ -3177,9 +3198,11 @@ def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
         'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
         'escalation_only_mode',
         'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct', 'sl_limit_offset',
-        'pt1_trim_pct', 'pt2_trim_pct', 'pt3_trim_pct', 'pt4_trim_pct'
+        'pt1_trim_pct', 'pt2_trim_pct', 'pt3_trim_pct', 'pt4_trim_pct',
+        'enable_pt_near_lock', 'pt_near_lock_threshold_pct', 'pt_near_lock_trail_pct',
+        'pt_near_lock_soft_exit', 'pt_near_lock_soft_threshold_pct', 'pt_near_lock_soft_trim_pct',
     ]
-    
+
     updates = []
     values = []
     for field, value in kwargs.items():

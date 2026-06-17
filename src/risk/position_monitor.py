@@ -295,7 +295,9 @@ class RiskDBAdapter:
                        ema_use_underlying, ema_no_trend_candles,
                        trim_limit_offset, trim_limit_offset_mode, trim_limit_offset_pct,
                        sl_limit_offset,
-                       pt1_trim_pct, pt2_trim_pct, pt3_trim_pct, pt4_trim_pct
+                       pt1_trim_pct, pt2_trim_pct, pt3_trim_pct, pt4_trim_pct,
+                       enable_pt_near_lock, pt_near_lock_threshold_pct, pt_near_lock_trail_pct,
+                       pt_near_lock_soft_exit, pt_near_lock_soft_threshold_pct, pt_near_lock_soft_trim_pct
                 FROM signal_routing_mappings
                 WHERE id = ?
                 LIMIT 1
@@ -347,7 +349,13 @@ class RiskDBAdapter:
             r_pt2_trim_pct = row[42] if len(row) > 42 else None
             r_pt3_trim_pct = row[43] if len(row) > 43 else None
             r_pt4_trim_pct = row[44] if len(row) > 44 else None
-            
+            r_enable_pt_near_lock = bool(row[45]) if len(row) > 45 and row[45] else False
+            r_pt_near_lock_threshold_pct = row[46] if len(row) > 46 and row[46] is not None else 80.0
+            r_pt_near_lock_trail_pct = row[47] if len(row) > 47 and row[47] is not None else 3.0
+            r_pt_near_lock_soft_exit = bool(row[48]) if len(row) > 48 and row[48] else False
+            r_pt_near_lock_soft_threshold_pct = row[49] if len(row) > 49 and row[49] is not None else 90.0
+            r_pt_near_lock_soft_trim_pct = row[50] if len(row) > 50 and row[50] is not None else 25.0
+
             exit_strategy = row[21] if len(row) > 21 and row[21] else 'risk'
             has_any_risk_config = (
                 sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or 
@@ -419,6 +427,12 @@ class RiskDBAdapter:
                 ema_use_underlying=ema_use_underlying,
                 ema_no_trend_candles=ema_no_trend_candles,
                 broker_bracket_mode=_source_bracket_mode,
+                enable_pt_near_lock=r_enable_pt_near_lock,
+                pt_near_lock_threshold_pct=r_pt_near_lock_threshold_pct,
+                pt_near_lock_trail_pct=r_pt_near_lock_trail_pct,
+                pt_near_lock_soft_exit=r_pt_near_lock_soft_exit,
+                pt_near_lock_soft_threshold_pct=r_pt_near_lock_soft_threshold_pct,
+                pt_near_lock_soft_trim_pct=r_pt_near_lock_soft_trim_pct,
             )
         except Exception as e:
             print(f"[RISK] Warning: Could not fetch signal routing risk settings: {e}")
@@ -519,7 +533,9 @@ class RiskDBAdapter:
                                    c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                    c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                    c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                                   c.broker_bracket_mode, t.profit_targets_json
+                                   c.broker_bracket_mode, t.profit_targets_json,
+                                   c.enable_pt_near_lock, c.pt_near_lock_threshold_pct, c.pt_near_lock_trail_pct,
+                                   c.pt_near_lock_soft_exit, c.pt_near_lock_soft_threshold_pct, c.pt_near_lock_soft_trim_pct
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -547,7 +563,9 @@ class RiskDBAdapter:
                                    c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                    c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                    c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                                   c.broker_bracket_mode, t.profit_targets_json
+                                   c.broker_bracket_mode, t.profit_targets_json,
+                                   c.enable_pt_near_lock, c.pt_near_lock_threshold_pct, c.pt_near_lock_trail_pct,
+                                   c.pt_near_lock_soft_exit, c.pt_near_lock_soft_threshold_pct, c.pt_near_lock_soft_trim_pct
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -579,7 +597,9 @@ class RiskDBAdapter:
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                               c.broker_bracket_mode, t.profit_targets_json
+                               c.broker_bracket_mode, t.profit_targets_json,
+                               c.enable_pt_near_lock, c.pt_near_lock_threshold_pct, c.pt_near_lock_trail_pct,
+                               c.pt_near_lock_soft_exit, c.pt_near_lock_soft_threshold_pct, c.pt_near_lock_soft_trim_pct
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -615,7 +635,9 @@ class RiskDBAdapter:
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                               c.broker_bracket_mode, t.profit_targets_json
+                               c.broker_bracket_mode, t.profit_targets_json,
+                               c.enable_pt_near_lock, c.pt_near_lock_threshold_pct, c.pt_near_lock_trail_pct,
+                               c.pt_near_lock_soft_exit, c.pt_near_lock_soft_threshold_pct, c.pt_near_lock_soft_trim_pct
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -643,7 +665,9 @@ class RiskDBAdapter:
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                               c.broker_bracket_mode, t.profit_targets_json
+                               c.broker_bracket_mode, t.profit_targets_json,
+                               c.enable_pt_near_lock, c.pt_near_lock_threshold_pct, c.pt_near_lock_trail_pct,
+                               c.pt_near_lock_soft_exit, c.pt_near_lock_soft_threshold_pct, c.pt_near_lock_soft_trim_pct
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -672,7 +696,9 @@ class RiskDBAdapter:
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                               c.broker_bracket_mode, t.profit_targets_json
+                               c.broker_bracket_mode, t.profit_targets_json,
+                               c.enable_pt_near_lock, c.pt_near_lock_threshold_pct, c.pt_near_lock_trail_pct,
+                               c.pt_near_lock_soft_exit, c.pt_near_lock_soft_threshold_pct, c.pt_near_lock_soft_trim_pct
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -726,7 +752,9 @@ class RiskDBAdapter:
                                    ema_use_underlying, ema_no_trend_candles, escalation_only_mode,
                                    profit_target_trim_pct_1, profit_target_trim_pct_2,
                                    profit_target_trim_pct_3, profit_target_trim_pct_4,
-                                   broker_bracket_mode
+                                   broker_bracket_mode,
+                                   enable_pt_near_lock, pt_near_lock_threshold_pct, pt_near_lock_trail_pct,
+                                   pt_near_lock_soft_exit, pt_near_lock_soft_threshold_pct, pt_near_lock_soft_trim_pct
                             FROM channels
                             WHERE discord_channel_id = ? OR CAST(id AS TEXT) = ? OR telegram_chat_id = ?
                             LIMIT 1
@@ -777,7 +805,7 @@ class RiskDBAdapter:
                             if len(row) > 42: row[42] = ch_row[37]  # ema_use_underlying
                             if len(row) > 43: row[43] = ch_row[38]  # ema_no_trend_candles
                             if len(row) > 44: row[44] = ch_row[39]  # escalation_only_mode
-                            while len(row) < 51:
+                            while len(row) < 57:
                                 row.append(None)
                             row[45] = ch_row[40]  # profit_target_trim_pct_1
                             row[46] = ch_row[41]  # profit_target_trim_pct_2
@@ -785,6 +813,12 @@ class RiskDBAdapter:
                             row[48] = ch_row[43]  # profit_target_trim_pct_4
                             row[49] = ch_row[44]  # broker_bracket_mode
                             # row[50] = profit_targets_json (from trade, not channel)
+                            row[51] = ch_row[45]  # enable_pt_near_lock
+                            row[52] = ch_row[46]  # pt_near_lock_threshold_pct
+                            row[53] = ch_row[47]  # pt_near_lock_trail_pct
+                            row[54] = ch_row[48]  # pt_near_lock_soft_exit
+                            row[55] = ch_row[49]  # pt_near_lock_soft_threshold_pct
+                            row[56] = ch_row[50]  # pt_near_lock_soft_trim_pct
                             print(f"[RISK] ✓ Channel settings recovered via direct lookup for '{channel_name_from_join}' (LEFT JOIN fallback)")
                     except Exception as e:
                         print(f"[RISK] ⚠️ Direct channel lookup fallback failed: {e}")
@@ -894,6 +928,12 @@ class RiskDBAdapter:
                             ema_no_trend_candles=row[43] if len(row) > 43 and row[43] is not None else 3,
                             escalation_only_mode=bool(row[44]) if len(row) > 44 and row[44] else False,
                             broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'none',
+                            enable_pt_near_lock=bool(row[51]) if len(row) > 51 and row[51] else False,
+                            pt_near_lock_threshold_pct=row[52] if len(row) > 52 and row[52] is not None else 80.0,
+                            pt_near_lock_trail_pct=row[53] if len(row) > 53 and row[53] is not None else 3.0,
+                            pt_near_lock_soft_exit=bool(row[54]) if len(row) > 54 and row[54] else False,
+                            pt_near_lock_soft_threshold_pct=row[55] if len(row) > 55 and row[55] is not None else 90.0,
+                            pt_near_lock_soft_trim_pct=row[56] if len(row) > 56 and row[56] is not None else 25.0,
                         )
                     return None
                 else:
@@ -1013,6 +1053,13 @@ class RiskDBAdapter:
                 ema_no_trend_candles = row[43] if len(row) > 43 and row[43] is not None else 3
                 escalation_only_mode = bool(row[44]) if len(row) > 44 and row[44] else False
 
+                enable_pt_near_lock = bool(row[51]) if len(row) > 51 and row[51] else False
+                pt_near_lock_threshold_pct = row[52] if len(row) > 52 and row[52] is not None else 80.0
+                pt_near_lock_trail_pct = row[53] if len(row) > 53 and row[53] is not None else 3.0
+                pt_near_lock_soft_exit = bool(row[54]) if len(row) > 54 and row[54] else False
+                pt_near_lock_soft_threshold_pct = row[55] if len(row) > 55 and row[55] is not None else 90.0
+                pt_near_lock_soft_trim_pct = row[56] if len(row) > 56 and row[56] is not None else 25.0
+
                 return ChannelRiskSettings(
                     channel_id=str(row[0]),
                     channel_name=row[7] or 'Unknown',
@@ -1058,8 +1105,14 @@ class RiskDBAdapter:
                     ema_no_trend_candles=ema_no_trend_candles,
                     escalation_only_mode=escalation_only_mode,
                     broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'none',
+                    enable_pt_near_lock=enable_pt_near_lock,
+                    pt_near_lock_threshold_pct=pt_near_lock_threshold_pct,
+                    pt_near_lock_trail_pct=pt_near_lock_trail_pct,
+                    pt_near_lock_soft_exit=pt_near_lock_soft_exit,
+                    pt_near_lock_soft_threshold_pct=pt_near_lock_soft_threshold_pct,
+                    pt_near_lock_soft_trim_pct=pt_near_lock_soft_trim_pct,
                 )
-            
+
             return None
         except Exception as e:
             print(f"[RISK] Warning: Could not fetch channel settings: {e}")
@@ -5022,8 +5075,33 @@ class RiskManager:
         if persist_updates:
             self.cache.update_enhanced_risk_state(position.position_key, **persist_updates)
         
+        # Persist PT near-lock state unconditionally — must survive every early-return path below
+        cache.pt_near_lock_active = updated_state.pt_near_lock_active
+        cache.pt_near_lock_soft_done = updated_state.pt_near_lock_soft_done
+
         for action in actions:
-            if action.action_type == ActionType.SELL_ALL:
+            if action.action_type == ActionType.PT_NEAR_LOCK_EXIT:
+                channel_name = channel_settings.channel_name
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"PT NEAR-LOCK [{channel_name}] {action.reason}",
+                    exit_qty=action.qty,
+                    is_partial=False,
+                    risk_trigger='pt_near_lock'
+                )
+
+            elif action.action_type == ActionType.PT_NEAR_LOCK_SOFT_EXIT:
+                channel_name = channel_settings.channel_name
+                print(f"[RISK] 🎯 PT Near-Lock soft exit: trimming {action.qty} — {action.reason}")
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"PT NEAR-LOCK SOFT [{channel_name}] {action.reason}",
+                    exit_qty=action.qty,
+                    is_partial=True,
+                    risk_trigger='pt_near_lock_soft'
+                )
+
+            elif action.action_type == ActionType.SELL_ALL:
                 channel_name = channel_settings.channel_name
                 if 'Dynamic SL' in action.reason:
                     return ExitDecision.dynamic_sl(action.reason, action.qty, channel_name)

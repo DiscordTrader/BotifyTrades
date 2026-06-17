@@ -116,8 +116,6 @@ async function loadChannels() {
                                     <button onclick="toggleTickerFilter('${channel.id}')" title="Ticker Filter${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? ' (Active)' : ''}" style="background: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.15)' : 'rgba(0, 212, 255, 0.1)'}; border: 1px solid ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.3)' : 'rgba(0, 212, 255, 0.3)'}; color: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? '#ffb300' : '#00d4ff'}; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.25)' : 'rgba(0, 212, 255, 0.25)'}'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.15)' : 'rgba(0, 212, 255, 0.1)'}'; this.style.transform='scale(1)'">🎯</button>
                                     ${channelCategory === 'TRACK' ? `<button onclick="togglePaperTradeSection('${channel.id}')" title="Paper Trading Settings" style="background: ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(0, 212, 255, 0.1)'}; border: 1px solid ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.3)' : 'rgba(0, 212, 255, 0.3)'}; color: ${channel.paper_trade_enabled ? '#00ff88' : '#00d4ff'}; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.25)' : 'rgba(0, 212, 255, 0.25)'}'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(0, 212, 255, 0.1)'}'; this.style.transform='scale(1)'">📄</button>` : ''}
                                     <button onclick="toggleAllowedUsers('${channel.id}')" title="Manage Users" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">👥</button>
-                                    <button onclick="showUserPerformance('${channel.id}', '${channel.name}')" title="User Performance" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">📈</button>
-                                    <button onclick="window.location.href='/signals?channel_id=${channel.id}&channel_name=${encodeURIComponent(channel.name)}'" title="View Signals" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">📊</button>
                                     <button onclick="resetChannelTracking('${channel.id}', '${channel.name}')" title="Reset" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">🔄</button>
                                     <button onclick="toggleChannel('${channel.id}', ${channel.is_active})" title="${channel.is_active ? 'Disable' : 'Enable'}" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">${channel.is_active ? '⏸️' : '▶️'}</button>
                                     <button onclick="deleteChannel('${channel.id}', '${channel.name}')" title="Delete" style="background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3); color: #ff6b6b; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(255, 107, 107, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255, 107, 107, 0.1)'; this.style.transform='scale(1)'">🗑️</button>
@@ -568,6 +566,50 @@ async function loadChannels() {
                                             <div style="display: flex; align-items: center; gap: 8px;">
                                                 <label class="toggle-switch"><input type="checkbox" id="risk-ema-extended-${channel.id}" ${channel.ema_extended_hours ? 'checked' : ''}><span class="toggle-slider"></span></label>
                                                 <label style="font-size: 11px; color: #8E8E93;">Extended Hours</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(52,211,153,0.05); border: 1px solid rgba(52,211,153,0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🎯</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #34d399;">PT Near-Lock</label>
+                                        </div>
+                                        <div style="display:flex;align-items:center;gap:8px;">
+                                            <button type="button" onclick="showRiskHelp('pt-near-lock')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                                            <label class="toggle-switch" title="Protect profit when price approaches but hasn't hit a target">
+                                                <input type="checkbox" id="risk-pt-near-lock-${channel.id}" ${channel.enable_pt_near_lock ? 'checked' : ''} onchange="document.getElementById('pt-near-lock-settings-${channel.id}').style.display=this.checked?'block':'none'">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Activates a tight trailing stop when price approaches but hasn't hit a profit target — captures gains on near-misses (e.g. +8% when PT1=10%).</p>
+                                    <div id="pt-near-lock-settings-${channel.id}" style="display: ${channel.enable_pt_near_lock ? 'block' : 'none'};">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Lock Threshold % of PT</label>
+                                                <input type="number" id="risk-pt-near-threshold-${channel.id}" value="${channel.pt_near_lock_threshold_pct != null ? channel.pt_near_lock_threshold_pct : 80}" placeholder="80" step="1" min="1" max="99" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                                <p style="font-size: 10px; color: #666; margin: 3px 0 0 0;">Activate at 80% = locks when +8% toward PT1=10%</p>
+                                            </div>
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trail From High %</label>
+                                                <input type="number" id="risk-pt-near-trail-${channel.id}" value="${channel.pt_near_lock_trail_pct != null ? channel.pt_near_lock_trail_pct : 3}" placeholder="3" step="0.5" min="0.5" max="20" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                                <p style="font-size: 10px; color: #666; margin: 3px 0 0 0;">Tight trail distance from the highest price</p>
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <label class="toggle-switch"><input type="checkbox" id="risk-pt-near-soft-${channel.id}" ${channel.pt_near_lock_soft_exit ? 'checked' : ''} onchange="document.getElementById('pt-near-soft-settings-${channel.id}').style.display=this.checked?'grid':'none'"><span class="toggle-slider"></span></label>
+                                            <label style="font-size: 11px; color: #8E8E93;">Auto Partial Trim at Soft Threshold (one-time)</label>
+                                        </div>
+                                        <div id="pt-near-soft-settings-${channel.id}" style="display: ${channel.pt_near_lock_soft_exit ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Soft Threshold % of PT</label>
+                                                <input type="number" id="risk-pt-near-soft-threshold-${channel.id}" value="${channel.pt_near_lock_soft_threshold_pct != null ? channel.pt_near_lock_soft_threshold_pct : 90}" placeholder="90" step="1" min="1" max="100" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            </div>
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trim Size % of Position</label>
+                                                <input type="number" id="risk-pt-near-soft-trim-${channel.id}" value="${channel.pt_near_lock_soft_trim_pct != null ? channel.pt_near_lock_soft_trim_pct : 25}" placeholder="25" step="5" min="5" max="75" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
                                             </div>
                                         </div>
                                     </div>
@@ -1522,6 +1564,14 @@ async function saveRiskManagement(channelId) {
         const earlyTrailingActivationPct = document.getElementById(`risk-early-activation-${channelId}`).value;
         const earlyTrailingStepPct = document.getElementById(`risk-early-step-${channelId}`).value;
 
+        // PT Near-Lock settings
+        const enablePtNearLock = document.getElementById(`risk-pt-near-lock-${channelId}`)?.checked ? 1 : 0;
+        const ptNearLockThreshold = document.getElementById(`risk-pt-near-threshold-${channelId}`)?.value;
+        const ptNearLockTrail = document.getElementById(`risk-pt-near-trail-${channelId}`)?.value;
+        const ptNearLockSoftExit = document.getElementById(`risk-pt-near-soft-${channelId}`)?.checked ? 1 : 0;
+        const ptNearLockSoftThreshold = document.getElementById(`risk-pt-near-soft-threshold-${channelId}`)?.value;
+        const ptNearLockSoftTrim = document.getElementById(`risk-pt-near-soft-trim-${channelId}`)?.value;
+
         // EMA Risk Management settings
         const emaRiskEnabled = document.getElementById(`risk-ema-enabled-${channelId}`)?.checked ? 1 : 0;
         const emaPeriod = document.getElementById(`risk-ema-period-${channelId}`)?.value || '5';
@@ -1566,6 +1616,12 @@ async function saveRiskManagement(channelId) {
                 enable_early_trailing: enableEarlyTrailing,
                 early_trailing_activation_pct: earlyTrailingActivationPct ? parseFloat(earlyTrailingActivationPct) : 5.0,
                 early_trailing_step_pct: earlyTrailingStepPct ? parseFloat(earlyTrailingStepPct) : 3.0,
+                enable_pt_near_lock: enablePtNearLock,
+                pt_near_lock_threshold_pct: ptNearLockThreshold ? parseFloat(ptNearLockThreshold) : 80.0,
+                pt_near_lock_trail_pct: ptNearLockTrail ? parseFloat(ptNearLockTrail) : 3.0,
+                pt_near_lock_soft_exit: ptNearLockSoftExit,
+                pt_near_lock_soft_threshold_pct: ptNearLockSoftThreshold ? parseFloat(ptNearLockSoftThreshold) : 90.0,
+                pt_near_lock_soft_trim_pct: ptNearLockSoftTrim ? parseFloat(ptNearLockSoftTrim) : 25.0,
                 ema_risk_enabled: emaRiskEnabled,
                 ema_period: parseInt(emaPeriod),
                 ema_timeframe_minutes: parseInt(emaTimeframe),
@@ -2383,6 +2439,70 @@ const RISK_HELP_CONTENT = {
                 <div style="margin-top:10px;padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
                     <strong style="color:#22D3EE;">Tip for Options:</strong> Enable \u201cUse Underlying\u201d to compute EMA on the stock price (e.g., SPY) rather than the option price, which tends to be more reliable. EMA on option prices can be noisy due to bid-ask spreads.
                 </div>`
+            }
+        ]
+    },
+    'pt-near-lock': {
+        title: '🎯 PT Near-Lock',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'PT Near-Lock protects your unrealized profit when price gets close to a Profit Target (PT) but hasn\'t actually hit it yet. Instead of watching a +8% gain evaporate back to breakeven because PT1 was at +10%, the bot locks in a tight trailing stop from the highest price reached — so you capture most of the move even on a near-miss.'
+            },
+            {
+                heading: 'The Problem It Solves',
+                body: `<div style="padding:12px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.2);border-radius:10px;font-size:13px;color:#D4D4D8;line-height:1.7;">
+                    <strong style="color:#34d399;">Example:</strong> PT1 = +10%, SL = -10%, Dynamic SL enabled.<br>
+                    Price climbs to <strong>+8.5%</strong> — then reverses hard.<br>
+                    Without PT Near-Lock: stop is still at entry/breakeven → you exit at <strong>0%</strong> or worse.<br>
+                    With PT Near-Lock (threshold 80% of PT1 = +8%): a tight trailing stop activates at +8%,<br>
+                    following price up to +8.5%, then exits on the dip → you capture roughly <strong>+5–7%</strong>.
+                </div>`
+            },
+            {
+                heading: 'Key Settings',
+                body: '',
+                diagram: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;">
+                    <div style="padding:12px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.2);border-radius:10px;">
+                        <div style="font-size:13px;font-weight:600;color:#34d399;margin-bottom:6px;">Lock Threshold % of PT</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.5;">Activate when price reaches this % of the distance to the next PT. <em>Default 80%</em> — if PT1 is +10%, activates at +8%.</div>
+                    </div>
+                    <div style="padding:12px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.2);border-radius:10px;">
+                        <div style="font-size:13px;font-weight:600;color:#34d399;margin-bottom:6px;">Trail From High %</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.5;">How far below the highest price the trailing stop sits. <em>Default 3%</em> — price peaks at +9%, stop is at +6%.</div>
+                    </div>
+                    <div style="padding:12px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.2);border-radius:10px;">
+                        <div style="font-size:13px;font-weight:600;color:#34d399;margin-bottom:6px;">Soft Exit (Partial Trim)</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.5;">Optional one-time partial sell when the lock threshold is first crossed — trim a slice to lock in gains before the full trailing stop takes over.</div>
+                    </div>
+                    <div style="padding:12px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.2);border-radius:10px;">
+                        <div style="font-size:13px;font-weight:600;color:#34d399;margin-bottom:6px;">Soft Threshold % / Trim %</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.5;">Controls when the soft partial trim fires (as % of PT) and how much to sell (e.g. 25% of position). Only fires once per PT level.</div>
+                    </div>
+                </div>
+                <div style="margin-top:12px;padding:12px;background:#1E1E24;border-radius:10px;">
+                    <div style="font-size:14px;font-weight:600;color:#34d399;margin-bottom:8px;">How It Flows</div>
+                    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#D4D4D8;">
+                        <div>1. Price climbs toward the next unmet PT (e.g. PT1 = +10%)</div>
+                        <div>2. When price crosses <strong>Lock Threshold</strong> (e.g. +8%) → near-lock activates</div>
+                        <div>3. <em>If Soft Exit enabled</em>: one-time partial trim fires at the Soft Threshold</div>
+                        <div>4. A tight trailing stop is set at <strong>highest price − Trail %</strong>, ratchets upward as price rises</div>
+                        <div>5. Price reverses past the trailing stop → position exits, profit captured</div>
+                        <div style="margin-top:4px;padding:8px 10px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.15);border-radius:6px;color:#86EFAC;">
+                            ✓ Applies independently to each unmet PT level. Once a PT is actually hit, the normal PT trim/OCO logic takes over.
+                        </div>
+                    </div>
+                </div>`
+            },
+            {
+                heading: 'Tips',
+                body: `<ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13px;color:#D4D4D8;">
+                    <li><strong style="color:#34d399;">80% threshold + 3% trail</strong> is a balanced default — aggressive enough to capture near-misses, loose enough to avoid premature exits on normal dips.</li>
+                    <li>Lower the trail % (e.g. <strong>1.5%</strong>) if your signals are fast-moving options where reversals are sharp.</li>
+                    <li>Enable <strong>Soft Exit</strong> if you'd rather take partial profits immediately rather than wait for the trailing stop to hit.</li>
+                    <li>PT Near-Lock only activates for <strong>unmet</strong> targets. If you already hit PT1, the lock doesn't re-trigger for PT1 — it moves on to PT2.</li>
+                    <li>Works alongside Dynamic SL — they govern different phases of the trade and don't conflict.</li>
+                </ul>`
             }
         ]
     },

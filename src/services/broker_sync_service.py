@@ -1521,7 +1521,8 @@ class BrokerSyncService:
                             _recalc_dec = 4 if fill_price < 1.0 else 2
                             recalc_updates = {}
                             if old_sl > 0:
-                                sl_pct = (intended - old_sl) / intended
+                                _stored_sl_pct = float(trade.get('stop_loss_pct') or 0)
+                                sl_pct = _stored_sl_pct / 100 if _stored_sl_pct > 0 else (intended - old_sl) / intended
                                 new_sl = round(fill_price * (1 - sl_pct), _recalc_dec)
                                 recalc_updates['stop_loss_price'] = new_sl
                                 print(f"[SYNC] 🔧 Recalculated SL for #{trade_id}: ${old_sl} → ${new_sl} (fill ${fill_price} vs trigger ${intended})")
@@ -1835,7 +1836,8 @@ class BrokerSyncService:
                                                 _recalc_dec = 4 if fill_price < 1.0 else 2
                                                 recalc_updates = {}
                                                 if old_sl > 0:
-                                                    sl_pct = (intended - old_sl) / intended
+                                                    _stored_sl_pct = float(trade.get('stop_loss_pct') or 0)
+                                                    sl_pct = _stored_sl_pct / 100 if _stored_sl_pct > 0 else (intended - old_sl) / intended
                                                     new_sl = round(fill_price * (1 - sl_pct), _recalc_dec)
                                                     recalc_updates['stop_loss_price'] = new_sl
                                                     print(f"[SYNC] 🔧 Recalculated SL for #{trade_id}: ${old_sl} → ${new_sl} (fill ${fill_price} vs trigger ${intended})")
@@ -2956,7 +2958,8 @@ class BrokerSyncService:
                             _recalc_dec = 4 if fill_price < 1.0 else 2
                             recalc_updates = {}
                             if old_sl > 0:
-                                sl_pct = (intended - old_sl) / intended
+                                _stored_sl_pct = float(pending_trade.get('stop_loss_pct') or 0)
+                                sl_pct = _stored_sl_pct / 100 if _stored_sl_pct > 0 else (intended - old_sl) / intended
                                 new_sl = round(fill_price * (1 - sl_pct), _recalc_dec)
                                 recalc_updates['stop_loss_price'] = new_sl
                                 print(f"[SYNC] 🔧 Recalculated SL for #{trade_id}: ${old_sl} → ${new_sl} (fill ${fill_price} vs trigger ${intended})")

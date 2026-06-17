@@ -12048,8 +12048,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 await self.handle_extract_history(message, channel_id, limit)
                 return
         
-        # If not in database, not in legacy CHANNEL_IDS list, AND not a mapped/routing source, ignore
-        if not channel_info and message.channel.id not in CHANNEL_IDS and not is_mapped_source_channel and not is_signal_routing_source:
+        # If not active in database AND not a mapped/routing source, ignore
+        if not channel_info and not is_mapped_source_channel and not is_signal_routing_source:
             return
 
         # PAUSE GATE: Block ALL signal processing when trading is paused
@@ -18137,7 +18137,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         else:
                             sizing_base = buying_power
                             sizing_label = "Buying Power (SOD)" if sod_used else "Buying Power"
-                        if has_settled and settled_cash < sizing_base:
+                        account_type_str = (account_info.get('account_type') or '').upper()
+                        is_margin_account = 'MARGIN' in account_type_str
+                        if has_settled and settled_cash < sizing_base and not is_margin_account:
                             _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ Settled cash ${settled_cash:,.2f} < {sizing_label} ${sizing_base:,.2f} — using settled cash to avoid unsettled fund usage")
                             sizing_base = settled_cash
                             sizing_label = "Settled Cash (SOD)" if sod_used else "Settled Cash"

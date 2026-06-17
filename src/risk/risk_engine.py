@@ -39,6 +39,8 @@ class ActionType(Enum):
     EMA_EXIT = "ema_exit"
     EMA_ESCALATE_STOP = "ema_escalate_stop"
     EMA_NO_TREND_EXIT = "ema_no_trend_exit"
+    PT_NEAR_LOCK_EXIT = "pt_near_lock_exit"
+    PT_NEAR_LOCK_SOFT_EXIT = "pt_near_lock_soft_exit"
 
 
 @dataclass
@@ -97,7 +99,11 @@ class TradeState:
     early_trailing_active: bool = False
     early_stop_price: Optional[float] = None
     early_steps_locked: int = 0
-    
+
+    # PT Near-Lock state
+    pt_near_lock_active: bool = False
+    pt_near_lock_soft_done: bool = False
+
     last_evaluated_price: Optional[float] = None
 
     interval_high: Optional[float] = None
@@ -141,6 +147,8 @@ class TradeState:
         self.early_trailing_active = cache.early_trailing_active
         self.early_stop_price = cache.early_stop_price
         self.early_steps_locked = cache.early_steps_locked
+        self.pt_near_lock_active = cache.pt_near_lock_active
+        self.pt_near_lock_soft_done = cache.pt_near_lock_soft_done
         self.ema_no_trend_count = cache.ema_no_trend_count
         self.ema_last_eval_candle_ts = cache.ema_last_eval_candle_ts
         self.ema_post_entry_candles = cache.ema_post_entry_candles
@@ -593,10 +601,60 @@ def evaluate_exit_actions(
                 action.steps_locked = expected_steps
                 actions.append(action)
     
+    # PT Near-Lock: in-engine trailing stop that activates when price approaches an unmet PT.
+    # Purely in-engine — no broker stop order is registered; exits via PT_NEAR_LOCK_EXIT.
+    if config.enable_pt_near_lock and state.entry_price > 0 and pnl_pct > 0 and state.highest_price > 0:
+        _nearest_pt_pct: Optional[float] = None
+        for _, _pt_pct_attr, _pt_hit in [
+            (1, 'profit_target_1_pct', state.pt1_hit),
+            (2, 'profit_target_2_pct', state.pt2_hit),
+            (3, 'profit_target_3_pct', state.pt3_hit),
+            (4, 'profit_target_4_pct', state.pt4_hit),
+        ]:
+            if not _pt_hit:
+                _pct = getattr(config, _pt_pct_attr, 0) or 0
+                if _pct > 0:
+                    _nearest_pt_pct = _pct
+                    break
+
+        if _nearest_pt_pct:
+            _lock_thresh = _nearest_pt_pct * (config.pt_near_lock_threshold_pct / 100.0)
+            _soft_thresh = _nearest_pt_pct * (config.pt_near_lock_soft_threshold_pct / 100.0)
+
+            # Soft partial (one-time) — flag set only when sell actually queued
+            if (config.pt_near_lock_soft_exit and not state.pt_near_lock_soft_done
+                    and pnl_pct >= _soft_thresh and state.remaining_qty > 1):
+                _soft_qty = max(1, int(state.remaining_qty * config.pt_near_lock_soft_trim_pct / 100.0))
+                if _soft_qty < state.remaining_qty:
+                    state.pt_near_lock_soft_done = True
+                    actions.append(RiskAction(
+                        action_type=ActionType.PT_NEAR_LOCK_SOFT_EXIT,
+                        reason=f"PT near-lock soft exit: +{pnl_pct:.1f}% reached {config.pt_near_lock_soft_threshold_pct:.0f}% of PT{_nearest_pt_pct:.0f}% — auto-trim {config.pt_near_lock_soft_trim_pct:.0f}%",
+                        qty=_soft_qty,
+                        tier=0,
+                        priority=3
+                    ))
+                    state.remaining_qty -= _soft_qty
+
+            # Tight trailing from highest price — recalculated every tick so floor ratchets up
+            if pnl_pct >= _lock_thresh and config.pt_near_lock_trail_pct > 0:
+                _trail_floor = state.highest_price * (1.0 - config.pt_near_lock_trail_pct / 100.0)
+                if not state.pt_near_lock_active:
+                    state.pt_near_lock_active = True
+                    print(f"[RISK] 🎯 PT Near-Lock ACTIVATED +{pnl_pct:.1f}% ({config.pt_near_lock_threshold_pct:.0f}% of PT{_nearest_pt_pct:.0f}%) — trailing {config.pt_near_lock_trail_pct:.1f}% from ${state.highest_price:.2f}, floor=${_trail_floor:.2f}")
+                if effective_low <= _trail_floor:
+                    actions.append(RiskAction(
+                        action_type=ActionType.PT_NEAR_LOCK_EXIT,
+                        reason=f"PT near-lock trail hit: ${effective_low:.2f} <= ${_trail_floor:.2f} (trailing {config.pt_near_lock_trail_pct:.1f}% from high ${state.highest_price:.2f})",
+                        qty=state.remaining_qty,
+                        priority=3
+                    ))
+                    return actions, state
+
     enabled_tiers = []
     tier_thresholds = {}
-    
-    for tier, pct_attr in [(1, 'profit_target_1_pct'), (2, 'profit_target_2_pct'), 
+
+    for tier, pct_attr in [(1, 'profit_target_1_pct'), (2, 'profit_target_2_pct'),
                            (3, 'profit_target_3_pct'), (4, 'profit_target_4_pct')]:
         pct = getattr(config, pct_attr, 0) or 0
         if pct > 0:
@@ -695,6 +753,8 @@ def apply_actions_to_cache(
     cache.early_trailing_active = state.early_trailing_active
     cache.early_stop_price = state.early_stop_price
     cache.early_steps_locked = state.early_steps_locked
+    cache.pt_near_lock_active = state.pt_near_lock_active
+    cache.pt_near_lock_soft_done = state.pt_near_lock_soft_done
     cache.ema_no_trend_count = state.ema_no_trend_count
     if state.ema_cross_state and state.ema_cross_state not in ('seeding', 'frozen', ''):
         cache.ema_last_cross_state = state.ema_cross_state

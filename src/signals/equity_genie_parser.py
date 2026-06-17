@@ -83,6 +83,7 @@ PT_LINE_PATTERNS = [
     re.compile(r'🎯\s*PT[:\s]*(.+)', re.IGNORECASE),
     re.compile(r'(?:^|\s)PT[:\s]+(.+)', re.IGNORECASE),
     re.compile(r'(?:^|\s)PT\s+((?:\$?' + PRICE_NUM + r'[\s,]+)*\$?' + PRICE_NUM + r')', re.IGNORECASE),
+    re.compile(r'\*\s*PT[:\s]+(.+)', re.IGNORECASE),   # italic *PT 2.25 2.32 2.50*
 ]
 
 EXIT_OUT_PATTERN = re.compile(
@@ -97,6 +98,18 @@ EXIT_SOLD_PATTERN = re.compile(
 
 EXIT_SOLD_HALF_PATTERN = re.compile(
     r'Sold\s+Half!?\s+\$?(' + PRICE_NUM + r')',
+    re.IGNORECASE
+)
+
+# "NOW $5.75" — live exit call at current price
+EXIT_NOW_PATTERN = re.compile(
+    r'\bNOW\s+\$?(' + PRICE_NUM + r')',
+    re.IGNORECASE
+)
+
+# "Trimmed half here $4.65" — partial exit price
+EXIT_TRIM_PRICE_PATTERN = re.compile(
+    r'Trimmed?\s+(?:half|most|all)?\s*here\s+\$?(' + PRICE_NUM + r')',
     re.IGNORECASE
 )
 
@@ -422,6 +435,14 @@ def parse_equity_genie_exits(embed_title: str, embed_description: str) -> List[D
             m = EXIT_SOLD_HALF_PATTERN.search(block_clean)
             if m:
                 exit_price = _parse_price(m.group(1))
+        if exit_price is None:
+            m = EXIT_NOW_PATTERN.search(block_clean)
+            if m:
+                exit_price = _parse_price(m.group(1))
+        if exit_price is None:
+            m = EXIT_TRIM_PRICE_PATTERN.search(block_clean)
+            if m:
+                exit_price = _parse_price(m.group(1))
 
         sell_pct = None
         is_partial = False
@@ -448,9 +469,9 @@ def parse_equity_genie_exits(embed_title: str, embed_description: str) -> List[D
         if not has_out_keyword and not exit_price and not is_partial and not sl_update:
             if any(p.search(block_clean) for p in CELEBRATORY_ONLY_PATTERNS):
                 is_celebratory = True
-            if is_pt_hit and not has_out_keyword:
+            if is_pt_hit and not has_out_keyword and not sl_update:
                 is_celebratory = True
-            if is_all_pts and not has_out_keyword:
+            if is_all_pts and not has_out_keyword and not sl_update:
                 is_celebratory = True
 
         if is_celebratory:

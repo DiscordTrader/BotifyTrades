@@ -2923,6 +2923,8 @@ class SignalFormatRegistry:
             "price": price,
             "stop_loss": stop_loss,
             "stop_loss_pct": stop_loss_pct,
+            "stop_loss_type": 'percent' if stop_loss_pct else None,
+            "stop_loss_value": stop_loss_pct if stop_loss_pct else stop_loss,
             "is_market_order": False,
             "trigger_price": price,
             "confidence": 1.0,

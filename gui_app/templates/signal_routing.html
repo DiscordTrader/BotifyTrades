@@ -855,6 +855,60 @@
                         </div>
                     </div>
                 </div>
+
+                <h4 style="margin: 25px 0 15px; color: #34d399; font-size: 0.95rem;">🎯 PT Near-Lock</h4>
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="risk-pt-near-lock" onchange="document.getElementById('pt-near-lock-params').style.display=this.checked?'block':'none'">
+                        <label for="risk-pt-near-lock" style="font-weight: 600;">Enable PT Near-Lock</label>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.78rem; margin: 6px 0 0;">Activates a tight trailing stop when price approaches but hasn't hit a profit target, protecting gains on near-misses (e.g. +8-9% when PT1=10%).</p>
+                </div>
+                <div id="pt-near-lock-params" style="display: none; background: rgba(52,211,153,0.05); border: 1px solid rgba(52,211,153,0.2); border-radius: 8px; padding: 15px; margin-top: 8px;">
+                    <div class="form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 12px; align-items: start;">
+                        <div class="form-group">
+                            <label>Lock Threshold</label>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                                <input type="number" id="risk-pt-near-threshold" class="form-input" style="width: 70px;" step="1" min="1" max="99" value="80">
+                                <span style="font-size: 0.8rem;">% of PT distance</span>
+                            </div>
+                            <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px;">Activate when price reaches this % of the nearest unmet target (e.g. 80% of PT1=10% → activates at +8%).</p>
+                        </div>
+                        <div class="form-group">
+                            <label>Trail From High</label>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                                <input type="number" id="risk-pt-near-trail" class="form-input" style="width: 70px;" step="0.5" min="0.5" max="20" value="3">
+                                <span style="font-size: 0.8rem;">%</span>
+                            </div>
+                            <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px;">Tight trailing stop distance from the highest price while near-lock is active.</p>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                <input type="checkbox" id="risk-pt-near-soft-exit" onchange="document.getElementById('pt-near-soft-params').style.display=this.checked?'flex':'none'">
+                                <label for="risk-pt-near-soft-exit" style="font-weight: 600;">Auto Partial Trim at Soft Threshold</label>
+                            </div>
+                            <p style="color: var(--text-muted); font-size: 0.75rem; margin: 0;">One-time partial sell when price gets very close to the target, before it pulls back.</p>
+                        </div>
+                        <div id="pt-near-soft-params" style="display: none; grid-column: 1 / -1; gap: 12px; flex-wrap: wrap;">
+                            <div class="form-group" style="flex: 1; min-width: 180px;">
+                                <label>Soft Threshold</label>
+                                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                                    <input type="number" id="risk-pt-near-soft-threshold" class="form-input" style="width: 70px;" step="1" min="1" max="100" value="90">
+                                    <span style="font-size: 0.8rem;">% of PT distance</span>
+                                </div>
+                                <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px;">Trigger partial at this % of PT (e.g. 90% of PT1=10% → trims at +9%).</p>
+                            </div>
+                            <div class="form-group" style="flex: 1; min-width: 180px;">
+                                <label>Soft Trim Size</label>
+                                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                                    <input type="number" id="risk-pt-near-soft-trim" class="form-input" style="width: 70px;" step="5" min="5" max="75" value="25">
+                                    <span style="font-size: 0.8rem;">% of remaining position</span>
+                                </div>
+                                <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px;">Percentage of remaining shares/contracts to sell at soft threshold.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="risk-tab-content" id="risk-tab-advanced" style="display: none;">
@@ -1330,6 +1384,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-ema-underlying').checked = s.ema_use_underlying !== 0;
                 document.getElementById('risk-ema-no-trend').value = s.ema_no_trend_candles || 3;
                 document.getElementById('ema-params').style.display = s.ema_risk_enabled ? 'block' : 'none';
+
+                document.getElementById('risk-pt-near-lock').checked = !!s.enable_pt_near_lock;
+                document.getElementById('risk-pt-near-threshold').value = s.pt_near_lock_threshold_pct != null ? s.pt_near_lock_threshold_pct : 80;
+                document.getElementById('risk-pt-near-trail').value = s.pt_near_lock_trail_pct != null ? s.pt_near_lock_trail_pct : 3;
+                document.getElementById('risk-pt-near-soft-exit').checked = !!s.pt_near_lock_soft_exit;
+                document.getElementById('risk-pt-near-soft-threshold').value = s.pt_near_lock_soft_threshold_pct != null ? s.pt_near_lock_soft_threshold_pct : 90;
+                document.getElementById('risk-pt-near-soft-trim').value = s.pt_near_lock_soft_trim_pct != null ? s.pt_near_lock_soft_trim_pct : 25;
+                document.getElementById('pt-near-lock-params').style.display = s.enable_pt_near_lock ? 'block' : 'none';
+                document.getElementById('pt-near-soft-params').style.display = s.pt_near_lock_soft_exit ? 'flex' : 'none';
                 
                 const trimMode = s.trim_limit_offset_mode || 'dollar';
                 document.getElementById('risk-trim-offset-mode').value = trimMode;
@@ -1420,6 +1483,12 @@ document.addEventListener('DOMContentLoaded', function() {
             ema_extended_hours: document.getElementById('risk-ema-extended').checked ? 1 : 0,
             ema_use_underlying: document.getElementById('risk-ema-underlying').checked ? 1 : 0,
             ema_no_trend_candles: parseInt(document.getElementById('risk-ema-no-trend').value) || 3,
+            enable_pt_near_lock: document.getElementById('risk-pt-near-lock').checked ? 1 : 0,
+            pt_near_lock_threshold_pct: parseFloat(document.getElementById('risk-pt-near-threshold').value) || 80.0,
+            pt_near_lock_trail_pct: parseFloat(document.getElementById('risk-pt-near-trail').value) || 3.0,
+            pt_near_lock_soft_exit: document.getElementById('risk-pt-near-soft-exit').checked ? 1 : 0,
+            pt_near_lock_soft_threshold_pct: parseFloat(document.getElementById('risk-pt-near-soft-threshold').value) || 90.0,
+            pt_near_lock_soft_trim_pct: parseFloat(document.getElementById('risk-pt-near-soft-trim').value) || 25.0,
             trim_limit_offset: (() => { const v = parseFloat(document.getElementById('risk-trim-offset-dollar').value); return Number.isFinite(v) ? v : 0.01; })(),
             trim_limit_offset_mode: document.getElementById('risk-trim-offset-mode').value || 'dollar',
             trim_limit_offset_pct: (() => { const v = parseFloat(document.getElementById('risk-trim-offset-pct').value); return Number.isFinite(v) ? v : 2.0; })(),
