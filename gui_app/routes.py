@@ -6686,6 +6686,11 @@ def register_routes(app):
                     if result.get('success'):
                         if is_db_trade:
                             db.close_trade(numeric_id, result.get('fill_price', 0) or requested_limit_price or 0, 'manual_close')
+                        try:
+                            from gui_app.live_snapshot import request_force_refresh
+                            request_force_refresh()
+                        except Exception:
+                            pass
                         return jsonify({'success': True, 'message': f"Position closed: {quantity_to_close} {close_symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': result.get('error', 'Alpaca close failed')}), 500
@@ -6755,6 +6760,11 @@ def register_routes(app):
                     if success:
                         if is_db_trade:
                             db.close_trade(numeric_id, fill_price or requested_limit_price or 0, 'manual_close')
+                        try:
+                            from gui_app.live_snapshot import request_force_refresh
+                            request_force_refresh()
+                        except Exception:
+                            pass
                         return jsonify({'success': True, 'message': f"Position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'Robinhood close failed: {error_msg or "Unknown error"}'}), 500
@@ -6801,6 +6811,11 @@ def register_routes(app):
                     if result and result.success:
                         if is_db_trade:
                             db.close_trade(numeric_id, result.price or requested_limit_price or 0, 'manual_close')
+                        try:
+                            from gui_app.live_snapshot import request_force_refresh
+                            request_force_refresh()
+                        except Exception:
+                            pass
                         return jsonify({'success': True, 'message': f"Schwab position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'Schwab close failed: {result.message if result else "Unknown error"}'}), 500
@@ -6846,6 +6861,11 @@ def register_routes(app):
                     if result and result.success:
                         if is_db_trade:
                             db.close_trade(numeric_id, result.price or requested_limit_price or 0, 'manual_close')
+                        try:
+                            from gui_app.live_snapshot import request_force_refresh
+                            request_force_refresh()
+                        except Exception:
+                            pass
                         return jsonify({'success': True, 'message': f"IBKR position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'IBKR close failed: {result.message if result else "Unknown error"}'}), 500
@@ -6891,6 +6911,11 @@ def register_routes(app):
                     if result and result.success:
                         if is_db_trade:
                             db.close_trade(numeric_id, result.price or requested_limit_price or 0, 'manual_close')
+                        try:
+                            from gui_app.live_snapshot import request_force_refresh
+                            request_force_refresh()
+                        except Exception:
+                            pass
                         return jsonify({'success': True, 'message': f"Tastytrade position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'Tastytrade close failed: {result.message if result else "Unknown error"}'}), 500
@@ -7146,6 +7171,11 @@ def register_routes(app):
                     message = f"Position closed: {qty_closed} {symbol} @ MARKET"
                 else:
                     message = f"Limit order submitted: SELL {qty_closed} {symbol} @ ${requested_limit_price}\n\nOrder is pending fill. Check 'Pending Orders' tab for status."
+                try:
+                    from gui_app.live_snapshot import request_force_refresh
+                    request_force_refresh()
+                except Exception:
+                    pass
                 return jsonify({'success': True, 'message': message})
             else:
                 error = result.get('error', 'Failed to close position')
@@ -7663,7 +7693,7 @@ def register_routes(app):
             if broker_filter:
                 positions = [p for p in positions if broker_filter in p.get('broker', '').upper()]
             
-            open_positions = [p for p in positions if p.get('status') in ('OPEN', None) or p.get('source') == 'live_brokerage']
+            open_positions = [p for p in positions if p.get('status') in ('OPEN', None) or (p.get('source') == 'live_brokerage' and p.get('status') != 'CLOSED')]
             pending_positions = [p for p in positions if p.get('fill_status') in ('Submitted', 'Working', 'Partially Filled') or p.get('status') == 'PENDING']
             
             return jsonify({
@@ -7695,8 +7725,11 @@ def register_routes(app):
                 yield f"data: {json.dumps({'type': 'connected', 'version': get_snapshot_version()})}\n\n"
                 while True:
                     try:
-                        version = q.get(timeout=30)
-                        yield f"data: {json.dumps({'type': 'update', 'version': version})}\n\n"
+                        payload = q.get(timeout=30)
+                        if isinstance(payload, dict):
+                            yield f"data: {json.dumps(payload)}\n\n"
+                        else:
+                            yield f"data: {json.dumps({'type': 'tick', 'version': payload})}\n\n"
                     except _queue.Empty:
                         yield f": keepalive\n\n"
             except GeneratorExit:
@@ -7843,6 +7876,118 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'quotes': {}, 'error': str(e)})
 
+    @app.route('/api/tick', methods=['GET'])
+    @login_required
+    def api_tick():
+        """Unified 1s tick endpoint: streaming prices + risk states for live positions."""
+        try:
+            from gui_app.live_snapshot import get_live_snapshot
+            snapshot = get_live_snapshot()
+            positions = snapshot.get('positions', [])
+
+            wb_hub = sch_hub = ibkr_hub = None
+            wb_streaming = sch_streaming = ibkr_streaming = False
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                wb_hub = get_webull_data_hub(); wb_streaming = wb_hub.is_streaming()
+            except Exception: pass
+            try:
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                sch_hub = get_schwab_data_hub(); sch_streaming = sch_hub.is_streaming()
+            except Exception: pass
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                ibkr_hub = get_ibkr_data_hub(); ibkr_streaming = ibkr_hub.is_streaming()
+            except Exception: pass
+
+            risk_states = {}
+            try:
+                import sys
+                cache = None
+                for mod_name in ('src.risk.position_monitor', 'risk.position_monitor'):
+                    mod = sys.modules.get(mod_name)
+                    rm = getattr(mod, 'risk_manager_instance', None) if mod else None
+                    if rm and hasattr(rm, 'cache'):
+                        cache = rm.cache; break
+                if cache is None:
+                    from src.risk.position_cache import get_position_cache
+                    cache = get_position_cache()
+                risk_states = cache.get_all_risk_states()
+            except Exception: pass
+
+            now = time.time()
+            quotes = {}
+            for pos in positions:
+                pid = pos.get('id')
+                if pid is None:
+                    pid = f"{pos.get('broker','')}__{pos.get('symbol','')}"
+                    if pid == '__': continue
+                symbol = pos.get('symbol', '')
+                broker = (pos.get('broker') or '').upper()
+                entry = pos.get('entry_price', 0) or pos.get('avg_cost', 0) or 0
+                qty = pos.get('quantity', 0) or 0
+                is_option = pos.get('asset_type') == 'option'
+
+                last = pos.get('last', pos.get('current_price', 0)) or 0
+                bid = pos.get('bid', 0) or 0
+                ask = pos.get('ask', 0) or 0
+                source = 'rest'
+                age_ms = -1
+
+                fresh_quote = None
+                if symbol and not is_option:
+                    if 'WEBULL' in broker and wb_hub and wb_streaming:
+                        fresh_quote = wb_hub.get_quote_detailed(symbol)
+                        if fresh_quote and fresh_quote.get('last', 0) > 0: source = 'stream'
+                    elif broker == 'SCHWAB' and sch_hub and sch_streaming:
+                        fresh_quote = sch_hub.get_quote_detailed(symbol)
+                        if fresh_quote and fresh_quote.get('last', 0) > 0: source = 'stream'
+                    elif 'IBKR' in broker and ibkr_hub and ibkr_streaming:
+                        fresh_quote = ibkr_hub.get_quote_detailed(symbol)
+                        if fresh_quote and fresh_quote.get('last', 0) > 0: source = 'stream'
+                    else:
+                        if wb_hub and wb_streaming:
+                            fresh_quote = wb_hub.get_quote_detailed(symbol)
+                            if fresh_quote and fresh_quote.get('last', 0) > 0: source = 'stream_cross'
+                        if (not fresh_quote or fresh_quote.get('last', 0) <= 0) and sch_hub and sch_streaming:
+                            fresh_quote = sch_hub.get_quote_detailed(symbol)
+                            if fresh_quote and fresh_quote.get('last', 0) > 0: source = 'stream_cross'
+
+                if fresh_quote and fresh_quote.get('last', 0) > 0:
+                    last = fresh_quote['last']
+                    bid = fresh_quote.get('bid', bid)
+                    ask = fresh_quote.get('ask', ask)
+                    ts = fresh_quote.get('timestamp')
+                    if ts: age_ms = int((now - ts) * 1000)
+
+                pnl = ((last - entry) * qty) if entry > 0 and qty > 0 and last > 0 else 0
+                pnl_pct = round(((last - entry) / entry * 100), 2) if entry > 0 and last > 0 else 0
+
+                quotes[str(pid)] = {
+                    'last': round(last, 4) if last else 0,
+                    'bid': round(bid, 4) if bid else 0,
+                    'ask': round(ask, 4) if ask else 0,
+                    'pnl': round(pnl, 2),
+                    'pnl_pct': pnl_pct,
+                    'source': source,
+                    'age_ms': age_ms,
+                    'broker': broker,
+                }
+
+            return jsonify({
+                'success': True,
+                'quotes': quotes,
+                'risk_states': risk_states,
+                'streaming_status': {
+                    'webull': wb_streaming,
+                    'schwab': sch_streaming,
+                    'ibkr': ibkr_streaming,
+                }
+            })
+        except Exception as e:
+            print(f"[TICK] /api/tick error: {e}")
+            return jsonify({'success': False, 'quotes': {}, 'risk_states': {}, 'error': str(e)})
+
     @app.route('/api/streaming/stock-quote', methods=['GET'])
     @login_required
     def api_streaming_stock_quote():
@@ -7979,6 +8124,11 @@ def register_routes(app):
                         results.append({'trade_id': pos.get('id'), 'symbol': pos.get('symbol'), 'success': False, 'message': str(e)})
             
             success_count = sum(1 for r in results if r.get('success'))
+            try:
+                from gui_app.live_snapshot import request_force_refresh
+                request_force_refresh()
+            except Exception:
+                pass
             return jsonify({
                 'success': True,
                 'message': f'Closed {success_count}/{len(results)} positions',

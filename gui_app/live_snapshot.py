@@ -35,6 +35,7 @@ _snapshot_version = 0
 _snapshot_version_lock = threading.Lock()
 _sse_clients: List = []
 _sse_clients_lock = threading.Lock()
+_prev_position_ids: set = set()
 
 _BROKER_INTERVALS = {
     'WEBULL': 3,
@@ -77,12 +78,12 @@ def unsubscribe_sse(q):
             pass
 
 
-def _notify_sse_clients(version: int):
+def _notify_sse_clients(payload: dict):
     with _sse_clients_lock:
         dead = []
         for q in _sse_clients:
             try:
-                q.put_nowait(version)
+                q.put_nowait(payload)
             except Exception:
                 dead.append(q)
         for q in dead:
@@ -940,8 +941,59 @@ def _make_match_key(broker, symbol, strike, expiry, call_put):
     return f"{str(broker).upper()}|{_canonical_symbol(symbol)}|{_normalize_strike(strike)}|{_normalize_expiry(expiry)}|{(call_put or '').upper()[:1]}"
 
 
+def _build_channel_risk_map() -> Dict[str, Dict]:
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT discord_channel_id, name, stop_loss_pct,
+                   profit_target_1_pct, profit_target_2_pct, profit_target_3_pct
+            FROM channels WHERE is_active = 1
+        ''')
+        rows = cursor.fetchall()
+        result = {}
+        for row in rows:
+            cid = str(row[0]) if row[0] else None
+            if cid:
+                result[cid] = {
+                    'channel_name': row[1] or '',
+                    'stop_loss_pct': row[2],
+                    'profit_target_1_pct': row[3],
+                    'profit_target_2_pct': row[4],
+                    'profit_target_3_pct': row[5],
+                }
+        return result
+    except Exception:
+        return {}
+
+
+def _apply_channel_fields(pos: Dict, channel_id, channel_risk_map: Dict, trade: Dict):
+    if not channel_id:
+        return
+    cid = str(channel_id)
+    info = channel_risk_map.get(cid, {})
+    if info.get('channel_name'):
+        pos['channel_name'] = info['channel_name']
+    pos['stop_loss_pct'] = info.get('stop_loss_pct')
+    pos['profit_target_1_pct'] = info.get('profit_target_1_pct')
+    pos['profit_target_2_pct'] = info.get('profit_target_2_pct')
+    pos['profit_target_3_pct'] = info.get('profit_target_3_pct')
+    try:
+        src_info = db.get_trade_source_display(trade)
+        pos['source_display'] = src_info.get('name', '')
+    except Exception:
+        pass
+    remaining = pos.get('remaining_qty')
+    original = pos.get('original_qty')
+    if remaining is not None and original is not None and remaining < original and remaining > 0:
+        pos['display_status'] = 'PARTIAL'
+    else:
+        pos['display_status'] = pos.get('status', 'OPEN')
+
+
 def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_status: Dict[str, Dict] = None) -> List[Dict]:
     from collections import defaultdict
+    channel_risk_map = _build_channel_risk_map()
     trade_map: Dict[str, Dict] = {}
     trade_map_all: Dict[str, list] = defaultdict(list)
     for t in db_trades:
@@ -1018,6 +1070,7 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
             pos['channel_record_id'] = matched_trade.get('channel_record_id')
             pos['channel_id'] = matched_trade.get('channel_id')
             pos['routing_mapping_id'] = matched_trade.get('routing_mapping_id')
+            _apply_channel_fields(pos, pos['channel_id'], channel_risk_map, matched_trade)
 
         enriched.append(pos)
 
@@ -1105,6 +1158,7 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
             except Exception:
                 pass
 
+            _apply_channel_fields(pos, pos['channel_id'], channel_risk_map, t)
             enriched.append(pos)
 
     return enriched
@@ -1334,10 +1388,14 @@ def _refresh_snapshot(bot_instance, force_all: bool = False):
             _snapshot_cache['updating'] = False
 
         with _snapshot_version_lock:
+            global _prev_position_ids
             _snapshot_version += 1
             ver = _snapshot_version
+            new_ids = {str(p.get('id')) for p in merged if p.get('id') is not None}
+            event_type = 'structure_changed' if new_ids != _prev_position_ids else 'tick'
+            _prev_position_ids = new_ids
 
-        _notify_sse_clients(ver)
+        _notify_sse_clients({'type': event_type, 'version': ver})
 
         broker_summary = ', '.join(
             f"{k}({v.get('position_count', 0)})" for k, v in broker_status.items()
