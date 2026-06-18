@@ -351,20 +351,21 @@ class WebullOfficialBroker:
             # Webull rejects DAY TIF outside core hours — upgrade to GTC
             if tif == "DAY":
                 tif = "GTC"
-            print(f"[{self.name}] ⏰ After-hours detected — GTC TIF, CORE session (EXTENDED rejected by API)", flush=True)
-            # Webull rejects MARKET orders outside regular hours — convert to LIMIT using last known price
-            if otype == "MARKET" and price is None:
-                _q = None
-                try:
-                    from src.services.webull_data_hub import get_webull_data_hub
-                    _q = get_webull_data_hub().get_quote(symbol)
-                except Exception:
-                    pass
-                if _q and (_q.bid or _q.last):
-                    price = _q.ask if side == "BUY" else _q.bid or _q.last
-                    price = round(price, 2) if price >= 1.0 else round(price, 4)
-                    otype = "LIMIT"
-                    print(f"[{self.name}] ⏰ After-hours MARKET→LIMIT conversion: ${price}", flush=True)
+            print(f"[{self.name}] ⏰ After-hours detected — GTC TIF, ALL session", flush=True)
+            # Extended hours requires LIMIT — convert MARKET orders
+            if otype == "MARKET":
+                if price is None:
+                    _q = None
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        _q = get_webull_data_hub().get_quote(symbol)
+                    except Exception:
+                        pass
+                    if _q and (_q.ask or _q.bid or _q.last):
+                        price = _q.ask if side == "BUY" else _q.bid or _q.last
+                        price = round(price, 2) if price >= 1.0 else round(price, 4)
+                otype = "LIMIT"
+                print(f"[{self.name}] ⏰ Extended hours MARKET→LIMIT: ${price}", flush=True)
 
         try:
             result = await self._orders.place_stock_order(

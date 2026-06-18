@@ -34,7 +34,7 @@ class OrdersAPI:
             "order_type": order_type,
             "time_in_force": time_in_force,
             "quantity": str(quantity),
-            "support_trading_session": "CORE",
+            "support_trading_session": "ALL" if extended_hours else "CORE",
         }
         if limit_price is not None:
             order["limit_price"] = str(limit_price)
@@ -132,7 +132,7 @@ class OrdersAPI:
             "order_type": order_type,
             "time_in_force": "GTC" if extended_hours else "DAY",
             "quantity": str(quantity),
-            "support_trading_session": "CORE",
+            "support_trading_session": "ALL" if extended_hours else "CORE",
         }
         if limit_price is not None:
             master["limit_price"] = str(limit_price)
