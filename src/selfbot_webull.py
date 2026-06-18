@@ -8165,6 +8165,12 @@ class SelfClient(discord.Client):
                                 _original_print(f"[WEBULL_OFFICIAL] ✓ Health monitor registered as {_wo_hm_key}", flush=True)
                             except Exception as _hm_err:
                                 _original_print(f"[WEBULL_OFFICIAL] ⚠️ Health monitor registration failed: {_hm_err}", flush=True)
+                            try:
+                                if hasattr(self, '_broker_manager') and self._broker_manager is not None:
+                                    self._broker_manager.webull_official_broker = self.webull_official_broker
+                                    _original_print(f"[WEBULL_OFFICIAL] ✓ Broker sync manager updated — will appear in next sync cycle", flush=True)
+                            except Exception as _bm_err:
+                                _original_print(f"[WEBULL_OFFICIAL] ⚠️ Broker sync manager update failed: {_bm_err}", flush=True)
                         except Exception as status_err:
                             _original_print(f"[WEBULL_OFFICIAL] ⚠️ Failed to update broker status: {status_err}", flush=True)
                         try:
