@@ -351,7 +351,7 @@ class WebullOfficialBroker:
             # Webull rejects DAY TIF outside core hours — upgrade to GTC
             if tif == "DAY":
                 tif = "GTC"
-            print(f"[{self.name}] ⏰ After-hours detected — enabling extended hours (support_trading_session=ALL, TIF={tif})", flush=True)
+            print(f"[{self.name}] ⏰ After-hours detected — enabling extended hours (support_trading_session=EXTENDED, TIF={tif})", flush=True)
             # Webull rejects MARKET orders outside regular hours — convert to LIMIT using last known price
             if otype == "MARKET" and price is None:
                 _q = None
@@ -388,9 +388,38 @@ class WebullOfficialBroker:
                 action=action,
             )
         except Exception as e:
+            err_str = str(e)
+            # If extended-hours session value rejected, retry with CORE session
+            if extended_hours and "support_trading_session" in err_str and "EXTENDED" in err_str:
+                print(f"[{self.name}] ⚠️ EXTENDED session rejected — retrying with CORE session", flush=True)
+                if tif == "GTC":
+                    tif = "DAY"
+                try:
+                    result = await self._orders.place_stock_order(
+                        account_id=self.account_id,
+                        symbol=symbol,
+                        side=side,
+                        quantity=quantity,
+                        order_type=otype,
+                        limit_price=price,
+                        stop_price=stop_price,
+                        time_in_force=tif,
+                        extended_hours=False,
+                    )
+                    return OrderResult(
+                        success=True,
+                        order_id=result.client_order_id or result.order_id,
+                        message=f"Order placed (CORE fallback): {side} {quantity} {symbol}",
+                        price=price,
+                        quantity=quantity,
+                        symbol=symbol,
+                        action=action,
+                    )
+                except Exception as e2:
+                    err_str = str(e2)
             return OrderResult(
                 success=False,
-                message=str(e),
+                message=err_str,
                 symbol=symbol,
                 action=action,
                 quantity=quantity,
