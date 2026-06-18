@@ -1,5 +1,43 @@
 # BotifyTrades Progress Log
 
+## Session: June 17, 2026 (continued) — Webull Official after-hours + position source tag + SL fix
+
+### Bugs Fixed
+
+**BUG: WEBULL_OFFICIAL 417 error after hours (`DAY_ORDER_NOT_ALLOWED_AFT_CORE_TIME_LIMIT`)**
+- Root cause: Bot sent `time_in_force=DAY` and `support_trading_session=CORE` outside regular hours. Webull rejects DAY TIF after 4 PM ET even with `support_trading_session=ALL`.
+- Fix: Added `_needs_extended_hours()` static method in `src/brokers/webull_official/broker.py`. In `place_stock_order` and `place_bracket_order`, if not already in extended-hours mode and `_needs_extended_hours()` returns True: force `extended_hours=True`, flip `DAY`→`GTC`, and convert MARKET→LIMIT (using ask/bid from data hub). Also fixed `orders.py` bracket master leg which hardcoded `time_in_force: "DAY"` — now `"GTC"` when `extended_hours=True`.
+
+**BUG: Live positions show "WEBULL_OFFICIAL_LIVE Sync" instead of source channel badge; SL not applied**
+- Root cause 1: `broker_sync_service.py` built position dicts without a `broker` field for WEBULL_OFFICIAL (line 1025-1036). So `routes.py` fell back to `pos.get('broker', 'Webull')` → `'Webull'`, which never matched `broker='WEBULL_OFFICIAL'` in the trades table.
+- Root cause 2: Even after adding `'broker': broker_name`, the sync service uses label `'WEBULL_OFFICIAL_LIVE'` while DB stores `'WEBULL_OFFICIAL'` — the recovery query `LOWER(t.broker) = LOWER(pos_broker)` never matched.
+- Fix 1: Added `'broker': broker_name` to Webull Official position dicts in `broker_sync_service.py:1036`.
+- Fix 2: In `routes.py:8356`, normalize `pos_broker` by stripping `_LIVE`/`_PAPER` suffix before the recovery query, so `'WEBULL_OFFICIAL_LIVE'` → `'WEBULL_OFFICIAL'` and matches DB trades.
+
+---
+
+## Session: June 17, 2026 — Conditional orders trigger fix + PHOENIX cache_key + XSS + "Failed to fetch"
+
+### Bugs Fixed
+
+**BUG: Conditional order not triggering on fast-moving stocks (e.g. AZTR)**
+- Root cause: `_price_reset_needed` defaults to `True` for all new orders. The breakout-reset guard has a 2-second grace window — if the first price update arrives after 2s and price is already past trigger, the guard blocks forever waiting for pullback. Fast stocks like AZTR move past trigger before monitoring startup completes.
+- Fix: Increased grace window from 2s to 30s in `src/services/conditional_orders/base.py:2458`.
+
+**BUG: "Error loading conditional orders: Failed to fetch" shown while switching tabs**
+- Root cause: Three conditions combine: (1) `_tabHasData['conditional']` stays `false` after aborted loads, so `_firstLoad` is always `true`; (2) some browsers throw `TypeError: Failed to fetch` for aborted fetch in edge cases rather than `AbortError`; (3) the error fires asynchronously after the tab was already switched away.
+- Fix: Added two additional guards in the catch block in `gui_app/templates/index.html`: check `_tabFetchController?.signal?.aborted` for browser-inconsistent abort errors, and check `currentTab !== 'conditional'` to suppress errors that fire after navigating away.
+
+**BUG: PHOENIX TGT/SL cache_key always uses `_stock` suffix — option PT/SL updates silently dropped**
+- Root cause: `cache_key = f"{_broker_upper}_{t_sym}_stock"` hardcoded in both PHOENIX SL (line 15536) and PHOENIX TGT (line 15593). Option positions have keys like `SCHWAB_AAPL_150.0_2025-06-20_C`. `self.risk_monitor.cache.get(cache_key)` always returned None for options.
+- Fix: Both SQL queries now also SELECT `asset_type, strike, expiry, call_put`. Cache key built conditionally: `{broker}_{symbol}_{strike}_{expiry}_{call_put}` for options, `{broker}_{symbol}_stock` for equities.
+
+**BUG: XSS via raw `evt.reason` / `evt.details` into innerHTML in trades.html**
+- Root cause: `reasonStr` and `detailsStr` injected directly into modal innerHTML without HTML escaping. A malicious or malformed signal reason string containing `<script>` would execute.
+- Fix: Added `_esc()` function (full HTML escaping: `&`, `<`, `>`, `"`, `'`) applied to `reasonStr` and `detailsStr` before template interpolation. Removed dead `escapedDetails` variable.
+
+---
+
 ## Session: June 15, 2026 — Code review #3: 3 bugs fixed across 2 files
 
 ### Code Review Findings (7 angles, Phase 2 verification)

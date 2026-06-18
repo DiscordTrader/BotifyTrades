@@ -65,7 +65,10 @@ class OrdersAPI:
         time_in_force: str = "DAY",
         client_order_id: str = None,
     ) -> PlaceOrderResult:
+        quantity = int(quantity)
         coid = client_order_id or self._gen_client_order_id()
+        _close_intents = {"SELL_TO_CLOSE", "BUY_TO_CLOSE"}
+        position_effect = "CLOSE" if position_intent in _close_intents else "OPEN"
         order = {
             "client_order_id": coid,
             "combo_type": "NORMAL",
@@ -78,6 +81,7 @@ class OrdersAPI:
             "order_type": order_type,
             "time_in_force": time_in_force,
             "quantity": str(quantity),
+            "position_intent": position_intent or ("SELL_TO_CLOSE" if side == "SELL" else "BUY_TO_OPEN"),
             "legs": [{
                 "side": side,
                 "quantity": str(quantity),
@@ -87,6 +91,7 @@ class OrdersAPI:
                 "strike_price": str(strike_price),
                 "option_expire_date": expiry_date,
                 "option_type": option_type,
+                "position_effect": position_effect,
             }],
         }
         if limit_price is not None:
@@ -125,7 +130,7 @@ class OrdersAPI:
             "market": "US",
             "side": side,
             "order_type": order_type,
-            "time_in_force": "DAY",
+            "time_in_force": "GTC" if extended_hours else "DAY",
             "quantity": str(quantity),
             "support_trading_session": "ALL" if extended_hours else "CORE",
         }

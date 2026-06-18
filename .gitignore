@@ -48,6 +48,7 @@ token.json
 schwab_tokens.enc
 config.enc
 wizard_credentials.json
+webull_official_token.json
 
 # Runtime data - machine-specific, changes constantly
 .position_cache.json

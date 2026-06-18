@@ -3016,6 +3016,8 @@ async function loadConditionalOrders() {
 
     } catch (err) {
         if (err.name === 'AbortError') return; // tab switched — keep existing content visible
+        if (_tabFetchController?.signal?.aborted) return; // signal aborted but error type varies by browser
+        if (currentTab !== 'conditional') return; // user switched away before error fired
         console.error('[loadConditionalOrders] Error:', err);
         if (_firstLoad) {
             container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Error loading conditional orders: ${err.message}</div>`;

@@ -1,6 +1,7 @@
 import asyncio
 import time
 from collections import defaultdict
+from typing import Optional
 
 
 class RateLimiter:
@@ -32,12 +33,14 @@ class RateLimiter:
 
     def __init__(self):
         self._timestamps: dict[str, list[float]] = defaultdict(list)
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
 
     async def acquire(self, path: str):
         category = self.ENDPOINT_CATEGORY.get(path)
         if not category:
             return
+        if self._lock is None:
+            self._lock = asyncio.Lock()
 
         max_requests, window_seconds = self.LIMITS[category]
 

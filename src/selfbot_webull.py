@@ -15503,18 +15503,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     conn = db.get_connection()
                     cursor = conn.cursor()
                     if sl_symbol:
-                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, quantity 
-                                         FROM trades WHERE channel_id = ? AND UPPER(symbol) = UPPER(?) 
-                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
+                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, quantity, asset_type, strike, expiry, call_put
+                                         FROM trades WHERE channel_id = ? AND UPPER(symbol) = UPPER(?)
+                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO'
                                          ORDER BY id DESC LIMIT 1''', (channel_id_str, sl_symbol))
                     else:
-                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, quantity 
-                                         FROM trades WHERE channel_id = ? 
-                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
+                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, quantity, asset_type, strike, expiry, call_put
+                                         FROM trades WHERE channel_id = ?
+                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO'
                                          ORDER BY id DESC LIMIT 1''', (channel_id_str,))
                     trade = cursor.fetchone()
                     if trade:
-                        trade_id, t_sym, entry_price, old_sl, t_broker, t_qty = trade
+                        trade_id, t_sym, entry_price, old_sl, t_broker, t_qty, t_asset, t_strike, t_expiry, t_callput = trade
                         new_sl = None
                         if sl_type == 'breakeven' and entry_price:
                             new_sl = float(entry_price)
@@ -15533,7 +15533,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             try:
                                 if hasattr(self, 'risk_monitor') and self.risk_monitor:
                                     _broker_upper = (t_broker or '').upper()
-                                    cache_key = f"{_broker_upper}_{t_sym}_stock"
+                                    if t_asset == 'option' and t_strike and t_expiry:
+                                        _cp = (t_callput or 'C').upper()
+                                        cache_key = f"{_broker_upper}_{t_sym}_{t_strike}_{t_expiry}_{_cp}"
+                                    else:
+                                        cache_key = f"{_broker_upper}_{t_sym}_stock"
                                     _cache_entry = self.risk_monitor.cache.get(cache_key)
                                     if _cache_entry:
                                         _cache_entry.manual_sl_price = new_sl
@@ -15569,18 +15573,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     conn = db.get_connection()
                     cursor = conn.cursor()
                     if tgt_symbol:
-                        cursor.execute('''SELECT id, symbol, profit_target_price, broker 
-                                         FROM trades WHERE channel_id = ? AND UPPER(symbol) = UPPER(?) 
-                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
+                        cursor.execute('''SELECT id, symbol, profit_target_price, broker, asset_type, strike, expiry, call_put
+                                         FROM trades WHERE channel_id = ? AND UPPER(symbol) = UPPER(?)
+                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO'
                                          ORDER BY id DESC LIMIT 1''', (channel_id_str, tgt_symbol))
                     else:
-                        cursor.execute('''SELECT id, symbol, profit_target_price, broker 
-                                         FROM trades WHERE channel_id = ? 
-                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
+                        cursor.execute('''SELECT id, symbol, profit_target_price, broker, asset_type, strike, expiry, call_put
+                                         FROM trades WHERE channel_id = ?
+                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO'
                                          ORDER BY id DESC LIMIT 1''', (channel_id_str,))
                     trade = cursor.fetchone()
                     if trade:
-                        trade_id, t_sym, old_pt, t_broker = trade
+                        trade_id, t_sym, old_pt, t_broker, t_asset, t_strike, t_expiry, t_callput = trade
                         if tgt_price and tgt_price > 0:
                             if tgt_tier == 1 or not old_pt:
                                 cursor.execute('UPDATE trades SET profit_target_price = ? WHERE id = ?', (tgt_price, trade_id))
@@ -15589,8 +15593,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 try:
                                     if hasattr(self, 'risk_monitor') and self.risk_monitor:
                                         _broker_upper = (t_broker or '').upper()
-                                        _asset_suffix = 'stock'
-                                        cache_key = f"{_broker_upper}_{t_sym}_{_asset_suffix}"
+                                        if t_asset == 'option' and t_strike and t_expiry:
+                                            _cp = (t_callput or 'C').upper()
+                                            cache_key = f"{_broker_upper}_{t_sym}_{t_strike}_{t_expiry}_{_cp}"
+                                        else:
+                                            cache_key = f"{_broker_upper}_{t_sym}_stock"
                                         _cache_entry = self.risk_monitor.cache.get(cache_key)
                                         if _cache_entry:
                                             _cache_entry.manual_pt_targets = [tgt_price]
@@ -18664,9 +18671,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         if matched_qty <= 0:
                             is_risk_order = signal.get('_risk_management_order', False)
-                            if is_risk_order and sig_option_id:
+                            _is_webull_official = 'WEBULL' in broker_upper and 'OFFICIAL' in broker_upper
+                            if is_risk_order and _is_webull_official:
                                 matched_qty = int(signal.get('qty', 1))
-                                _original_print(f"[{broker_name}] ⚠️ RISK BYPASS: Broker API returned no positions but risk monitor confirmed position exists — proceeding with option_id={sig_option_id}, qty={matched_qty}")
+                                _original_print(f"[{broker_name}] ⚠️ RISK BYPASS: Broker API returned no positions but risk monitor confirmed position exists — proceeding with {sig_symbol} ${sig_strike}{sig_opt} {sig_expiry}, qty={matched_qty}")
                             else:
                                 _original_print(f"[{broker_name}] ⚠️ STC rejected: No matching position for {sig_symbol} ${sig_strike}{sig_opt} {sig_expiry}")
                                 return {'success': False, 'msg': f'No matching position for {sig_symbol} ${sig_strike}{sig_opt} on {broker_name}', 'broker': broker_name}

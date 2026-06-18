@@ -2415,9 +2415,13 @@ function displayOrderEventsTable(events, total) {
         const dirColor = evt.direction === 'BTO' ? '#30d158' : evt.direction === 'STC' ? '#ff453a' : '#fff';
         const priceStr = evt.price ? `$${parseFloat(evt.price).toFixed(2)}` : '-';
         const qtyStr = evt.quantity || '-';
-        const reasonStr = evt.reason || '';
-        const detailsStr = evt.details || '';
+        const _esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const reasonStr = _esc(evt.reason || '');
+        const detailsStr = _esc(evt.details || '');
         const combinedDetails = [reasonStr, detailsStr].filter(Boolean).join(' | ');
+        const shortDetails = combinedDetails.length > 55 ? combinedDetails.slice(0, 55) + '…' : combinedDetails;
+        const hasLongDetails = combinedDetails.length > 55;
+        const evtId = `evt-${evt.id || Math.random().toString(36).slice(2)}`;
 
         html += `
             <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
@@ -2430,13 +2434,41 @@ function displayOrderEventsTable(events, total) {
                 <td>${qtyStr}</td>
                 <td>${priceStr}</td>
                 <td>${getSeverityBadge(evt.severity || 'info')}</td>
-                <td style="font-size: 0.8125rem; color: var(--text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${combinedDetails}">${combinedDetails || '-'}</td>
+                <td style="font-size: 0.8125rem; color: var(--text-secondary);">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="color: var(--text-secondary);">${shortDetails || '-'}</span>
+                        ${hasLongDetails ? `<button onclick="showEventDetail('${evtId}')" style="flex-shrink:0; background:rgba(10,132,255,0.12); border:1px solid rgba(10,132,255,0.3); color:#0a84ff; border-radius:4px; padding:1px 7px; font-size:0.7rem; cursor:pointer; white-space:nowrap;" title="View full details">Full ↗</button>
+                        <div id="${evtId}" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.7); align-items:center; justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+                            <div style="background:#1c1c1e; border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:24px; max-width:560px; width:90%; max-height:80vh; overflow-y:auto; position:relative;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                    <span style="font-weight:700; font-size:0.9375rem;">Event Details — ${evt.symbol || ''} ${typeLabel}</span>
+                                    <button onclick="document.getElementById('${evtId}').style.display='none'" style="background:none; border:none; color:var(--text-secondary); font-size:1.2rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+                                </div>
+                                <div style="display:grid; grid-template-columns:100px 1fr; gap:8px 12px; font-size:0.8125rem; margin-bottom:16px;">
+                                    <span style="color:var(--text-secondary);">Time</span><span>${time}</span>
+                                    <span style="color:var(--text-secondary);">Broker</span><span>${evt.broker || '-'}</span>
+                                    <span style="color:var(--text-secondary);">Direction</span><span style="color:${dirColor}; font-weight:600;">${evt.direction || '-'}</span>
+                                    <span style="color:var(--text-secondary);">Price</span><span>${priceStr}</span>
+                                    <span style="color:var(--text-secondary);">Qty</span><span>${qtyStr}</span>
+                                    <span style="color:var(--text-secondary);">Severity</span><span>${getSeverityBadge(evt.severity || 'info')}</span>
+                                </div>
+                                ${reasonStr ? `<div style="margin-bottom:10px;"><div style="color:var(--text-secondary); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Reason</div><div style="background:rgba(255,255,255,0.05); border-radius:6px; padding:10px 12px; font-size:0.8125rem; word-break:break-word;">${reasonStr}</div></div>` : ''}
+                                ${detailsStr ? `<div><div style="color:var(--text-secondary); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Details</div><div style="background:rgba(255,255,255,0.05); border-radius:6px; padding:10px 12px; font-size:0.8125rem; word-break:break-word; font-family:monospace;">${detailsStr}</div></div>` : ''}
+                            </div>
+                        </div>` : ''}
+                    </div>
+                </td>
             </tr>
         `;
     }
 
     html += '</tbody></table>';
     container.innerHTML = html;
+}
+
+function showEventDetail(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'flex';
 }
 
 async function clearOrderEvents() {

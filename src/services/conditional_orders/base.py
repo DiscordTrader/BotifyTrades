@@ -2455,13 +2455,13 @@ class BaseConditionalOrderService(ABC):
                         else:
                             ct = created_at
                         age_seconds = (datetime.utcnow() - ct).total_seconds()
-                        if age_seconds < 2:
+                        if age_seconds < 30:
                             grace_expired = False
                             self._price_reset_needed[order_id] = False
                             self._log(
                                 f"#{order_id} breakout reset SKIPPED — order only {age_seconds:.1f}s old, "
                                 f"price {price:.4f} already past trigger {adjusted_trigger}. "
-                                f"Allowing immediate trigger (multi-broker grace)."
+                                f"Allowing immediate trigger (startup grace)."
                             )
                     except Exception:
                         pass

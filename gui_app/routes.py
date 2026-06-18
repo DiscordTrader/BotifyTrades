@@ -8354,7 +8354,16 @@ def register_routes(app):
                     stable_id = 'live_' + hashlib.md5(pos_key.encode()).hexdigest()[:12]
                     
                     pos_broker = pos.get('broker', 'Webull')
-                    
+                    # DB query needs the base broker name (e.g. 'WEBULL_OFFICIAL') while
+                    # the card needs the full label (e.g. 'WEBULL_OFFICIAL_LIVE') so the
+                    # risk engine position key matches via computePositionKey in the UI.
+                    _pos_broker_db = pos_broker
+                    _pb = pos_broker.upper()
+                    for _suffix in ('_LIVE', '_PAPER'):
+                        if _pb.endswith(_suffix):
+                            _pos_broker_db = pos_broker[:len(pos_broker) - len(_suffix)]
+                            break
+
                     recovered_channel = None
                     recovered_channel_info = None
                     try:
@@ -8373,13 +8382,13 @@ def register_routes(app):
                                 AND t.status IN ('OPEN', 'PENDING', 'PARTIAL')
                                 AND COALESCE(LOWER(TRIM(t.source)), '') IN ('discord', 'signal', 'sync_routing')
                                 ORDER BY t.id DESC LIMIT 1
-                            ''', (pos['symbol'], pos_broker))
+                            ''', (pos['symbol'], _pos_broker_db))
                         else:
                             cur_ch.execute('''
-                                SELECT t.channel_id, c.name as channel_name, c.profit_target_1_pct, c.profit_target_2_pct, 
+                                SELECT t.channel_id, c.name as channel_name, c.profit_target_1_pct, c.profit_target_2_pct,
                                        c.profit_target_3_pct, c.stop_loss_pct
                                 FROM trades t
-                                LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
+                                LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                                     OR t.channel_id = CAST(c.id AS TEXT)
                                     OR t.channel_id = c.telegram_chat_id)
                                 WHERE t.symbol = ? AND t.asset_type = 'stock' AND LOWER(t.broker) = LOWER(?)
@@ -8387,7 +8396,7 @@ def register_routes(app):
                                 AND t.status IN ('OPEN', 'PENDING', 'PARTIAL')
                                 AND COALESCE(LOWER(TRIM(t.source)), '') IN ('discord', 'signal', 'sync_routing')
                                 ORDER BY t.id DESC LIMIT 1
-                            ''', (pos['symbol'], pos_broker))
+                            ''', (pos['symbol'], _pos_broker_db))
                         recovered_channel = cur_ch.fetchone()
                         if recovered_channel and recovered_channel[1]:
                             recovered_channel_info = {

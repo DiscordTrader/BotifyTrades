@@ -261,7 +261,9 @@ class WebullOfficialBroker:
                     "current_price": p.last_price,
                     "unrealized_pl": p.unrealized_pnl,
                     "asset": "option" if p.instrument_type == "OPTION" else "stock",
+                    "broker": self.name,
                     "position_id": p.position_id,
+                    "option_id": p.position_id,
                     "option_type": p.option_type,
                     "strike_price": p.strike_price,
                     "expiry_date": p.expiry_date,
@@ -277,6 +279,23 @@ class WebullOfficialBroker:
 
     async def get_positions_detailed(self) -> list:
         return await self.get_positions()
+
+    @staticmethod
+    def _needs_extended_hours() -> bool:
+        """Return True when current time is outside regular US market hours (9:30–16:00 ET).
+        Webull Official rejects DAY/CORE orders after hours with 417 — must use ALL session."""
+        try:
+            from datetime import datetime
+            import pytz
+            et = pytz.timezone('US/Eastern')
+            now = datetime.now(et)
+            if now.weekday() >= 5:
+                return True
+            open_t = now.replace(hour=9, minute=30, second=0, microsecond=0)
+            close_t = now.replace(hour=16, minute=0, second=0, microsecond=0)
+            return not (open_t <= now <= close_t)
+        except Exception:
+            return False
 
     async def place_stock_order(self, symbol, quantity, action, price=None,
                                 order_type=None, stop_price=None, duration="DAY",
@@ -320,6 +339,33 @@ class WebullOfficialBroker:
             except Exception as _fe:
                 print(f"[{self.name}] ⚠️ FUNDS: Could not verify buying power: {_fe}", flush=True)
 
+        # Webull requires price precision: 2dp for stocks >= $1, 4dp for < $1
+        if price is not None:
+            price = round(price, 2) if price >= 1.0 else round(price, 4)
+        if stop_price is not None:
+            stop_price = round(stop_price, 2) if stop_price >= 1.0 else round(stop_price, 4)
+
+        # Auto-enable extended hours when outside regular session (same behaviour as legacy Webull)
+        if not extended_hours and self._needs_extended_hours():
+            extended_hours = True
+            # Webull rejects DAY TIF outside core hours — upgrade to GTC
+            if tif == "DAY":
+                tif = "GTC"
+            print(f"[{self.name}] ⏰ After-hours detected — enabling extended hours (support_trading_session=ALL, TIF={tif})", flush=True)
+            # Webull rejects MARKET orders outside regular hours — convert to LIMIT using last known price
+            if otype == "MARKET" and price is None:
+                _q = None
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    _q = get_webull_data_hub().get_quote(symbol)
+                except Exception:
+                    pass
+                if _q and (_q.bid or _q.last):
+                    price = _q.ask if side == "BUY" else _q.bid or _q.last
+                    price = round(price, 2) if price >= 1.0 else round(price, 4)
+                    otype = "LIMIT"
+                    print(f"[{self.name}] ⏰ After-hours MARKET→LIMIT conversion: ${price}", flush=True)
+
         try:
             result = await self._orders.place_stock_order(
                 account_id=self.account_id,
@@ -334,7 +380,7 @@ class WebullOfficialBroker:
             )
             return OrderResult(
                 success=True,
-                order_id=result.order_id or result.client_order_id,
+                order_id=result.client_order_id or result.order_id,
                 message=f"Order placed: {side} {quantity} {symbol}",
                 price=price,
                 quantity=quantity,
@@ -387,6 +433,23 @@ class WebullOfficialBroker:
         effective_strike = strike_price if strike_price is not None else strike
         effective_expiry = expiry_date if expiry_date is not None else expiry
         effective_limit = limit_price if limit_price is not None else price
+
+        # Normalize expiry to YYYY-MM-DD — positions from legacy Webull hub may carry MM/DD or MM/DD/YY
+        if effective_expiry:
+            _exp = str(effective_expiry).strip()
+            if '/' in _exp and '-' not in _exp:
+                from datetime import date as _date
+                _parts = _exp.split('/')
+                if len(_parts) == 2:
+                    _m, _d = int(_parts[0]), int(_parts[1])
+                    _yr = _date.today().year
+                    # Roll to next year if the date has already passed
+                    if (_m, _d) < (_date.today().month, _date.today().day):
+                        _yr += 1
+                    effective_expiry = f"{_yr}-{_m:02d}-{_d:02d}"
+                elif len(_parts) == 3:
+                    _m, _d, _y = int(_parts[0]), int(_parts[1]), int(_parts[2])
+                    effective_expiry = f"{2000 + _y if _y < 100 else _y}-{_m:02d}-{_d:02d}"
 
         # Webull Official API does not support MARKET orders for options.
         # Simulate market order by fetching live bid/ask: BTO uses ask, STC uses bid.
@@ -452,8 +515,8 @@ class WebullOfficialBroker:
             except Exception as _fe:
                 print(f"[{self.name}] ⚠️ FUNDS: Could not verify settled cash: {_fe}", flush=True)
 
-        # Sell-side options only support DAY time-in-force per Webull Official API
-        tif = "DAY" if side == "SELL" else "DAY"
+        # Sell-side STC/STO: DAY only (Webull Official restriction). Buy-side (BTO/BTC): allow GTC for PT brackets.
+        tif = "DAY" if side == "SELL" else kwargs.get('time_in_force', 'GTC')
 
         try:
             result = await self._orders.place_option_order(
@@ -471,7 +534,7 @@ class WebullOfficialBroker:
             )
             return OrderResult(
                 success=True,
-                order_id=result.order_id or result.client_order_id,
+                order_id=result.client_order_id or result.order_id,
                 message=f"Option order placed: {action} {quantity}x {symbol}",
                 price=effective_limit,
                 quantity=quantity,
@@ -502,6 +565,10 @@ class WebullOfficialBroker:
                                   extended_hours=False) -> OrderResult:
         if not self.connected:
             return OrderResult(success=False, message="Not connected")
+
+        if not extended_hours and self._needs_extended_hours():
+            extended_hours = True
+            print(f"[{self.name}] ⏰ After-hours detected — enabling extended hours for bracket order", flush=True)
 
         try:
             result = await self._orders.place_bracket_order(
@@ -667,6 +734,9 @@ class WebullOfficialBroker:
                     quote['last'] = float(tick_data['close'])
                 elif tick_data.get('dealPrice') is not None:
                     quote['last'] = float(tick_data['dealPrice'])
+                # When only snapshot close is present (no bid/ask), use last as bid fallback so SL exits have a meaningful price
+                if not quote.get('bid') and quote.get('last'):
+                    quote['bid'] = quote['last']
                 if tick_data.get('volume') is not None:
                     quote['volume'] = int(tick_data['volume'])
                 if tick_data.get('high') is not None:

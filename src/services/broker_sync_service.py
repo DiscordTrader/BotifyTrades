@@ -1032,7 +1032,8 @@ class BrokerSyncService:
                                 'asset_type': asset,
                                 'strike': strike,
                                 'expiry': expiry,
-                                'call_put': call_put
+                                'call_put': call_put,
+                                'broker': broker_name,
                             })
                     except Exception as e:
                         print(f"[SYNC] Webull Official fetch error: {e}")

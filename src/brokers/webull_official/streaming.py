@@ -54,7 +54,7 @@ class WebullMarketStream:
 
     async def subscribe(self, symbols: list[str], sub_types: list[str] = None, category: str = "US_STOCK"):
         if sub_types is None:
-            sub_types = ["SNAPSHOT"]
+            sub_types = ["SNAPSHOT", "QUOTE"] if category == "US_OPTION" else ["SNAPSHOT"]
 
         batch_size = 100
         for i in range(0, len(symbols), batch_size):
@@ -99,6 +99,7 @@ class WebullMarketStream:
             log.info("[WEBULL-OFF] MQTT connected")
             client.subscribe("snapshot")
             client.subscribe("quote")
+            client.subscribe("tick")
             client.subscribe("notice")
             # Re-subscribe all symbols after reconnect (session-side subscriptions are lost)
             if self._subscribed_symbols and self._main_loop and self._main_loop.is_running():
@@ -216,7 +217,9 @@ class TradeEventPoller:
 
     async def _poll_loop(self):
         from .orders import OrdersAPI
+        from datetime import datetime
         orders_api = OrdersAPI(self._client)
+        _cycle = 0
 
         while self._running:
             try:
@@ -246,6 +249,38 @@ class TradeEventPoller:
                 break
             except Exception as e:
                 log.error(f"[WEBULL-OFF] Poll error: {e}")
+
+            # Every 5 cycles, scan order history to catch fills that transitioned out of open orders between polls
+            _cycle += 1
+            if _cycle % 5 == 0:
+                try:
+                    today = datetime.utcnow().strftime('%Y-%m-%d')
+                    hist = await orders_api.get_order_history(
+                        self._account_id,
+                        start_date=today,
+                        end_date=today,
+                        page_size=50,
+                    )
+                    for order in hist:
+                        prev = self._known_fills.get(order.client_order_id, 0)
+                        if order.status == "FILLED" and order.filled_quantity > prev:
+                            self._emit("fill", {
+                                "client_order_id": order.client_order_id,
+                                "order_id": order.order_id,
+                                "symbol": order.symbol,
+                                "side": order.side,
+                                "filled_qty": order.filled_quantity,
+                                "filled_price": order.filled_price,
+                                "status": order.status,
+                                "new_fills": order.filled_quantity - prev,
+                                "from_history": True,
+                            })
+                            self._known_fills[order.client_order_id] = order.filled_quantity
+                            self._emit("terminal", {"client_order_id": order.client_order_id, "status": "FILLED", "symbol": order.symbol})
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    log.warning(f"[WEBULL-OFF] Order history catchup error: {e}")
 
             try:
                 await asyncio.sleep(self._interval)

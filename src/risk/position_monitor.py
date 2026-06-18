@@ -3041,7 +3041,7 @@ class RiskManager:
                             'quantity': position_qty, 'avg_cost': float(pos.get('avg_cost', 0)),
                             'current_price': float(pos.get('current_price', 0)),
                             'unrealized_pl': float(pos.get('unrealized_pl', 0)),
-                            'option_id': pos.get('option_id', 0),
+                            'option_id': pos.get('option_id') or None,
                             'strike': float(pos.get('strike', 0)),
                             'expiry': pos.get('expiry', ''),
                             'direction': pos.get('direction', ''),
@@ -3272,7 +3272,7 @@ class RiskManager:
                                 'quantity': position_qty, 'avg_cost': float(pos.get('avg_cost', 0)),
                                 'current_price': float(pos.get('current_price', 0)),
                                 'unrealized_pl': float(pos.get('unrealized_pl', 0)),
-                                'option_id': pos.get('option_id', 0),
+                                'option_id': pos.get('option_id') or None,
                                 'strike': float(pos.get('strike', 0)),
                                 'expiry': pos.get('expiry', ''),
                                 'direction': pos.get('direction', ''),
@@ -4031,6 +4031,8 @@ class RiskManager:
         try:
             raw = await self.webull_official_broker.get_positions(max_age_seconds=15) or []
             broker_label = 'WEBULL_OFFICIAL_LIVE' if not getattr(self.webull_official_broker, 'paper_trade', True) else 'WEBULL_OFFICIAL_PAPER'
+            if not hasattr(self, '_webull_official_subscribed_symbols'):
+                self._webull_official_subscribed_symbols = set()
             for pos in raw:
                 asset = pos.get('asset', 'stock')
                 call_put = None
@@ -4049,6 +4051,15 @@ class RiskManager:
                             raw_symbol = f"{pos.get('symbol', '').upper()}{exp}{call_put}{strike_int:08d}"
                         except Exception:
                             pass
+                    # Subscribe new option positions to MQTT for live SL monitoring
+                    sub_key = raw_symbol or f"{pos.get('symbol','')}_{strike}_{expiry}_{call_put}"
+                    if sub_key and sub_key not in self._webull_official_subscribed_symbols:
+                        try:
+                            self.webull_official_broker.subscribe_symbol(raw_symbol or pos.get('symbol', ''), is_option=True)
+                            self._webull_official_subscribed_symbols.add(sub_key)
+                            print(f"[RISK] 📡 WEBULL_OFFICIAL: subscribed {sub_key} to MQTT stream")
+                        except Exception as _se:
+                            print(f"[RISK] ⚠️ WEBULL_OFFICIAL MQTT subscribe failed for {sub_key}: {_se}")
                 positions.append(PositionSnapshot(
                     symbol=pos.get('symbol', ''),
                     quantity=abs(float(pos.get('quantity', 0))),
@@ -7289,14 +7300,34 @@ class RiskManager:
                     print(f"[RISK PT REPLACE] ⚠️ Webull Official cancel PT #{_old_pt_id} failed — aborting replace")
                     return False
 
-                _is_opt = getattr(cache, 'asset', '') == 'option'
+                # Parse option metadata from position_key since PositionCacheEntry lacks strike/expiry/direction
+                # Option key format: {broker}_{symbol}_{strike}_{expiry_YYYY-MM-DD}_{direction}
+                _is_opt = not position_key.endswith('_stock')
+                _opt_strike = None
+                _opt_expiry = None
+                _opt_dir = 'C'
+                if _is_opt:
+                    try:
+                        _pk_parts = position_key.rsplit('_', 3)
+                        if len(_pk_parts) == 4:
+                            _opt_dir = _pk_parts[3].upper()
+                            _opt_dir = 'C' if _opt_dir in ('C', 'CALL') else 'P'
+                            _opt_expiry = _pk_parts[2]
+                            _opt_strike = float(_pk_parts[1])
+                            # Extract real symbol from broker+symbol prefix (e.g. 'WEBULL_OFFICIAL_LIVE_SPY' → 'SPY')
+                            _sym_from_key = _pk_parts[0].rsplit('_', 1)[-1]
+                            if not cache.raw_symbol or str(cache.raw_symbol).isdigit():
+                                symbol = _sym_from_key
+                    except (ValueError, IndexError):
+                        pass
+
                 _new_pt_r = round(new_pt_price, 4 if new_pt_price < 1.0 else 2)
                 if _is_opt:
                     pt_result = await self.webull_official_broker.place_option_order(
                         symbol=symbol,
-                        strike=cache.channel_settings and getattr(cache.channel_settings, 'strike', 0) or 0,
-                        expiry='',
-                        option_type='C',
+                        strike=_opt_strike or 0,
+                        expiry=_opt_expiry or '',
+                        option_type=_opt_dir,
                         action='STC',
                         quantity=cache.original_qty or 1,
                         price=_new_pt_r,
@@ -8031,11 +8062,14 @@ class RiskManager:
                     'quantity': stc_signal['qty'],
                     'price': order_price,
                 }
-                if broker_upper in ('WEBULL', 'WEBULL_PAPER', 'SCHWAB'):
-                    option_kwargs['option_id'] = stc_signal.get('option_id')
+                if broker_upper in ('WEBULL', 'WEBULL_PAPER', 'SCHWAB', 'WEBULL_OFFICIAL'):
                     option_kwargs['_risk_management_order'] = True
+                if broker_upper in ('WEBULL', 'WEBULL_PAPER', 'SCHWAB'):
+                    # Old Webull/Schwab need cached price as fallback when market order; WEBULL_OFFICIAL fetches live bid/ask itself
                     if order_price is None:
                         option_kwargs['price'] = stc_signal['price']
+                if broker_upper in ('WEBULL', 'WEBULL_PAPER'):
+                    option_kwargs['option_id'] = stc_signal.get('option_id')
                 result = await broker_instance.place_option_order(**option_kwargs)
             else:
                 _stk_exit_kwargs = {
@@ -8314,7 +8348,7 @@ class RiskManager:
             stc_signal['strike'] = position.strike or 0
             stc_signal['opt_type'] = opt_type
             stc_signal['expiry'] = expiry_iso
-            stc_signal['option_id'] = position.option_id or 0
+            stc_signal['option_id'] = position.option_id or None
         
         return stc_signal
     
