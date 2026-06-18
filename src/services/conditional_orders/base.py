@@ -1740,7 +1740,7 @@ class BaseConditionalOrderService(ABC):
             adjusted_price = trigger_price
             print(f"[CONDITIONAL] No offset configured, using signal price: ${trigger_price}", flush=True)
         
-        timeout_minutes = channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes')
+        timeout_minutes = channel_settings.get('conditional_order_timeout_minutes')
         if timeout_minutes:
             # Use UTC for consistent timezone handling
             expires_at = (datetime.utcnow() + timedelta(minutes=timeout_minutes)).strftime('%Y-%m-%d %H:%M:%S')
@@ -2367,7 +2367,7 @@ class BaseConditionalOrderService(ABC):
             if created_at and channel_id:
                 try:
                     ch_settings = get_channel_conditional_settings(str(channel_id))
-                    tm = ch_settings.get('order_timeout_minutes') or ch_settings.get('conditional_order_timeout_minutes')
+                    tm = ch_settings.get('conditional_order_timeout_minutes')
                     if tm:
                         created_dt = datetime.strptime(created_at.replace('T', ' ').split('.')[0], '%Y-%m-%d %H:%M:%S')
                         computed_expires = (created_dt + timedelta(minutes=tm)).strftime('%Y-%m-%d %H:%M:%S')
