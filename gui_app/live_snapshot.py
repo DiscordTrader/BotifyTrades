@@ -1094,6 +1094,7 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
                 is_pending = trade_status in ('PENDING', 'PARTIAL')
 
                 is_recent = False
+                age_seconds = 0
                 try:
                     executed_at = t.get('executed_at', '')
                     if executed_at:
@@ -1114,6 +1115,12 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
                             is_recent = age_seconds < 300
                 except Exception:
                     pass
+
+                # Don't show PENDING orders that the broker has been syncing for > 10 minutes
+                # with no matching live position — the sync service will close them shortly
+                if is_pending and age_seconds > 600:
+                    _log(f"[ENRICH] Hiding stale PENDING trade #{tid} ({t.get('symbol')}) — {age_seconds:.0f}s old, broker synced with no match")
+                    continue
 
                 if is_pending or is_recent:
                     _log(f"[ENRICH] Keeping DB trade #{tid} ({t.get('symbol')}) - {'pending' if is_pending else 'recent'} order on {trade_broker}")

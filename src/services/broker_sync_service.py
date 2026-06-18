@@ -1762,7 +1762,7 @@ class BrokerSyncService:
                         continue
                     
                     trade_created_at = trade.get('created_at') or trade.get('executed_at')
-                    grace_period_seconds = 120
+                    grace_period_seconds = 30
                     
                     if trade_created_at:
                         try:
@@ -1814,9 +1814,15 @@ class BrokerSyncService:
                                     live_status = status_result.get('status', 'unknown')
                                     schwab_desc = status_result.get('status_description', '')
                                     print(f"[SYNC] 🔍 Schwab re-verify order #{order_id_str}: status={live_status}" + (f" desc={schwab_desc}" if schwab_desc else ""))
-                                    if live_status in ('pending', 'working', 'partial'):
+                                    if live_status in ('pending', 'working', 'partial', 'pending_activation'):
                                         print(f"[SYNC] ✓ Order #{order_id_str} still {live_status} on Schwab — skipping cancellation (stale pending list)")
                                         continue
+                                    elif live_status in ('cancelled', 'rejected', 'expired', 'not_found'):
+                                        print(f"[SYNC] ✓ Order #{order_id_str} confirmed {live_status} on Schwab — proceeding to close")
+                                        if schwab_desc:
+                                            cancel_reason = f"order_{live_status}: {schwab_desc}"
+                                        else:
+                                            cancel_reason = f"order_{live_status}"
                                     elif live_status == 'filled':
                                         fill_price = status_result.get('average_price', 0)
                                         fill_qty = status_result.get('filled_quantity', trade.get('quantity', 1))
@@ -1866,8 +1872,15 @@ class BrokerSyncService:
                                             pass
                                         continue
                                 else:
-                                    print(f"[SYNC] ⚠️ Schwab re-verify returned None for order #{order_id_str} — deferring cancellation")
-                                    continue
+                                    if not hasattr(self, '_schwab_reverify_fails'):
+                                        self._schwab_reverify_fails = {}
+                                    fails = self._schwab_reverify_fails.get(order_id_str, 0) + 1
+                                    self._schwab_reverify_fails[order_id_str] = fails
+                                    if fails < 3:
+                                        print(f"[SYNC] ⚠️ Schwab re-verify returned None for order #{order_id_str} (attempt {fails}/3) — deferring")
+                                        continue
+                                    print(f"[SYNC] ✓ Schwab re-verify None x3 for order #{order_id_str} — order gone, proceeding to close")
+                                    self._schwab_reverify_fails.pop(order_id_str, None)
                             except (asyncio.TimeoutError, asyncio.CancelledError):
                                 print(f"[SYNC] ⚠️ Schwab re-verify timed out for order #{order_id_str} — deferring cancellation")
                                 continue

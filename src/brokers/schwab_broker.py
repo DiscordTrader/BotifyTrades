@@ -3697,6 +3697,8 @@ class SchwabBroker(BrokerInterface):
 
                 return result
 
+            elif response.status_code == 404:
+                return {'status': 'not_found'}
             else:
                 print(f"[{self.name}] Error getting order status: {response.status_code}")
                 return None
