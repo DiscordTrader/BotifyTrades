@@ -16960,6 +16960,16 @@ def register_routes(app):
                             except Exception:
                                 pass
 
+                            # Start MQTT streaming so real-time quotes flow to risk engine
+                            try:
+                                import asyncio as _asyncio
+                                _loop = getattr(_bot_instance, 'loop', None) or _asyncio.get_event_loop()
+                                if _loop and _loop.is_running():
+                                    _asyncio.run_coroutine_threadsafe(broker.start_streaming(), _loop)
+                                    print("[API] Webull Official MQTT streaming started via hot-connect", flush=True)
+                            except Exception as _stream_err:
+                                print(f"[API] Webull Official streaming warning: {_stream_err}", flush=True)
+
                         return jsonify({
                             'success': True,
                             'message': f'Webull Official API connected ({env})',

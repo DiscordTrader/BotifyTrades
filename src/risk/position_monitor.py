@@ -4033,12 +4033,18 @@ class RiskManager:
             broker_label = 'WEBULL_OFFICIAL_LIVE' if not getattr(self.webull_official_broker, 'paper_trade', True) else 'WEBULL_OFFICIAL_PAPER'
             if not hasattr(self, '_webull_official_subscribed_symbols'):
                 self._webull_official_subscribed_symbols = set()
+            try:
+                from src.services.unified_price_hub import get_unified_price_hub as _get_uph
+                _uph = _get_uph()
+            except Exception:
+                _uph = None
             for pos in raw:
                 asset = pos.get('asset', 'stock')
                 call_put = None
                 strike = None
                 expiry = None
                 raw_symbol = None
+                sym = pos.get('symbol', '')
                 if asset == 'option':
                     ot = (pos.get('option_type') or '').upper()
                     call_put = 'C' if 'CALL' in ot else ('P' if 'PUT' in ot else None)
@@ -4048,23 +4054,45 @@ class RiskManager:
                         try:
                             exp = expiry.replace('-', '')[2:]
                             strike_int = int(round(strike * 1000))
-                            raw_symbol = f"{pos.get('symbol', '').upper()}{exp}{call_put}{strike_int:08d}"
+                            raw_symbol = f"{sym.upper()}{exp}{call_put}{strike_int:08d}"
                         except Exception:
                             pass
-                    # Subscribe new option positions to MQTT for live SL monitoring
-                    sub_key = raw_symbol or f"{pos.get('symbol','')}_{strike}_{expiry}_{call_put}"
+                    sub_key = raw_symbol or f"{sym}_{strike}_{expiry}_{call_put}"
                     if sub_key and sub_key not in self._webull_official_subscribed_symbols:
                         try:
-                            self.webull_official_broker.subscribe_symbol(raw_symbol or pos.get('symbol', ''), is_option=True)
+                            self.webull_official_broker.subscribe_symbol(raw_symbol or sym, is_option=True)
                             self._webull_official_subscribed_symbols.add(sub_key)
                             print(f"[RISK] 📡 WEBULL_OFFICIAL: subscribed {sub_key} to MQTT stream")
                         except Exception as _se:
                             print(f"[RISK] ⚠️ WEBULL_OFFICIAL MQTT subscribe failed for {sub_key}: {_se}")
+                else:
+                    # Subscribe stock positions to MQTT so UPH gets real-time prices
+                    if sym and sym not in self._webull_official_subscribed_symbols:
+                        try:
+                            self.webull_official_broker.subscribe_symbol(sym, is_option=False)
+                            self._webull_official_subscribed_symbols.add(sym)
+                            print(f"[RISK] 📡 WEBULL_OFFICIAL: subscribed {sym} stock to MQTT stream")
+                        except Exception as _se:
+                            print(f"[RISK] ⚠️ WEBULL_OFFICIAL MQTT subscribe failed for {sym}: {_se}")
+
+                # Use UPH streaming price when fresh (≤3s); fall back to REST snapshot
+                rest_price = float(pos.get('current_price', 0) or 0)
+                lookup_sym = raw_symbol or sym
+                uph_price = None
+                if _uph and lookup_sym:
+                    try:
+                        _q = _uph.get_quote(lookup_sym)
+                        if _q and _q.last > 0 and _q.price_age_seconds <= 3.0:
+                            uph_price = _q.last
+                    except Exception:
+                        pass
+                current_price = uph_price if (uph_price and uph_price > 0) else rest_price
+
                 positions.append(PositionSnapshot(
-                    symbol=pos.get('symbol', ''),
+                    symbol=sym,
                     quantity=abs(float(pos.get('quantity', 0))),
                     avg_cost=float(pos.get('avg_cost', 0) or 0),
-                    current_price=float(pos.get('current_price', 0) or 0),
+                    current_price=current_price,
                     asset=asset,
                     broker=broker_label,
                     strike=strike,
