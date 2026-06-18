@@ -16927,6 +16927,32 @@ def register_routes(app):
                         if _bot_instance is not None:
                             _bot_instance.webull_official_broker = broker
                             try:
+                                if hasattr(_bot_instance, '_broker_manager') and _bot_instance._broker_manager:
+                                    _bot_instance._broker_manager.webull_official_broker = broker
+                                if hasattr(_bot_instance, 'sync_service') and getattr(_bot_instance.sync_service, 'broker_manager', None):
+                                    _bot_instance.sync_service.broker_manager.webull_official_broker = broker
+                                if hasattr(_bot_instance, 'risk_manager') and _bot_instance.risk_manager:
+                                    _bot_instance.risk_manager.webull_official_broker = broker
+                            except Exception as wire_err:
+                                print(f"[API] Webull Official service wiring warning: {wire_err}")
+
+                            try:
+                                from src.services.broker_health_monitor import get_health_monitor
+                                hm = get_health_monitor()
+                                mode_key = 'WEBULL_OFFICIAL_PAPER' if getattr(broker, 'paper_trade', False) else 'WEBULL_OFFICIAL_LIVE'
+                                for key in ('WEBULL_OFFICIAL', mode_key):
+                                    hm.update_broker_status(key, True, account_info=account_info)
+                            except Exception as health_err:
+                                print(f"[API] Webull Official health cache warning: {health_err}")
+
+                            try:
+                                from src.services.conditional_orders.router import conditional_order_router
+                                for key in ('webull_official', 'webull_official_live', 'webull_official_paper'):
+                                    conditional_order_router.set_broker_instance(key, broker)
+                            except Exception as cond_err:
+                                print(f"[API] Webull Official conditional router warning: {cond_err}")
+
+                            try:
                                 from src.services.unified_price_hub import get_unified_price_hub
                                 uph = get_unified_price_hub()
                                 if uph and hasattr(uph, '_hub_status'):
