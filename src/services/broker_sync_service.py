@@ -1045,8 +1045,12 @@ class BrokerSyncService:
                         orders = await broker_instance.get_pending_orders() or []
                         for order in orders:
                             side = (order.get('action') or '').upper()
+                            # DB stores client_order_id as order_id (what we generated before sending).
+                            # order_id field from get_pending_orders() IS the client_order_id.
+                            # broker_order_id is the server-side numeric ID — not what's in the DB.
+                            # Prioritise client_order_id so pending_by_order_id keys match the DB.
                             result['pending_orders'].append({
-                                'broker_order_id': order.get('broker_order_id') or order.get('order_id'),
+                                'broker_order_id': order.get('order_id') or order.get('broker_order_id'),
                                 'symbol': order.get('symbol'),
                                 'quantity': order.get('quantity'),
                                 'limit_price': order.get('limit_price'),
@@ -1893,6 +1897,46 @@ class BrokerSyncService:
                             _broker_inst = getattr(self.broker_manager, 'webull_paper_broker', None) or getattr(self.broker_manager, 'webull_broker', None)
                         else:
                             _broker_inst = getattr(self.broker_manager, 'webull_broker', None) or getattr(self.broker_manager, 'webull_paper_broker', None)
+
+                    if _bn_upper.startswith('WEBULL_OFFICIAL') and order_id_str:
+                        _wo_broker = getattr(self.broker_manager, 'webull_official_broker', None)
+                        if _wo_broker and hasattr(_wo_broker, 'get_order_status'):
+                            try:
+                                wo_status = await asyncio.wait_for(
+                                    _wo_broker.get_order_status(order_id_str),
+                                    timeout=10.0
+                                )
+                                if wo_status:
+                                    wo_live = (wo_status.get('status') or 'unknown').upper()
+                                    print(f"[SYNC] 🔍 WEBULL_OFFICIAL re-verify order #{order_id_str}: status={wo_live}")
+                                    if wo_live in ('WORKING', 'PARTIAL', 'PENDING_NEW', 'SUBMITTING', 'SUBMITTED'):
+                                        print(f"[SYNC] ✓ Order #{order_id_str} still {wo_live} on Webull Official — skipping cancellation")
+                                        continue
+                                    elif wo_live == 'FILLED':
+                                        fill_price = float(wo_status.get('avg_fill_price') or wo_status.get('average_price') or 0)
+                                        fill_qty = int(wo_status.get('filled_quantity') or trade.get('quantity', 1))
+                                        print(f"[SYNC] ✓ WEBULL_OFFICIAL order #{order_id_str} FILLED: {fill_qty}x @ ${fill_price} — PENDING → OPEN")
+                                        self.db.update_trade(trade_id, status='OPEN',
+                                                             executed_price=fill_price if fill_price > 0 else None,
+                                                             quantity=fill_qty if fill_qty > 0 else None,
+                                                             executed_at=datetime.now().isoformat())
+                                        continue
+                                    # cancelled/rejected/not_found → fall through to close
+                                else:
+                                    if not hasattr(self, '_wo_reverify_fails'):
+                                        self._wo_reverify_fails = {}
+                                    fails = self._wo_reverify_fails.get(order_id_str, 0) + 1
+                                    self._wo_reverify_fails[order_id_str] = fails
+                                    if fails < 3:
+                                        print(f"[SYNC] ⚠️ WEBULL_OFFICIAL re-verify returned None for #{order_id_str} ({fails}/3) — deferring")
+                                        continue
+                                    self._wo_reverify_fails.pop(order_id_str, None)
+                            except (asyncio.TimeoutError, asyncio.CancelledError):
+                                print(f"[SYNC] ⚠️ WEBULL_OFFICIAL re-verify timed out for #{order_id_str} — deferring")
+                                continue
+                            except Exception as wo_rv_err:
+                                print(f"[SYNC] ⚠️ WEBULL_OFFICIAL re-verify error: {wo_rv_err} — deferring")
+                                continue
 
                     cancel_reason = 'order_cancelled_or_rejected'
                     if _bn_upper == 'SCHWAB' and schwab_desc:
