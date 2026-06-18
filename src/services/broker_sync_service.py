@@ -1364,6 +1364,10 @@ class BrokerSyncService:
             return trade_broker == 'upstox'
         elif broker_lower == 'dhanq':
             return trade_broker == 'dhanq'
+        elif broker_lower.startswith('webull_official'):
+            # Match 'webull_official', 'webull_official_live', 'webull_official_paper'
+            # DB may store any of these variants depending on how the order was routed
+            return trade_broker.startswith('webull_official')
         else:
             return trade_broker == broker_lower
 

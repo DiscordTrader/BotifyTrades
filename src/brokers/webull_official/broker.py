@@ -351,7 +351,7 @@ class WebullOfficialBroker:
             # Webull rejects DAY TIF outside core hours — upgrade to GTC
             if tif == "DAY":
                 tif = "GTC"
-            print(f"[{self.name}] ⏰ After-hours detected — GTC TIF, ALL session", flush=True)
+            print(f"[{self.name}] ⏰ After-hours detected — GTC TIF, CORE session (queues for regular open)", flush=True)
             # Extended hours requires LIMIT — convert MARKET orders
             if otype == "MARKET":
                 if price is None:
