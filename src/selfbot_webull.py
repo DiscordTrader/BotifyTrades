@@ -8158,6 +8158,13 @@ class SelfClient(discord.Client):
                             _original_print(f"[WEBULL_OFFICIAL]   Buying Power: ${account_info.get('buying_power', 0):,.2f}", flush=True)
                             from gui_app.broker_credentials_service import set_broker_status
                             set_broker_status('webull_official', True, 'connected', account_info=account_info)
+                            try:
+                                from src.services.broker_health_monitor import get_health_monitor
+                                _wo_hm_key = 'WEBULL_OFFICIAL_PAPER' if paper_mode else 'WEBULL_OFFICIAL_LIVE'
+                                get_health_monitor().update_broker_status(_wo_hm_key, True, account_info=account_info)
+                                _original_print(f"[WEBULL_OFFICIAL] ✓ Health monitor registered as {_wo_hm_key}", flush=True)
+                            except Exception as _hm_err:
+                                _original_print(f"[WEBULL_OFFICIAL] ⚠️ Health monitor registration failed: {_hm_err}", flush=True)
                         except Exception as status_err:
                             _original_print(f"[WEBULL_OFFICIAL] ⚠️ Failed to update broker status: {status_err}", flush=True)
                         try:
