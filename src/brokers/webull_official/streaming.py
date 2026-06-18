@@ -182,7 +182,7 @@ class WebullMarketStream:
 
 
 class TradeEventPoller:
-    def __init__(self, client: WebullClient, account_id: str, interval: float = 3.0):
+    def __init__(self, client: WebullClient, account_id: str, interval: float = 5.0):
         self._client = client
         self._account_id = account_id
         self._interval = interval
@@ -217,11 +217,19 @@ class TradeEventPoller:
 
     async def _poll_loop(self):
         from .orders import OrdersAPI
-        from datetime import datetime
+        from datetime import datetime, timedelta
         orders_api = OrdersAPI(self._client)
         _cycle = 0
+        _backoff = 0
 
         while self._running:
+            if _backoff > 0:
+                try:
+                    await asyncio.sleep(_backoff)
+                except asyncio.CancelledError:
+                    break
+                _backoff = 0
+
             try:
                 orders = await orders_api.get_open_orders(self._account_id)
                 for order in orders:
@@ -248,17 +256,22 @@ class TradeEventPoller:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                log.error(f"[WEBULL-OFF] Poll error: {e}")
+                if "TOO_MANY_REQUESTS" in str(e) or "429" in str(e):
+                    log.warning(f"[WEBULL-OFF] Poll rate limited — backing off 15s")
+                    _backoff = 15
+                else:
+                    log.error(f"[WEBULL-OFF] Poll error: {e}")
 
-            # Every 5 cycles, scan order history to catch fills that transitioned out of open orders between polls
+            # Every 10 cycles, scan order history to catch fills that transitioned out of open orders between polls
             _cycle += 1
-            if _cycle % 5 == 0:
+            if _cycle % 10 == 0:
                 try:
                     today = datetime.utcnow().strftime('%Y-%m-%d')
+                    tomorrow = (datetime.utcnow() + timedelta(days=1)).strftime('%Y-%m-%d')
                     hist = await orders_api.get_order_history(
                         self._account_id,
                         start_date=today,
-                        end_date=today,
+                        end_date=tomorrow,
                         page_size=50,
                     )
                     for order in hist:

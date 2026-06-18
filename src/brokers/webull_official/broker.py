@@ -638,7 +638,10 @@ class WebullOfficialBroker:
                 'raw_status': order.status,
             }
         except Exception as e:
-            log.error(f"[{self.name}] get_order_status error: {e}")
+            if "ORDER_NOT_FOUND" in str(e) or "order was not found" in str(e).lower():
+                log.debug(f"[{self.name}] get_order_status: order {client_order_id} not found")
+            else:
+                log.error(f"[{self.name}] get_order_status error: {e}")
             return None
 
     async def place_stop_order(self, symbol: str, quantity: int, stop_price: float, side: str = 'sell') -> 'OrderResult':
@@ -687,7 +690,10 @@ class WebullOfficialBroker:
                 for o in orders
             ]
         except Exception as e:
-            log.error(f"[{self.name}] get_pending_orders error: {e}")
+            if "TOO_MANY_REQUESTS" in str(e) or "429" in str(e):
+                log.warning(f"[{self.name}] get_pending_orders rate limited")
+            else:
+                log.error(f"[{self.name}] get_pending_orders error: {e}")
             return []
 
     async def get_order_history(self, start_date: str = None, end_date: str = None) -> list:
