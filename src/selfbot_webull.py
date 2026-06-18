@@ -60,7 +60,7 @@ import ssl
 # ADMIN = Full features (Channel Mappings, Debug tools, etc.) - for developer use
 # USER = Limited features - for end-user distribution
 # This line is automatically updated by scripts/release.sh
-BUILD_TYPE = 'ADMIN'  # Set by release.sh
+BUILD_TYPE = 'USER'  # Set by release.sh
 
 def is_admin_build():
     """Check if this is an admin build with full features"""
