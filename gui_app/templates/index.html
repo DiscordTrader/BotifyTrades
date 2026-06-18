@@ -303,10 +303,6 @@
     <div class="table-header">
         <h3 class="table-title">📈 Live Trading Monitor
             <span id="streaming-indicator" style="display:none; margin-left:10px; font-size:0.7rem; padding:2px 8px; border-radius:10px; background:#22c55e33; color:#22c55e; font-weight:500; vertical-align:middle;">⚡ LIVE</span>
-            <span id="live-conn-pill" class="live-conn-pill state-polling" style="margin-left:8px; vertical-align:middle;">
-                <span class="pill-dot"></span>
-                <span id="live-conn-text">POLLING</span>
-            </span>
         </h3>
         <div style="display: flex; gap: 12px; align-items: center;">
             <span id="summary-text" style="color: var(--text-secondary); font-size: 0.875rem;">Loading...</span>
@@ -675,48 +671,6 @@
     0%, 100% { opacity: 1; box-shadow: 0 0 6px currentColor; }
     50% { opacity: 0.5; box-shadow: 0 0 2px currentColor; }
 }
-/* Connection status pill */
-.live-conn-pill {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 3px 10px; border-radius: 20px; font-size: 10px;
-    font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase;
-    border: 1px solid; transition: all 0.4s ease;
-}
-.live-conn-pill.state-live { background: rgba(0,245,255,0.08); color: #00f5ff; border-color: rgba(0,245,255,0.3); }
-.live-conn-pill.state-polling { background: rgba(251,191,36,0.1); color: #fbbf24; border-color: rgba(251,191,36,0.3); }
-.live-conn-pill.state-stale { background: rgba(255,59,48,0.1); color: #ff3b30; border-color: rgba(255,59,48,0.3); }
-.live-conn-pill .pill-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-.live-conn-pill.state-live .pill-dot { background: #00f5ff; box-shadow: 0 0 5px #00f5ff; animation: reDotPulse 2s ease-in-out infinite; }
-.live-conn-pill.state-polling .pill-dot { background: #fbbf24; }
-.live-conn-pill.state-stale .pill-dot { background: #ff3b30; }
-
-/* Per-card source badge */
-.price-source-badge {
-    display: inline-block; font-size: 8px; font-weight: 700;
-    padding: 1px 4px; border-radius: 3px; letter-spacing: 0.5px;
-    vertical-align: middle; margin-left: 4px;
-}
-.price-source-badge.src-stream { background: rgba(0,245,255,0.15); color: #00f5ff; }
-.price-source-badge.src-rest { background: rgba(100,100,100,0.2); color: #666; }
-.price-source-badge.src-cross { background: rgba(175,130,255,0.15); color: #af82ff; }
-
-/* Price age indicator */
-.price-age {
-    font-size: 9px; color: #555; margin-left: 3px; transition: color 0.3s;
-}
-.price-age.age-warn { color: #fbbf24; }
-.price-age.age-stale { color: #ff3b30; }
-
-/* Price flash animation */
-@keyframes flashGreen { 0%,100% { background: transparent; } 30% { background: rgba(34,197,94,0.18); } }
-@keyframes flashRed   { 0%,100% { background: transparent; } 30% { background: rgba(239,68,68,0.18); } }
-.price-flash-up   { animation: flashGreen 0.6s ease-out; }
-.price-flash-down { animation: flashRed   0.6s ease-out; }
-
-/* Card dim when stream stale */
-.position-card.stream-stale { opacity: 0.62; transition: opacity 0.5s; }
-.stream-stale-icon { font-size: 9px; color: #555; margin-left: 3px; }
-
 @keyframes reClosePulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
@@ -1293,14 +1247,6 @@ const _tabHasData = { live: false, pending: false, filled: false, 'bot-trades': 
 
 let dashboardRiskPollTimer = null;
 
-let _liveSSESource = null;
-let _liveSSEConnected = false;
-let _liveSSEFallbackTimer = null;
-let _tickPollInFlight = false;
-let _lastSuccessfulFetch = Date.now();
-let _liveConnPill = null;
-let _prevPositionIds = new Set();
-
 function buildDashboardRiskBadges(rs) {
     if (!rs || !rs.monitoring) {
         return '<span class="re-badge re-not-monitored">Not Monitored</span>';
@@ -1367,95 +1313,6 @@ function buildDashboardRiskBadges(rs) {
     }
     
     return badges.join('');
-}
-
-function _patchPositionTicks(quotes, riskStates) {
-    document.querySelectorAll('[data-pos-id]').forEach(card => {
-        const pid = card.getAttribute('data-pos-id');
-        const q = quotes[String(pid)];
-        if (!q) return;
-
-        const last = parseFloat(q.last) || 0;
-        if (last <= 0) return;
-
-        const isStream = q.source === 'stream';
-        const isCross = q.source === 'stream_cross';
-        const color = (q.pnl_pct || 0) >= 0 ? '#22c55e' : '#ef4444';
-
-        // Price cell
-        const priceEl = _cacheEl('current-price', pid);
-        if (priceEl) {
-            const newVal = last.toFixed(2);
-            const oldVal = priceEl.getAttribute('data-last') || '';
-            if (oldVal !== newVal) {
-                priceEl.setAttribute('data-last', newVal);
-                priceEl.textContent = '$' + newVal;
-                priceEl.style.color = color;
-                priceEl.classList.remove('price-flash-up', 'price-flash-down');
-                void priceEl.offsetWidth; // force reflow for animation restart
-                priceEl.classList.add(parseFloat(newVal) > parseFloat(oldVal || newVal) ? 'price-flash-up' : 'price-flash-down');
-                if (isStream) priceEl.style.textShadow = `0 0 6px ${color}60`;
-                setTimeout(() => { priceEl.style.textShadow = 'none'; priceEl.classList.remove('price-flash-up','price-flash-down'); }, 650);
-            }
-
-            // Source badge
-            let srcBadge = priceEl.parentElement.querySelector('.price-source-badge');
-            if (!srcBadge) {
-                srcBadge = document.createElement('span');
-                srcBadge.className = 'price-source-badge';
-                priceEl.parentElement.appendChild(srcBadge);
-            }
-            const brokerAbbr = { WEBULL_OFFICIAL_LIVE: 'WB', WEBULL_OFFICIAL: 'WB', SCHWAB: 'SCH', IBKR: 'IBKR', 'IBKR_PAPER': 'IBKR' };
-            const abbr = brokerAbbr[(q.broker || '').toUpperCase()] || (q.broker || '').slice(0,3);
-            srcBadge.textContent = abbr;
-            srcBadge.className = 'price-source-badge ' + (isStream ? 'src-stream' : isCross ? 'src-cross' : 'src-rest');
-
-            // Price age
-            let ageEl = priceEl.parentElement.querySelector('.price-age');
-            if (!ageEl) {
-                ageEl = document.createElement('span');
-                ageEl.className = 'price-age';
-                priceEl.parentElement.appendChild(ageEl);
-            }
-            if (q.age_ms >= 0) {
-                const ageSec = (q.age_ms / 1000).toFixed(1);
-                ageEl.textContent = ageSec + 's';
-                ageEl.className = 'price-age' + (q.age_ms > 15000 ? ' age-stale' : q.age_ms > 5000 ? ' age-warn' : '');
-            }
-        }
-
-        // PnL cells
-        const pnlEl = _cacheEl('pnl-value', pid);
-        if (pnlEl && q.pnl != null) {
-            const sign = q.pnl >= 0 ? '+' : '';
-            pnlEl.textContent = sign + '$' + Math.abs(q.pnl).toFixed(2);
-            pnlEl.style.color = color;
-        }
-        const pctEl = _cacheEl('pnl-pct', pid);
-        if (pctEl && q.pnl_pct != null) {
-            const sign = q.pnl_pct >= 0 ? '+' : '';
-            pctEl.textContent = sign + q.pnl_pct.toFixed(1) + '%';
-            pctEl.style.color = color;
-        }
-
-        // Card dim for stale stream
-        if (q.age_ms > 15000) card.classList.add('stream-stale');
-        else card.classList.remove('stream-stale');
-
-        // Risk badge strip (in-place, no re-render)
-        const strip = document.getElementById('re-strip-' + pid);
-        if (strip) {
-            const rs = matchRiskStateForCard(strip, riskStates);
-            const badgesContainer = strip.querySelector('.re-badges');
-            if (badgesContainer) {
-                const badgesHTML = buildDashboardRiskBadges(rs);
-                const tooltipHTML = rs && rs.monitoring ? buildDashboardRiskTooltip(rs) : '';
-                badgesContainer.innerHTML = tooltipHTML
-                    ? `<div class="re-tooltip">${badgesHTML}<div class="re-tooltip-content">${tooltipHTML}</div></div>`
-                    : badgesHTML;
-            }
-        }
-    });
 }
 
 function buildDashboardRiskTooltip(rs) {
@@ -2090,44 +1947,83 @@ async function loadTrades() {
     }
     
     try {
-        const statusMap = { 'live': 'OPEN', 'pending': 'PENDING', 'filled': 'CLOSED' };
-        const statusFilter = statusMap[currentTab] || '';
-        
-        let url = '/api/trades/merged?';
-        if (statusFilter) url += `status=${statusFilter}&`;
-        if (currentBroker) url += `broker=${currentBroker}`;
-        url = url.replace(/[&?]$/, '');
-        
-        const response = await _tabFetch(url);
-        if (response.status === 401) {
-            if (_isFirstLoad) {
-                let msg401 = 'Session expired';
-                let sub401 = `Please <a href="/login" style="color: var(--accent);">log in</a> to view positions.`;
-                try {
-                    const body401 = await response.clone().json();
-                    if (body401 && body401.consent_required) {
-                        msg401 = 'Agreement acceptance required';
-                        sub401 = `Please <a href="/consent" style="color: var(--accent);">accept the user agreement</a> to continue.`;
-                    }
-                } catch (_) {}
-                container.innerHTML = `
-                    <div style="text-align: center; padding: 40px;">
-                        <div style="color: var(--error);">${msg401}</div>
-                        <div style="color: var(--text-secondary); margin-top: 8px;">${sub401}</div>
-                    </div>`;
-                _isFirstLoad = false;
+        let filteredTrades = [];
+
+        if (currentTab === 'live' || currentTab === 'pending') {
+            let snapUrl = '/api/trades/live-snapshot';
+            if (currentBroker) snapUrl += `?broker=${currentBroker}`;
+            const snapResp = await _tabFetch(snapUrl);
+            if (snapResp.status === 401) {
+                if (_isFirstLoad) {
+                    let msg401 = 'Session expired';
+                    let sub401 = `Please <a href="/login" style="color: var(--accent);">log in</a> to view positions.`;
+                    try {
+                        const body401 = await snapResp.clone().json();
+                        if (body401 && body401.consent_required) {
+                            msg401 = 'Agreement acceptance required';
+                            sub401 = `Please <a href="/consent" style="color: var(--accent);">accept the user agreement</a> to continue.`;
+                        }
+                    } catch (_) {}
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 40px;">
+                            <div style="color: var(--error);">${msg401}</div>
+                            <div style="color: var(--text-secondary); margin-top: 8px;">${sub401}</div>
+                        </div>`;
+                    _isFirstLoad = false;
+                }
+                return;
             }
-            return;
+            const snapData = await snapResp.json();
+            if (!snapData) {
+                _isFirstLoad = false;
+                _tabHasData[currentTab] = true;
+                container.innerHTML = `<div class="empty-positions"><div class="empty-icon">📊</div><div class="empty-text">No ${currentTab} positions</div></div>`;
+                return;
+            }
+            filteredTrades = currentTab === 'pending'
+                ? (snapData.pending || [])
+                : (snapData.positions || []);
+            if (snapData.risk_states) dashboardRiskStates = snapData.risk_states;
+        } else {
+            const statusMap = { 'filled': 'CLOSED' };
+            const statusFilter = statusMap[currentTab] || '';
+
+            let url = '/api/trades/merged?';
+            if (statusFilter) url += `status=${statusFilter}&`;
+            if (currentBroker) url += `broker=${currentBroker}`;
+            url = url.replace(/[&?]$/, '');
+
+            const response = await _tabFetch(url);
+            if (response.status === 401) {
+                if (_isFirstLoad) {
+                    let msg401 = 'Session expired';
+                    let sub401 = `Please <a href="/login" style="color: var(--accent);">log in</a> to view positions.`;
+                    try {
+                        const body401 = await response.clone().json();
+                        if (body401 && body401.consent_required) {
+                            msg401 = 'Agreement acceptance required';
+                            sub401 = `Please <a href="/consent" style="color: var(--accent);">accept the user agreement</a> to continue.`;
+                        }
+                    } catch (_) {}
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 40px;">
+                            <div style="color: var(--error);">${msg401}</div>
+                            <div style="color: var(--text-secondary); margin-top: 8px;">${sub401}</div>
+                        </div>`;
+                    _isFirstLoad = false;
+                }
+                return;
+            }
+            const mergedResponse = await response.json();
+            if (!mergedResponse) {
+                // Server returned JSON null — treat as empty, not error
+                _isFirstLoad = false;
+                _tabHasData[currentTab] = true;
+                container.innerHTML = `<div class="empty-positions"><div class="empty-icon">📊</div><div class="empty-text">No ${currentTab} positions</div></div>`;
+                return;
+            }
+            filteredTrades = (mergedResponse && mergedResponse.trades) || [];
         }
-        const mergedResponse = await response.json();
-        if (!mergedResponse) {
-            // Server returned JSON null — treat as empty, not error
-            _isFirstLoad = false;
-            _tabHasData[currentTab] = true;
-            container.innerHTML = `<div class="empty-positions"><div class="empty-icon">📊</div><div class="empty-text">No ${currentTab} positions</div></div>`;
-            return;
-        }
-        let filteredTrades = (mergedResponse && mergedResponse.trades) || [];
         
         const count = filteredTrades.length;
         const totalPnl = filteredTrades.reduce((sum, t) => sum + (parseFloat(t.pnl) || 0), 0);
@@ -2166,6 +2062,7 @@ async function loadTrades() {
                 container.innerHTML = renderPositionCards(filteredTrades);
                 _currentPositionIds = filteredTrades.map(t => String(t.id));
                 _restoreDrawers(openDrawers);
+                fetchDashboardRiskStates();
             } else {
                 requestAnimationFrame(() => {
                     filteredTrades.forEach(t => _updatePositionCardInPlace(t));
@@ -2248,7 +2145,7 @@ function renderPositionCards(trades) {
         const progressPercent = Math.min(Math.max((pnlPercent / tier1) * 100, -100), 150);
         
         html += `
-        <div class="position-card ${pnlClass}" id="position-${trade.id}" data-pos-id="${trade.id}">
+        <div class="position-card ${pnlClass}" id="position-${trade.id}">
             <div class="position-main">
                 <div class="position-symbol">
                     <div class="symbol-name">
@@ -2274,7 +2171,7 @@ function renderPositionCards(trades) {
                 
                 <div class="position-metrics">
                     <div class="metric-label">Current</div>
-                    <div class="metric-value" data-field="current-price" data-trade-id="${trade.id}" data-last="${currentPrice.toFixed(2)}" style="color: ${pnl >= 0 ? '#22c55e' : '#ef4444'}">$${currentPrice.toFixed(2)}</div>
+                    <div class="metric-value" data-field="current-price" data-trade-id="${trade.id}" style="color: ${pnl >= 0 ? '#22c55e' : '#ef4444'}">$${currentPrice.toFixed(2)}</div>
                 </div>
                 
                 <div class="position-pnl">
@@ -3834,84 +3731,32 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Loading trades and stats...');
         loadTrades();
         loadStats();
-
-        // Pending tab structural refresh (live tab handled by SSE/tick below)
+        
         setInterval(() => {
-            if (currentTab === 'pending') {
+            // Only poll on tabs that use live trade data; other tabs manage their own refresh
+            if (currentTab === 'live' || currentTab === 'pending') {
                 loadTrades();
                 loadStats();
             }
         }, 10000);
 
-        _initLiveSSE();
-        setInterval(_tickPoll, 1000);
+        setInterval(streamingQuotePoll, 1000);
     }, 3000);
 });
 
 let _lastStreamingStatus = {};
 let _streamingIndicator = null;
 
-// SSE-driven structural updates
-function _initLiveSSE() {
+async function streamingQuotePoll() {
+    if (currentTab !== 'live') return;
     try {
-        if (_liveSSESource) { _liveSSESource.close(); _liveSSESource = null; }
-        _liveSSESource = new EventSource('/api/snapshot/stream');
-        _liveSSESource.onmessage = function(event) {
-            try {
-                const msg = JSON.parse(event.data);
-                _liveSSEConnected = true;
-                _lastSuccessfulFetch = Date.now();
-                if (_liveSSEFallbackTimer) { clearInterval(_liveSSEFallbackTimer); _liveSSEFallbackTimer = null; }
-                _updateConnPill('live');
-                if (msg.type === 'structure_changed' && currentTab === 'live') {
-                    loadTrades();
-                }
-            } catch(e) {}
-        };
-        _liveSSESource.onerror = function() {
-            _liveSSEConnected = false;
-            _updateConnPill('polling');
-            if (!_liveSSEFallbackTimer) {
-                _liveSSEFallbackTimer = setInterval(() => {
-                    if (currentTab === 'live') loadTrades();
-                }, 3000);
-            }
-            setTimeout(() => { if (!_liveSSEConnected) _initLiveSSE(); }, 5000);
-        };
-    } catch(e) {
-        _liveSSEConnected = false;
-        if (!_liveSSEFallbackTimer) {
-            _liveSSEFallbackTimer = setInterval(() => {
-                if (currentTab === 'live') loadTrades();
-            }, 3000);
-        }
-    }
-}
-
-function _updateConnPill(state) {
-    if (!_liveConnPill) _liveConnPill = document.getElementById('live-conn-pill');
-    const textEl = document.getElementById('live-conn-text');
-    if (!_liveConnPill || !textEl) return;
-    _liveConnPill.className = 'live-conn-pill state-' + state;
-    const labels = { live: 'LIVE', polling: 'POLLING', stale: 'STALE' };
-    textEl.textContent = labels[state] || state.toUpperCase();
-}
-
-// Unified 1s tick poll \u2014 prices + risk states, no full re-render
-async function _tickPoll() {
-    if (_tickPollInFlight || currentTab !== 'live') return;
-    _tickPollInFlight = true;
-    try {
-        const resp = await fetch('/api/tick');
+        const resp = await fetch('/api/streaming/quotes');
         const data = await resp.json();
         if (!data.success) return;
-        _lastSuccessfulFetch = Date.now();
 
         const quotes = data.quotes || {};
-        const riskStates = data.risk_states || {};
         const status = data.streaming_status || {};
 
-        // Update streaming indicator (legacy element)
         if (!_streamingIndicator) _streamingIndicator = document.getElementById('streaming-indicator');
         if (_streamingIndicator) {
             const broker = (currentBroker || '').toUpperCase();
@@ -3934,31 +3779,68 @@ async function _tickPoll() {
             }
         }
 
-        // Update connection pill based on streaming status
-        const anyStreaming = status.webull || status.schwab || status.ibkr;
-        if (_liveSSEConnected && anyStreaming) _updateConnPill('live');
-        else if (_liveSSEConnected) _updateConnPill('polling');
+        requestAnimationFrame(() => {
+            for (const [pid, q] of Object.entries(quotes)) {
+                const priceEl = _cacheEl('current-price', pid);
+                if (!priceEl) continue;
+
+                // Risk badge strip — always update regardless of price (options have last=0)
+                const strip = document.getElementById('re-strip-' + pid);
+                if (strip && dashboardRiskStates) {
+                    const rs = matchRiskStateForCard(strip, dashboardRiskStates);
+                    const badgesContainer = strip.querySelector('.re-badges');
+                    if (badgesContainer) {
+                        const badgesHTML = buildDashboardRiskBadges(rs);
+                        const tooltipHTML = rs && rs.monitoring ? buildDashboardRiskTooltip(rs) : '';
+                        badgesContainer.innerHTML = tooltipHTML
+                            ? `<div class="re-tooltip">${badgesHTML}<div class="re-tooltip-content">${tooltipHTML}</div></div>`
+                            : badgesHTML;
+                    }
+                }
+
+                const last = parseFloat(q.last) || 0;
+                if (last <= 0) continue;
+
+                const isStream = q.source === 'stream';
+                const pnl = parseFloat(q.unrealized_pnl) || 0;
+                const pnlPct = parseFloat(q.pnl_pct) || 0;
+                const pnlSign = pnl >= 0 ? '+' : '';
+                const color = pnl >= 0 ? '#22c55e' : '#ef4444';
+
+                const newPrice = last.toFixed(2);
+                const oldPrice = priceEl.textContent.replace(/[^0-9.]/g, '');
+                if (oldPrice !== newPrice) {
+                    priceEl.style.color = color;
+                    priceEl.textContent = '$' + newPrice;
+                    if (isStream) {
+                        priceEl.style.textShadow = `0 0 6px ${color}60`;
+                        setTimeout(() => { priceEl.style.textShadow = 'none'; }, 800);
+                    }
+                }
+
+                const pnlEl = _cacheEl('pnl-value', pid);
+                if (pnlEl) {
+                    pnlEl.textContent = pnlSign + '$' + Math.abs(pnl).toFixed(2);
+                    pnlEl.className = 'pnl-value ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                }
+                const pctEl = _cacheEl('pnl-pct', pid);
+                if (pctEl) {
+                    pctEl.textContent = pnlSign + pnlPct.toFixed(1) + '%';
+                    pctEl.className = 'pnl-percent ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                }
+
+                const card = document.getElementById('position-' + pid);
+                if (card) {
+                    card.classList.remove('profit', 'loss');
+                    card.classList.add(pnl >= 0 ? 'profit' : 'loss');
+                }
+            }
+        });
 
         _lastStreamingStatus = status;
-
-        // In-place patch each position card
-        requestAnimationFrame(() => {
-            _patchPositionTicks(quotes, riskStates);
-        });
-    } catch(e) {
-        const age = (Date.now() - _lastSuccessfulFetch) / 1000;
-        if (age > 10) _updateConnPill('stale');
-    } finally {
-        _tickPollInFlight = false;
+    } catch (e) {
     }
 }
-
-// Stale check \u2014 runs every 15s
-setInterval(() => {
-    if (currentTab !== 'live') return;
-    const age = (Date.now() - _lastSuccessfulFetch) / 1000;
-    if (age > 10) _updateConnPill('stale');
-}, 15000);
 
 let _pnlDismissed = {};
 

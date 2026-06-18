@@ -78,7 +78,7 @@ def unsubscribe_sse(q):
             pass
 
 
-def _notify_sse_clients(payload: dict):
+def _notify_sse_clients(payload):
     with _sse_clients_lock:
         dead = []
         for q in _sse_clients:
@@ -979,10 +979,9 @@ def _apply_channel_fields(pos: Dict, channel_id, channel_risk_map: Dict, trade: 
     pos['profit_target_2_pct'] = info.get('profit_target_2_pct')
     pos['profit_target_3_pct'] = info.get('profit_target_3_pct')
     try:
-        src_info = db.get_trade_source_display(trade)
-        pos['source_display'] = src_info.get('name', '')
+        pos['source_display'] = db.get_trade_source_display(trade)
     except Exception:
-        pass
+        pos['source_display'] = {'name': pos.get('channel_name', ''), 'color': 'gray', 'icon': '📊', 'full_name': ''}
     remaining = pos.get('remaining_qty')
     original = pos.get('original_qty')
     if remaining is not None and original is not None and remaining < original and remaining > 0:
@@ -1158,7 +1157,7 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
             except Exception:
                 pass
 
-            _apply_channel_fields(pos, pos['channel_id'], channel_risk_map, t)
+            _apply_channel_fields(pos, pos.get('channel_id'), channel_risk_map, t)
             enriched.append(pos)
 
     return enriched
@@ -1391,9 +1390,11 @@ def _refresh_snapshot(bot_instance, force_all: bool = False):
             global _prev_position_ids
             _snapshot_version += 1
             ver = _snapshot_version
-            new_ids = {str(p.get('id')) for p in merged if p.get('id') is not None}
-            event_type = 'structure_changed' if new_ids != _prev_position_ids else 'tick'
-            _prev_position_ids = new_ids
+            def _pos_fingerprint(p):
+                return (str(p.get('id')), str(p.get('status', '')), str(p.get('remaining_qty', '')))
+            new_fingerprints = {_pos_fingerprint(p) for p in merged if p.get('id') is not None}
+            event_type = 'structure_changed' if new_fingerprints != _prev_position_ids else 'tick'
+            _prev_position_ids = new_fingerprints
 
         _notify_sse_clients({'type': event_type, 'version': ver})
 
