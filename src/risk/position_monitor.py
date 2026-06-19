@@ -3210,6 +3210,7 @@ class RiskManager:
         _REST_CACHE_TTL = 30
         if _force_global:
             self._force_rest_refresh = False
+            self._wo_positions_cache_ts = 0  # bust WBO local cache on force refresh
             if _has_open:
                 _REST_CACHE_TTL = 0
 
@@ -4029,7 +4030,11 @@ class RiskManager:
         if not self.webull_official_broker:
             return positions
         try:
-            raw = await self.webull_official_broker.get_positions(max_age_seconds=15) or []
+            import time as _wo_t
+            _wo_cache_age = _wo_t.time() - getattr(self, '_wo_positions_cache_ts', 0)
+            if hasattr(self, '_wo_positions_cache') and self._wo_positions_cache is not None and _wo_cache_age < 30:
+                return list(self._wo_positions_cache)
+            raw = await self.webull_official_broker.get_positions(max_age_seconds=30) or []
             broker_label = 'WEBULL_OFFICIAL_LIVE' if not getattr(self.webull_official_broker, 'paper_trade', True) else 'WEBULL_OFFICIAL_PAPER'
             if not hasattr(self, '_webull_official_subscribed_symbols'):
                 self._webull_official_subscribed_symbols = set()
@@ -4100,6 +4105,8 @@ class RiskManager:
                     direction=call_put,
                     raw_symbol=raw_symbol,
                 ))
+            self._wo_positions_cache = list(positions)
+            self._wo_positions_cache_ts = _wo_t.time()
         except Exception as e:
             print(f"[RISK] Error fetching Webull Official positions: {e}")
         return positions
