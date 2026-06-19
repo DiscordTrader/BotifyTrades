@@ -99,6 +99,8 @@ class WebullDataHub:
         self._refresh_positions_lock = asyncio.Lock()
         self._refresh_account_lock = asyncio.Lock()
         self._refresh_orders_lock = asyncio.Lock()
+        self._refresh_positions_fail_ts: float = 0.0
+        self._refresh_positions_fail_count: int = 0
 
         self._risk_eval_requested = threading.Event()
 
@@ -350,14 +352,23 @@ class WebullDataHub:
     async def refresh_positions_once(self, wb_instance):
         if self._refresh_positions_lock.locked():
             return
+        # Back off 60s after failure to avoid spamming when REST API consistently errors
+        if self._refresh_positions_fail_ts and (time.time() - self._refresh_positions_fail_ts) < 60.0:
+            return
         async with self._refresh_positions_lock:
             try:
                 positions = await asyncio.to_thread(wb_instance.get_positions)
                 if positions is not None:
                     self.update_positions(positions)
-                    print("[WEBULL_HUB] Positions refreshed after order event")
+                    if self._refresh_positions_fail_count > 0:
+                        print(f"[WEBULL_HUB] Positions refreshed (recovered after {self._refresh_positions_fail_count} failures)")
+                    self._refresh_positions_fail_ts = 0.0
+                    self._refresh_positions_fail_count = 0
             except Exception as e:
-                logger.warning(f"Position refresh after order event failed: {e}")
+                self._refresh_positions_fail_ts = time.time()
+                self._refresh_positions_fail_count += 1
+                if self._refresh_positions_fail_count == 1:
+                    logger.warning(f"Position refresh failed: {e} — will suppress for 60s")
 
     async def refresh_account_once(self, wb_instance):
         if self._refresh_account_lock.locked():
