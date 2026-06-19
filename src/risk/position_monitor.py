@@ -1749,6 +1749,8 @@ class RiskManager:
         self._dirty_symbols = {}
         self._dirty_lock = _threading.Lock()
         self._price_wake_event = asyncio.Event()
+        self._early_cycle_event = asyncio.Event()
+        self._incremental_task: Optional[asyncio.Task] = None
         self._monitored_symbols = set()
         self._monitored_symbols_lock = _threading.Lock()
         self._hub_subscribed = False
@@ -2211,6 +2213,76 @@ class RiskManager:
                       f"tick→eval: {tick_to_eval_ms:.0f}ms | avg: {avg_latency:.0f}ms | max: {_max_lat:.0f}ms | "
                       f"dirty: {', '.join(sorted(dirty_symbol_names)[:3])}")
 
+    async def _incremental_eval_loop(self) -> None:
+        while self._running:
+            try:
+                import time as _iel_time
+                _sleep_start = _iel_time.monotonic()
+                _interval = self._get_adaptive_interval()
+                _has_reason = getattr(self, '_has_open_positions_or_watches_cache', True) or self._has_active_fill_watches()
+                while True:
+                    _remaining = _interval - (_iel_time.monotonic() - _sleep_start)
+                    if _remaining <= 0:
+                        break
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        if get_webull_data_hub().check_risk_eval_requested():
+                            if _has_reason:
+                                print("[RISK] ⚡ Early wake: order event from Webull stream")
+                                self._force_rest_refresh = True
+                                self._early_cycle_event.set()
+                                break
+                    except Exception:
+                        pass
+                    try:
+                        from src.services.schwab_data_hub import get_schwab_data_hub
+                        if get_schwab_data_hub().check_risk_eval_requested():
+                            if _has_reason:
+                                print("[RISK] ⚡ Early wake: order event from Schwab stream")
+                                self._force_rest_refresh = True
+                                self._early_cycle_event.set()
+                                break
+                    except Exception:
+                        pass
+                    try:
+                        from src.services.ibkr_data_hub import get_ibkr_data_hub
+                        _ibkr_h = get_ibkr_data_hub()
+                        if _ibkr_h.is_streaming() and _ibkr_h.check_risk_eval_requested():
+                            if _has_reason:
+                                print("[RISK] ⚡ Early wake: order event from IBKR stream")
+                                self._force_rest_refresh = True
+                                self._early_cycle_event.set()
+                                break
+                    except Exception:
+                        pass
+                    try:
+                        await asyncio.wait_for(
+                            self._price_wake_event.wait(),
+                            timeout=min(0.05, _remaining)
+                        )
+                        self._price_wake_event.clear()
+                        await asyncio.sleep(0.02)
+                        await self._run_incremental_eval()
+                    except asyncio.TimeoutError:
+                        pass
+                await asyncio.sleep(0)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                print(f"[RISK] ⚠️ Incremental eval loop error: {e}")
+                import traceback
+                traceback.print_exc()
+                await asyncio.sleep(1)
+
+    def _on_incremental_task_done(self, task: asyncio.Task) -> None:
+        if not task.cancelled():
+            try:
+                exc = task.exception()
+                if exc:
+                    print(f"[RISK] ⚠️ Incremental eval task exited unexpectedly: {exc}")
+            except Exception:
+                pass
+
     async def start_monitoring(self) -> None:
         """Start the position monitoring loop with enable gate and standby support."""
         try:
@@ -2259,7 +2331,10 @@ class RiskManager:
             self._subscribe_to_price_streams()
         except Exception as e:
             print(f"[RISK] ⚠️ Price stream subscribe failed (continuing): {e}")
-        
+
+        self._incremental_task = asyncio.create_task(self._incremental_eval_loop())
+        self._incremental_task.add_done_callback(self._on_incremental_task_done)
+
         while self._running:
             try:
                 is_enabled = self._check_service_enabled()
@@ -2291,59 +2366,17 @@ class RiskManager:
                         _ticks = getattr(self, '_tick_eval_count', 0)
                         print(f"[RISK] ⏱ Cycle #{self._cycle_timing_log_counter}: {_cycle_elapsed_ms:.0f}ms{_detail} | ticks={_ticks} max_cycle={self._cycle_max_ms:.0f}ms{_slow}")
                     interval = self._get_adaptive_interval()
-                    _sleep_start = _cycle_t.monotonic()
-                    _order_event_woke = False
-                    while True:
-                        _remaining = interval - (_cycle_t.monotonic() - _sleep_start)
-                        if _remaining <= 0:
-                            break
-                        _has_reason = getattr(self, '_has_open_positions_or_watches_cache', True) or self._has_active_fill_watches()
-                        try:
-                            from src.services.webull_data_hub import get_webull_data_hub
-                            if get_webull_data_hub().check_risk_eval_requested():
-                                if _has_reason:
-                                    print("[RISK] ⚡ Early wake: order event from Webull stream")
-                                    self._force_rest_refresh = True
-                                    _order_event_woke = True
-                                    break
-                        except Exception:
-                            pass
-                        try:
-                            from src.services.schwab_data_hub import get_schwab_data_hub
-                            if get_schwab_data_hub().check_risk_eval_requested():
-                                if _has_reason:
-                                    print("[RISK] ⚡ Early wake: order event from Schwab stream")
-                                    self._force_rest_refresh = True
-                                    _order_event_woke = True
-                                    break
-                        except Exception:
-                            pass
-                        try:
-                            from src.services.ibkr_data_hub import get_ibkr_data_hub
-                            _ibkr_h = get_ibkr_data_hub()
-                            if _ibkr_h.is_streaming() and _ibkr_h.check_risk_eval_requested():
-                                if _has_reason:
-                                    print("[RISK] ⚡ Early wake: order event from IBKR stream")
-                                    self._force_rest_refresh = True
-                                    _order_event_woke = True
-                                    break
-                        except Exception:
-                            pass
-                        try:
-                            await asyncio.wait_for(
-                                self._price_wake_event.wait(),
-                                timeout=min(0.05, _remaining)
-                            )
-                            self._price_wake_event.clear()
-                            await asyncio.sleep(0.02)
-                            await self._run_incremental_eval()
-                        except asyncio.TimeoutError:
-                            pass
+                    try:
+                        await asyncio.wait_for(self._early_cycle_event.wait(), timeout=interval)
+                        self._early_cycle_event.clear()
+                    except asyncio.TimeoutError:
+                        pass
                 else:
                     if not self._standby_mode:
                         print("[RISK] ⏸️ Entering standby mode - no risk settings enabled (zero API calls)")
                         self._standby_mode = True
-                    
+
+                    self._early_cycle_event.clear()
                     await self._standby_cycle()
                     await asyncio.sleep(5)
                 
@@ -2493,7 +2526,17 @@ class RiskManager:
     def stop_monitoring(self) -> None:
         """Stop the monitoring loop."""
         self._running = False
-    
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.call_soon_threadsafe(self._early_cycle_event.set)
+            else:
+                self._early_cycle_event.set()
+        except Exception:
+            pass
+        if self._incremental_task and not self._incremental_task.done():
+            self._incremental_task.cancel()
+
     def invalidate_settings_cache(self, channel_id: str = None) -> int:
         """Force refresh of cached channel settings on next monitoring cycle.
         
@@ -2841,9 +2884,10 @@ class RiskManager:
                     else:
                         continue
                 await self._evaluate_position(position, risk_settings, broker_position_keys)
+                await asyncio.sleep(0)
             except Exception as e:
                 print(f"[RISK] ⚠️ Error processing position {position.symbol}: {e}")
-        
+
         if not hasattr(self, '_stale_cleanup_counter'):
             self._stale_cleanup_counter = 0
         if not hasattr(self, '_zero_position_cleanup_count'):

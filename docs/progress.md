@@ -1,5 +1,85 @@
 # BotifyTrades Progress Log
 
+## Session: June 18, 2026 (continued) — 5 code-review findings fixed in _incremental_eval_loop
+
+### Fixes applied to `src/risk/position_monitor.py`
+
+**Fix 1 (CRITICAL): `except Exception` moved inside `while self._running:`**
+- Old: outer `try/except` wrapped the entire while — any unhandled exception (e.g. `AttributeError` in `_get_adaptive_interval()`) killed the task permanently with no restart
+- New: inner `try/except Exception` wraps the loop body; logs + `await asyncio.sleep(1)` then outer while continues
+- `except asyncio.CancelledError: raise` placed inside the inner try before generic except
+
+**Fix 2 (MEDIUM): Done-callback for silent task death detection**
+- New method `_on_incremental_task_done(self, task)`: checks `not task.cancelled()`, calls `task.exception()` inside try/except, prints `[RISK] ⚠️` warning if unexpected exit
+- `add_done_callback(self._on_incremental_task_done)` wired immediately after `create_task`
+
+**Fix 3 (MEDIUM latent): Thread-safe `stop_monitoring` event wakeup**
+- Old: `self._early_cycle_event.set()` — not thread-safe from non-event-loop thread
+- New: `loop.call_soon_threadsafe(self._early_cycle_event.set)` when loop is running, direct `.set()` fallback when loop stopped
+
+**Fix 4 (LOW): `_has_reason` computed once per outer iteration, not per 50ms tick**
+- Moved above inner `while True:` — eliminates up to 3 `_fill_watch_lock` acquisitions per 50ms tick
+- No behavioral change: `_has_reason` value is stable within a 5s adaptive interval
+
+**Fix 5 (LOW): Standby branch clears `_early_cycle_event`**
+- `self._early_cycle_event.clear()` added before `_standby_cycle()` in else-branch
+- Prevents spurious extra cycle on standby→active transition from stale event set by task during standby
+
+**Validation**: 9-point checklist — all PASS. 5-scenario logic trace — all clean. Final code review — all 6 checks PASS (Fix 5 has cosmetic `DeprecationWarning` on `get_event_loop()` in Python 3.10+, not a correctness issue).
+
+---
+
+## Session: June 18, 2026 (continued) — asyncio scheduling fix: incremental eval task separation
+
+### Fix: Risk Engine asyncio Scheduling — Incremental Eval Now Runs During Full Cycle
+
+**Problem**: `_run_incremental_eval` (SL/PT evaluation on MQTT price ticks) only ran during the sleep period BETWEEN full cycles. During `_monitoring_cycle` execution (1-4s), all MQTT ticks accumulated in `_dirty_symbols` but zero SL/PT evaluations ran. Worst case: 4s delay on penny stocks and options.
+
+**Root cause**: The sleep loop (with `_price_wake_event.wait()` and `_run_incremental_eval()`) lived inside the outer `while self._running:` in `start_monitoring`, only executing after `_monitoring_cycle` returned. During the gather of 8 broker fetches, asyncio was free but `_run_incremental_eval` was never scheduled.
+
+**Fix 1 — Separate asyncio Task** (`src/risk/position_monitor.py`):
+- Extracted the sleep loop into new method `_incremental_eval_loop()` as a concurrent `asyncio.Task`
+- Launched via `asyncio.create_task()` in `start_monitoring` after `self._running = True`
+- Task runs independently of full cycle — MQTT ticks evaluated within 25-75ms regardless of full cycle state
+- Added `_early_cycle_event = asyncio.Event()` to preserve order-event early-wake behaviour: when Webull/Schwab/IBKR order event fires, task sets `_early_cycle_event` instead of breaking the outer loop; main loop awaits `_early_cycle_event` with 5s timeout instead of plain `asyncio.sleep(5)`
+- `stop_monitoring()` now sets `_early_cycle_event` (unblocks main loop immediately) and cancels the task
+- `CancelledError` re-raised cleanly from task
+
+**Fix 2 — Yield points between position evals** (`_monitoring_cycle`):
+- Added `await asyncio.sleep(0)` after each `_evaluate_position()` call in the for-loop
+- Releases asyncio loop between each of 10-20 position evaluations
+- Flask GUI responses and order placement no longer queue behind a 45ms+ evaluation block
+
+**Validation**: 8-point correctness check — all PASS. 3-scenario logic trace — all clean. One shutdown bug found and fixed (missing `_early_cycle_event.set()` in `stop_monitoring`).
+
+**Result**: SL/PT evaluation latency during full cycle: 4000ms → 25-75ms.
+
+---
+
+## Session: June 18, 2026 — Log validation, MQTT analysis, position-refresh spam fix
+
+### Bot Health Validation (v12.1.8 + unreleased fixes)
+- Bot PID 20760, started 19:32 EST. All services healthy.
+- Risk engine: Monitoring FFAI (#523) and CRVO (#547) on Schwab with TEMPLE-BOOM channel settings (SL=10%, PT=8/10/12%)
+- UPH: StreamTicks=312, Hits=3376, Misses=0, Updates=1817 — MQTT streaming active (legacy Webull feed for Schwab positions)
+- Sync: SCHWAB=2 positions, WEBULL_OFFICIAL_LIVE=0 (correct, no open WBO positions), Webull=0
+- IBKR: 4 stale PENDING trades manually closed in DB (from prior session)
+- CDT expiry fix and WEBULL_OFFICIAL price lag fix are in git (commits `a1c3e3c0`, `5f0de42a`) but NOT in v12.1.8 release — need v12.1.9
+
+### Bugs Found & Fixed
+
+**BUG: WebullDataHub spamming 375 WARNING lines per session ("Position refresh after order event failed: 'positions'")**
+- Root cause: Legacy Webull library `get_positions()` calls `get_account()['positions']` internally. When there are no open Webull positions, the API response omits the `positions` key → `KeyError('positions')`. This fires every ~5s because active fill watches (for Schwab positions) bypass the 60s discovery debounce in `position_monitor.py`, causing the Webull REST refresh to be called on every risk cycle. Zero functional impact — no Webull positions.
+- Fix: Added 60s backoff in `webull_data_hub.py:refresh_positions_once`. First failure logs the warning with "will suppress for 60s" note. Subsequent failures within 60s are silenced. Logs "recovered" when it clears.
+- Commit: `43b54fe4`
+
+### Findings (No Fix Needed)
+
+**WEBULL-OFF MQTT rc=16 disconnects every ~150s**
+- Server-side idle timeout on Webull's MQTT broker when no symbols are subscribed. Bot auto-reconnects in 2s. With `keepalive=30`, the client pings every 30s, but Webull drops idle connections at 150s regardless. When positions ARE active and symbols ARE subscribed, data flows continuously and the server doesn't time out. No fix needed.
+
+---
+
 ## Session: June 17, 2026 (continued) — Webull Official after-hours + position source tag + SL fix
 
 ### Bugs Fixed
