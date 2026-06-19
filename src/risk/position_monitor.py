@@ -4032,9 +4032,20 @@ class RiskManager:
         try:
             import time as _wo_t
             _wo_cache_age = _wo_t.time() - getattr(self, '_wo_positions_cache_ts', 0)
-            if hasattr(self, '_wo_positions_cache') and self._wo_positions_cache is not None and _wo_cache_age < 30:
+            _wo_has_positions = bool(getattr(self, '_wo_positions_cache', None))
+            _wo_fill_watch = self._has_active_fill_watches()
+            # Bypass cache when fill watches are active (BTO pending fill) or cache is empty
+            # with open trades in DB — ensures new fills are detected promptly
+            _wo_use_cache = (
+                hasattr(self, '_wo_positions_cache')
+                and self._wo_positions_cache is not None
+                and _wo_cache_age < 30
+                and not _wo_fill_watch
+            )
+            if _wo_use_cache:
                 return list(self._wo_positions_cache)
-            raw = await self.webull_official_broker.get_positions(max_age_seconds=30) or []
+            _wo_max_age = 5 if _wo_fill_watch else 30
+            raw = await self.webull_official_broker.get_positions(max_age_seconds=_wo_max_age) or []
             broker_label = 'WEBULL_OFFICIAL_LIVE' if not getattr(self.webull_official_broker, 'paper_trade', True) else 'WEBULL_OFFICIAL_PAPER'
             if not hasattr(self, '_webull_official_subscribed_symbols'):
                 self._webull_official_subscribed_symbols = set()
