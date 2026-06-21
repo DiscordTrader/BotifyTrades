@@ -15,47 +15,143 @@ from .license_types import RSA_PUBLIC_KEY_PEM
 
 
 def get_machine_id() -> str:
-    """Generate a unique machine identifier based on hardware."""
+    """Generate a unique machine identifier based on hardware.
+    
+    Platform strategies (most stable → fallback):
+      Windows: PowerShell Get-CimInstance → wmic → registry → hostname+MAC
+      Linux:   /etc/machine-id → /var/lib/dbus/machine-id → hostname+MAC
+      macOS:   ioreg IOPlatformUUID → system_profiler → hostname+MAC
+    """
     system = platform.system()
+    machine_uuid = None
     
     try:
         if system == 'Windows':
-            result = subprocess.run(
-                ['wmic', 'csproduct', 'get', 'uuid'],
-                capture_output=True, text=True, timeout=10
-            )
-            uuid_lines = [line.strip() for line in result.stdout.split('\n') if line.strip() and line.strip() != 'UUID']
-            if uuid_lines:
-                machine_uuid = uuid_lines[0]
-            else:
-                machine_uuid = platform.node()
+            machine_uuid = _get_windows_uuid()
         elif system == 'Linux':
-            try:
-                with open('/etc/machine-id', 'r', encoding='utf-8') as f:
-                    machine_uuid = f.read().strip()
-            except:
-                machine_uuid = platform.node()
-        elif system == 'Darwin':  # macOS
-            try:
-                result = subprocess.run(
-                    ['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
-                    capture_output=True, text=True, timeout=10
-                )
-                for line in result.stdout.split('\n'):
-                    if 'IOPlatformUUID' in line:
-                        machine_uuid = line.split('"')[-2]
-                        break
-                else:
-                    machine_uuid = platform.node()
-            except:
-                machine_uuid = platform.node()
-        else:
-            machine_uuid = platform.node()
+            machine_uuid = _get_linux_uuid()
+        elif system == 'Darwin':
+            machine_uuid = _get_macos_uuid()
     except Exception:
-        machine_uuid = platform.node()
+        pass
+    
+    # Final fallback: hostname + first MAC address (better than hostname alone)
+    if not machine_uuid or machine_uuid == 'FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF':
+        machine_uuid = _get_fallback_id()
     
     raw = f"{machine_uuid}_{platform.system()}_{platform.machine()}"
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]
+
+
+def _get_windows_uuid() -> str:
+    """Windows: PowerShell CIM (future-proof) → wmic (legacy) → registry."""
+    # Method 1: PowerShell Get-CimInstance (works on Windows 10/11, no deprecation)
+    try:
+        result = subprocess.run(
+            ['powershell', '-NoProfile', '-Command',
+             '(Get-CimInstance Win32_ComputerSystemProduct).UUID'],
+            capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000),
+        )
+        uuid_val = result.stdout.strip()
+        if uuid_val and len(uuid_val) >= 16 and uuid_val != 'FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF':
+            return uuid_val
+    except Exception:
+        pass
+    
+    # Method 2: wmic (legacy, may not exist on Windows 11 24H2+)
+    try:
+        result = subprocess.run(
+            ['wmic', 'csproduct', 'get', 'uuid'],
+            capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000),
+        )
+        uuid_lines = [line.strip() for line in result.stdout.split('\n')
+                       if line.strip() and line.strip() != 'UUID']
+        if uuid_lines and len(uuid_lines[0]) >= 16:
+            return uuid_lines[0]
+    except Exception:
+        pass
+    
+    # Method 3: Windows Registry MachineGuid (always exists, survives hardware changes)
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                             r'SOFTWARE\Microsoft\Cryptography', 0, winreg.KEY_READ)
+        guid, _ = winreg.QueryValueEx(key, 'MachineGuid')
+        winreg.CloseKey(key)
+        if guid:
+            return guid
+    except Exception:
+        pass
+    
+    return None
+
+
+def _get_linux_uuid() -> str:
+    """Linux: /etc/machine-id → /var/lib/dbus/machine-id."""
+    for path in ['/etc/machine-id', '/var/lib/dbus/machine-id']:
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                mid = f.read().strip()
+                if mid and len(mid) >= 16:
+                    return mid
+        except Exception:
+            continue
+    return None
+
+
+def _get_macos_uuid() -> str:
+    """macOS: ioreg IOPlatformUUID → system_profiler hardware UUID."""
+    # Method 1: ioreg (fastest, most reliable)
+    try:
+        result = subprocess.run(
+            ['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
+            capture_output=True, text=True, timeout=10,
+        )
+        for line in result.stdout.split('\n'):
+            if 'IOPlatformUUID' in line:
+                uuid_val = line.split('"')[-2]
+                if uuid_val and len(uuid_val) >= 16:
+                    return uuid_val
+    except Exception:
+        pass
+    
+    # Method 2: system_profiler (slower but always available)
+    try:
+        result = subprocess.run(
+            ['system_profiler', 'SPHardwareDataType'],
+            capture_output=True, text=True, timeout=15,
+        )
+        for line in result.stdout.split('\n'):
+            if 'Hardware UUID' in line or 'UUID' in line:
+                uuid_val = line.split(':')[-1].strip()
+                if uuid_val and len(uuid_val) >= 16:
+                    return uuid_val
+    except Exception:
+        pass
+    
+    return None
+
+
+def _get_fallback_id() -> str:
+    """Fallback: hostname + first non-loopback MAC address.
+    
+    Better than hostname alone — two machines named 'DESKTOP-ABC' with different
+    network cards will get different IDs. Not perfect (MAC can change) but much
+    more unique than hostname-only.
+    """
+    hostname = platform.node()
+    mac = ''
+    try:
+        import uuid as _uuid_mod
+        mac_int = _uuid_mod.getnode()
+        # getnode() returns a random if no MAC found — check bit 0 (multicast flag)
+        if not (mac_int >> 40) & 1:  # bit 40 = locally administered, not real MAC
+            mac = format(mac_int, '012x')
+    except Exception:
+        pass
+    return f"{hostname}_{mac}" if mac else hostname
 
 
 def get_machine_info() -> dict:
