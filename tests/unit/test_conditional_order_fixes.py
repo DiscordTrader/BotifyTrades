@@ -45,7 +45,8 @@ class TestGap7UPHAllowStale:
         """Old callers omitting allow_stale must still work."""
         from src.services.unified_price_hub import UnifiedPriceHub, UnifiedQuote
         hub = UnifiedPriceHub.__new__(UnifiedPriceHub)
-        fake_quote = UnifiedQuote(symbol='AAPL', last=150.25)
+        import time as _t
+        fake_quote = UnifiedQuote(symbol='AAPL', last=150.25, timestamp=_t.time())
         hub.get_quote = MagicMock(return_value=fake_quote)
         result = hub.get_quote_price('AAPL')
         assert result == 150.25

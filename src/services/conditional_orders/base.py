@@ -2975,6 +2975,17 @@ class BaseConditionalOrderService(ABC):
                     )
                 except Exception as ne:
                     self._log(f"Notification error (execution failed): {ne}")
+        else:
+            # COND-2: No callback wired — set ERROR instead of silently staying TRIGGERED
+            print(f"[CONDITIONAL] ❌ No execution_callback for #{order_id} {symbol} — setting ERROR (startup race?)", flush=True)
+            self._log(f"No execution callback for #{order_id} — cannot execute")
+            from gui_app.database import update_conditional_order_status
+            update_conditional_order_status(
+                order_id, 'ERROR',
+                event='NO_CALLBACK',
+                error_message='Execution callback not wired — bot may still be starting up. Resubmit the order.'
+            )
+            callback_success = False
     
     def cancel_order(self, order_id: int) -> bool:
         """Cancel a conditional order."""

@@ -350,7 +350,10 @@ class IBKRBroker(BrokerInterface):
                 if trade.isDone():
                     break
                 await asyncio.sleep(0.1)
-            print(f"[{self.name}] ✓ Cancelled order {order_id} (status: {trade.orderStatus.status if trade.orderStatus else 'unknown'})")
+            status = trade.orderStatus.status if trade and trade.orderStatus else 'Unknown'
+            if status == 'Filled':
+                return {'success': False, 'error': f'Order already filled (cannot cancel)', 'filled': True}
+            print(f"[{self.name}] ✓ Cancelled order {order_id} (status: {status})")
             return {'success': True, 'order_id': order_id}
         except Exception as e:
             print(f"[{self.name}] Cancel order {order_id} error: {e}")
@@ -448,8 +451,12 @@ class IBKRBroker(BrokerInterface):
                 _existing_trade.order.lmtPrice = limit_price
             self.ib.placeOrder(_existing_trade.contract, _existing_trade.order)
             await asyncio.sleep(0.5)
+            status = _existing_trade.orderStatus.status if _existing_trade and _existing_trade.orderStatus else 'Unknown'
+            if status in ('ApiCancelled', 'Cancelled', 'Inactive'):
+                print(f"[{self.name}] ⚠️ Modify rejected by IB: {status}")
+                return {'success': False, 'status': status}
             print(f"[{self.name}] ✓ Modified order {order_id} stop={stop_price} lmt={limit_price}")
-            return {'success': True, 'order_id': order_id}
+            return {'success': True, 'order_id': str(order_id)}
         except Exception as e:
             print(f"[{self.name}] modify_order error: {e}")
             return {'success': False, 'error': str(e)}
@@ -569,7 +576,9 @@ class IBKRBroker(BrokerInterface):
                 return OrderResult(success=False, message=f"Invalid limit price: {price}", symbol=symbol, action=action)
             contract = Stock(symbol, 'SMART', 'USD')
             
-            await self.ib.qualifyContractsAsync(contract)
+            qualified = await self.ib.qualifyContractsAsync(contract)
+            if not qualified or contract.conId == 0:
+                return OrderResult(success=False, message=f"Invalid symbol: {symbol} — contract qualification failed", symbol=symbol, action=action)
 
             side = 'BUY' if action == 'BTO' else 'SELL'
 
@@ -587,7 +596,9 @@ class IBKRBroker(BrokerInterface):
                     price = round(price, 4)
                 order = LimitOrder(side, quantity, price)
 
-            order.outsideRth = self._get_extended_hours_enabled()
+            # outsideRth only applies to LimitOrder — IBKR rejects MarketOrder with outsideRth
+            if isinstance(order, LimitOrder):
+                order.outsideRth = self._get_extended_hours_enabled()
             if tif:
                 order.tif = tif
 
@@ -680,7 +691,8 @@ class IBKRBroker(BrokerInterface):
         action: str,
         quantity: int,
         price: Optional[float] = None,
-        tif: Optional[str] = None
+        tif: Optional[str] = None,
+        _auto_adjust_depth: int = 0
     ) -> OrderResult:
         """Place an options order"""
         if not self.ib.isConnected():
@@ -693,7 +705,9 @@ class IBKRBroker(BrokerInterface):
             right = 'C' if option_type.lower() in ['c', 'call'] else 'P'
             contract = Option(symbol, expiry_formatted, strike, right, 'SMART')
             
-            await self.ib.qualifyContractsAsync(contract)
+            qualified = await self.ib.qualifyContractsAsync(contract)
+            if not qualified or contract.conId == 0:
+                return OrderResult(success=False, message=f"Invalid symbol: {symbol} — option contract qualification failed", symbol=symbol, action=action)
             
             # Create order
             side = 'BUY' if action == 'BTO' else 'SELL'
@@ -705,8 +719,9 @@ class IBKRBroker(BrokerInterface):
                 price = round(price, 2)
                 order = LimitOrder(side, quantity, price)
             
-            # Enable extended hours trading if configured
-            order.outsideRth = self._get_extended_hours_enabled()
+            # outsideRth only applies to LimitOrder — IBKR rejects MarketOrder with outsideRth
+            if isinstance(order, LimitOrder):
+                order.outsideRth = self._get_extended_hours_enabled()
             if tif:
                 order.tif = tif
 
@@ -739,6 +754,19 @@ class IBKRBroker(BrokerInterface):
             )
 
         except Exception as e:
+            _err_msg = str(e).lower()
+            if 'insufficient' in _err_msg and _auto_adjust_depth < 1:
+                try:
+                    positions = self.ib.positions()
+                    if action.upper() in ('STC', 'SELL'):
+                        for pos in positions:
+                            if hasattr(pos.contract, 'symbol') and pos.contract.symbol == symbol:
+                                held_qty = abs(int(pos.position))
+                                if 0 < held_qty < quantity:
+                                    print(f"[{self.name}] Auto-adjusting option STC qty: {quantity} → {held_qty}")
+                                    return await self.place_option_order(symbol, strike, expiry, option_type, action, held_qty, price, tif=tif, _auto_adjust_depth=_auto_adjust_depth + 1)
+                except Exception:
+                    pass
             return OrderResult(
                 success=False,
                 message=f"IBKR error: {str(e)}",

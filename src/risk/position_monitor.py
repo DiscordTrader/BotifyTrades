@@ -4647,15 +4647,26 @@ class RiskManager:
             if _skip_bracket_placement:
                 pass
             elif (_bracket_attempts := getattr(cache, '_bracket_attempt_count', 0)) >= 3:
-                if _bracket_attempts == 3:
-                    print(f"[RISK] ⚠️ Bracket placement failed 3 times for {position.symbol} on {position.broker} — giving up (risk engine will manage exits)")
-                    cache._bracket_attempt_count = _bracket_attempts + 1
+                # Retry every 60s after initial 3 failures (was permanent give-up)
+                import time as _t_bracket
+                _last_attempt = getattr(cache, '_bracket_last_attempt_ts', 0)
+                if _last_attempt and _t_bracket.time() - _last_attempt > 60:
+                    cache._bracket_attempt_count = 0  # Reset for retry
+                    print(f"[RISK] 🔄 Bracket retry after 60s cooldown for {position.broker}_{position.symbol}_{position.asset}")
+                    # Will re-enter else branch on next monitoring cycle with count=0
+                else:
+                    if _bracket_attempts == 3:
+                        print(f"[RISK] ⚠️ Bracket placement failed 3 times for {position.symbol} on {position.broker} — entering 60s retry cooldown")
+                        cache._bracket_attempt_count = _bracket_attempts + 1  # Prevent re-logging
+                    return  # Still in cooldown
             else:
                 _exit_mode = channel_settings.exit_strategy_mode
                 _has_levels = (channel_settings.stop_loss_pct > 0 or channel_settings.profit_target_1_pct > 0)
                 if _has_levels:
                     try:
                         cache._bracket_attempt_count = _bracket_attempts + 1
+                        import time as _t_bracket2
+                        cache._bracket_last_attempt_ts = _t_bracket2.time()
                         await self._place_initial_broker_bracket(position, cache, channel_settings)
                         if cache.broker_orders_placed:
                             cache._bracket_placed_qty = int(position.quantity)
@@ -4807,6 +4818,10 @@ class RiskManager:
             _staleness_change_age = change_age
             session = self._get_market_session()
             _effective_threshold = self._STALENESS_EXIT_BLOCK_THRESHOLD
+            # Low-volume stocks (no price change in 10s+) get a longer staleness threshold
+            _tick_gap = change_age  # change_age = time since last price change
+            if _tick_gap >= 10:
+                _effective_threshold = min(30, _tick_gap * 1.5)
             if session == 'extended':
                 _effective_threshold = 300
             if change_age > _effective_threshold:

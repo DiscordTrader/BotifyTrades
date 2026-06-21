@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 class IBKRQuoteData:
     __slots__ = ('symbol', 'contract_id', 'bid', 'ask', 'last', 'volume',
                  'high', 'low', 'open_price', 'close_price', 'change',
-                 'change_pct', 'timestamp', 'source')
+                 'change_pct', 'timestamp', 'source',
+                 'delta', 'gamma', 'theta', 'vega', 'implied_vol')
 
     def __init__(self, symbol: str = '', contract_id: int = 0):
         self.symbol = symbol
@@ -42,6 +43,11 @@ class IBKRQuoteData:
         self.change_pct = 0.0
         self.timestamp = 0.0
         self.source = 'stream'
+        self.delta = 0.0
+        self.gamma = 0.0
+        self.theta = 0.0
+        self.vega = 0.0
+        self.implied_vol = 0.0
 
 
 class IBKRDataHub:
@@ -81,6 +87,7 @@ class IBKRDataHub:
         self._streaming_active = False
         self._last_quote_ts: float = 0
         self._subscribed_symbols: Set[str] = set()
+        self._subscribed_lock = threading.Lock()
         self._subscribed_conids: Set[int] = set()
         self._pending_subscriptions: Set[str] = set()
 
@@ -222,8 +229,9 @@ class IBKRDataHub:
             elif errorCode == 1101:
                 print(f"[IBKR_HUB] ✓ TWS connectivity restored — data lost (error 1101). Will re-subscribe.")
                 self._streaming_active = True
-                old_symbols = set(self._subscribed_symbols)
-                self._subscribed_symbols.clear()
+                with self._subscribed_lock:
+                    old_symbols = set(self._subscribed_symbols)
+                    self._subscribed_symbols.clear()
                 self._subscribed_conids.clear()
                 for sym in old_symbols:
                     self._pending_subscriptions.add(sym)
@@ -255,15 +263,18 @@ class IBKRDataHub:
                     logger.warning(f"[IBKR_HUB] ⚠️ Market data denied for {symbol} (error {errorCode}) — requesting delayed data and retrying")
                     try:
                         self._ib.reqMarketDataType(4)
-                        self._subscribed_symbols.discard(symbol)
+                        with self._subscribed_lock:
+                            self._subscribed_symbols.discard(symbol)
                         self._pending_subscriptions.add(symbol)
                     except Exception as e:
                         logger.warning(f"[IBKR_HUB] Delayed data retry failed for {symbol}: {e}")
                         self._subscribe_fail_cache[symbol] = time.time() + 3600
-                        self._subscribed_symbols.discard(symbol)
+                        with self._subscribed_lock:
+                            self._subscribed_symbols.discard(symbol)
                 else:
                     self._subscribe_fail_cache[symbol] = time.time() + 3600
-                    self._subscribed_symbols.discard(symbol)
+                    with self._subscribed_lock:
+                        self._subscribed_symbols.discard(symbol)
         elif errorCode in (2104, 2106):
             # Farm connection OK — informational
             if errorCode == 2104:
@@ -409,8 +420,9 @@ class IBKRDataHub:
                 for q in self._quotes.values():
                     q.timestamp = 0
 
-            old_symbols = set(self._subscribed_symbols)
-            self._subscribed_symbols.clear()
+            with self._subscribed_lock:
+                old_symbols = set(self._subscribed_symbols)
+                self._subscribed_symbols.clear()
             self._subscribed_conids.clear()
 
             resubscribed = 0
@@ -421,7 +433,8 @@ class IBKRDataHub:
                     try:
                         _gtl = '233,426' if getattr(contract, 'secType', '') == 'OPT' else ''
                         self._ib.reqMktData(contract, _gtl, False, False)
-                        self._subscribed_symbols.add(sym)
+                        with self._subscribed_lock:
+                            self._subscribed_symbols.add(sym)
                         con_id = contract.conId if contract else 0
                         if con_id:
                             self._subscribed_conids.add(con_id)
@@ -515,14 +528,26 @@ class IBKRDataHub:
                 if ticker.low is not None and ticker.low > 0:
                     q.low = float(ticker.low)
                 # Mark price via modelGreeks (tick 233) — fills bid/ask gap for illiquid options
-                if not has_real_data and q.last == 0:
-                    try:
-                        _mg = getattr(ticker, 'modelGreeks', None)
-                        if _mg and getattr(_mg, 'optPrice', None) and _mg.optPrice > 0:
-                            q.last = float(_mg.optPrice)
-                            has_real_data = True
-                    except Exception:
-                        pass
+                try:
+                    _mg = getattr(ticker, 'modelGreeks', None)
+                    if _mg:
+                        if not has_real_data and q.last == 0:
+                            if getattr(_mg, 'optPrice', None) and _mg.optPrice > 0:
+                                q.last = float(_mg.optPrice)
+                                has_real_data = True
+                        # GAP-1: Extract greeks
+                        if _mg.delta is not None:
+                            q.delta = float(_mg.delta)
+                        if _mg.gamma is not None:
+                            q.gamma = float(_mg.gamma)
+                        if _mg.theta is not None:
+                            q.theta = float(_mg.theta)
+                        if _mg.vega is not None:
+                            q.vega = float(_mg.vega)
+                        if getattr(_mg, 'impliedVol', None) is not None and _mg.impliedVol > 0:
+                            q.implied_vol = float(_mg.impliedVol)
+                except Exception:
+                    pass
                 if has_real_data or is_new:
                     q.timestamp = now
                     updated_symbols.append(symbol)
@@ -695,7 +720,12 @@ class IBKRDataHub:
                 'high': q.high,
                 'low': q.low,
                 'timestamp': q.timestamp,
-                'source': q.source
+                'source': q.source,
+                'delta': q.delta,
+                'gamma': q.gamma,
+                'theta': q.theta,
+                'vega': q.vega,
+                'implied_vol': q.implied_vol,
             }
 
     def get_recent_executions(self, limit: int = 50) -> List[Dict[str, Any]]:
@@ -776,23 +806,29 @@ class IBKRDataHub:
             return False
 
     def subscribe_symbol(self, symbol: str, contract=None):
-        if symbol in self._subscribed_symbols:
-            return
+        with self._subscribed_lock:
+            if symbol in self._subscribed_symbols:
+                return
         # Option keys (e.g. "AAPL_20240120_150_C") must not be auto-queued for qualification —
         # their contract arrives via _refresh_positions_from_ib. If no contract is provided,
         # we must not mark them as subscribed since reqMktData will never fire for them.
         if '_' in symbol and contract is None:
+            # GAP-3: Queue for subscription when contract becomes available (via portfolio refresh)
+            self._pending_subscriptions.add(symbol)
+            print(f"[IBKR_HUB] ⚠️ Option {symbol} queued for subscription (no contract yet — will subscribe on next portfolio refresh)")
             return
         if not self._ib or not self._streaming_active:
             self._pending_subscriptions.add(symbol)
             return
-        self._subscribed_symbols.add(symbol)
+        with self._subscribed_lock:
+            self._subscribed_symbols.add(symbol)
         if self._loop and not self._loop.is_closed():
             asyncio.run_coroutine_threadsafe(
                 self._subscribe_on_loop(symbol, contract), self._loop
             )
         else:
-            self._subscribed_symbols.discard(symbol)
+            with self._subscribed_lock:
+                self._subscribed_symbols.discard(symbol)
             self._pending_subscriptions.add(symbol)
 
     async def _subscribe_on_loop(self, symbol: str, contract=None):
@@ -809,7 +845,8 @@ class IBKRDataHub:
         # Option keys contain '_' — they must have their contract registered by
         # _refresh_positions_from_ib before subscription. Auto-qualify only for plain tickers.
         if '_' in symbol:
-            self._subscribed_symbols.discard(symbol)
+            with self._subscribed_lock:
+                self._subscribed_symbols.discard(symbol)
             logger.debug(f"[IBKR_HUB] Skipping auto-qualify for option key '{symbol}' — contract must come from positions")
             return
         # Prevent concurrent qualifications of the same symbol — two callers racing through
@@ -820,11 +857,13 @@ class IBKRDataHub:
         try:
             with self._mktdata_denied_lock:
                 if symbol in self._mktdata_denied_symbols:
-                    self._subscribed_symbols.discard(symbol)
+                    with self._subscribed_lock:
+                        self._subscribed_symbols.discard(symbol)
                     return
             fail_ts = self._subscribe_fail_cache.get(symbol, 0)
             if fail_ts and _time.time() - fail_ts < self._SUBSCRIBE_FAIL_BACKOFF:
-                self._subscribed_symbols.discard(symbol)
+                with self._subscribed_lock:
+                    self._subscribed_symbols.discard(symbol)
                 return
             try:
                 from ib_insync import Stock
@@ -835,7 +874,8 @@ class IBKRDataHub:
                 logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} (conId={auto_contract.conId})")
             except Exception as e:
                 self._subscribe_fail_cache[symbol] = _time.time()
-                self._subscribed_symbols.discard(symbol)
+                with self._subscribed_lock:
+                    self._subscribed_symbols.discard(symbol)
                 if 'event loop' in str(e).lower():
                     pass
                 else:
@@ -846,7 +886,8 @@ class IBKRDataHub:
 
     def _start_market_data(self, symbol: str, contract):
         if not self._ib:
-            self._subscribed_symbols.discard(symbol)
+            with self._subscribed_lock:
+                self._subscribed_symbols.discard(symbol)
             return
         try:
             con_id = contract.conId if contract else 0
@@ -856,7 +897,8 @@ class IBKRDataHub:
             with self._contract_lock:
                 if con_id in self._subscribed_conids:
                     return
-                self._subscribed_symbols.add(symbol)
+                with self._subscribed_lock:
+                    self._subscribed_symbols.add(symbol)
                 self._subscribed_conids.add(con_id)
                 self._conid_to_symbol[con_id] = symbol
                 self._symbol_to_contract[symbol] = contract
@@ -876,20 +918,23 @@ class IBKRDataHub:
                 except Exception as _tbt_e:
                     print(f"[IBKR_HUB] ⚠️ reqTickByTickData failed for {symbol}: {_tbt_e}")
         except Exception as e:
-            self._subscribed_symbols.discard(symbol)
+            with self._subscribed_lock:
+                self._subscribed_symbols.discard(symbol)
             print(f"[IBKR_HUB] Failed to subscribe {symbol}: {e}")
 
     def unsubscribe_symbol(self, symbol: str):
         with self._contract_lock:
             contract = self._symbol_to_contract.pop(symbol, None)
         if not contract:
-            self._subscribed_symbols.discard(symbol)
+            with self._subscribed_lock:
+                self._subscribed_symbols.discard(symbol)
             return
         con_id = contract.conId if contract else 0
         self._subscribed_conids.discard(con_id)
         with self._contract_lock:
             self._conid_to_symbol.pop(con_id, None)
-        self._subscribed_symbols.discard(symbol)
+        with self._subscribed_lock:
+            self._subscribed_symbols.discard(symbol)
         tbt_ticker = self._tick_by_tick_tickers.pop(con_id, None)
         if tbt_ticker is not None:
             self._tick_by_tick_count = max(0, self._tick_by_tick_count - 1)
@@ -913,7 +958,8 @@ class IBKRDataHub:
             contracts = list(self._symbol_to_contract.values())
             self._symbol_to_contract.clear()
             self._conid_to_symbol.clear()
-        self._subscribed_symbols.clear()
+        with self._subscribed_lock:
+            self._subscribed_symbols.clear()
         self._subscribed_conids.clear()
         tbt_tickers = list(self._tick_by_tick_tickers.values())
         self._tick_by_tick_tickers.clear()
@@ -937,8 +983,9 @@ class IBKRDataHub:
     def _sync_subscriptions(self, current_symbols: Set[str]):
         if not self._ib or not self._streaming_active:
             return
-        new_symbols = current_symbols - self._subscribed_symbols
-        stale_symbols = self._subscribed_symbols - current_symbols
+        with self._subscribed_lock:
+            new_symbols = current_symbols - self._subscribed_symbols
+            stale_symbols = self._subscribed_symbols - current_symbols
 
         for sym in stale_symbols:
             self.unsubscribe_symbol(sym)
@@ -1016,7 +1063,9 @@ class IBKRDataHub:
             for p in parsed:
                 sym_key = p.get('raw_symbol', p['symbol'])
                 contract = p.get('contract')
-                if contract and sym_key not in self._subscribed_symbols:
+                with self._subscribed_lock:
+                    already_subscribed = sym_key in self._subscribed_symbols
+                if contract and not already_subscribed:
                     self._start_market_data(sym_key, contract)
 
         except Exception as e:
@@ -1043,7 +1092,8 @@ class IBKRDataHub:
                 await asyncio.sleep(interval)
 
                 is_connected = self._ib and self._ib.isConnected()
-                has_subs = len(self._subscribed_symbols) > 0
+                with self._subscribed_lock:
+                    has_subs = len(self._subscribed_symbols) > 0
                 quote_age = (time.time() - self._last_quote_ts) if self._last_quote_ts > 0 else 0
 
                 if not is_connected and self._broker:
@@ -1058,7 +1108,8 @@ class IBKRDataHub:
                 if is_connected and has_subs and self._last_quote_ts > 0 and quote_age > 30:
                     self._consecutive_stale_checks += 1
                     if self._consecutive_stale_checks >= self._STALE_CHECK_THRESHOLD:
-                        print(f"[IBKR_HUB] ⚠️ Price data stale for {quote_age:.0f}s with {len(self._subscribed_symbols)} active subscriptions — connection may be zombie, attempting reconnect")
+                        with self._subscribed_lock:
+                            print(f"[IBKR_HUB] ⚠️ Price data stale for {quote_age:.0f}s with {len(self._subscribed_symbols)} active subscriptions — connection may be zombie, attempting reconnect")
                         reconnected = await self._attempt_reconnect()
                         if reconnected:
                             continue
@@ -1074,14 +1125,17 @@ class IBKRDataHub:
                     now_dead_check = time.time()
                     if self._per_symbol_last_tick:
                         dead_symbols = []
-                        for sym in list(self._subscribed_symbols):
+                        with self._subscribed_lock:
+                            check_syms = list(self._subscribed_symbols)
+                        for sym in check_syms:
                             last_tick = self._per_symbol_last_tick.get(sym, 0)
                             if last_tick > 0 and (now_dead_check - last_tick) > self._PER_SYMBOL_DEAD_THRESHOLD:
                                 dead_symbols.append(sym)
                         if dead_symbols:
                             print(f"[IBKR_HUB] ⚠️ Dead subscriptions detected ({len(dead_symbols)} symbols, >{self._PER_SYMBOL_DEAD_THRESHOLD:.0f}s no ticks): {dead_symbols[:5]}")
                             for sym in dead_symbols:
-                                self._subscribed_symbols.discard(sym)
+                                with self._subscribed_lock:
+                                    self._subscribed_symbols.discard(sym)
                                 with self._contract_lock:
                                     contract = self._symbol_to_contract.get(sym)
                                 if contract:
@@ -1105,7 +1159,8 @@ class IBKRDataHub:
                             # guard prevents a duplicate reqMktData from running concurrently
                             # with subscribe_symbol's own _qualify_and_subscribe call.
                             self._pending_subscriptions.discard(sym)
-                            self._subscribed_symbols.add(sym)
+                            with self._subscribed_lock:
+                                self._subscribed_symbols.add(sym)
                             await self._qualify_and_subscribe(sym)
             except asyncio.CancelledError:
                 break

@@ -187,11 +187,16 @@ class TestExec3STCAutoAdjust:
         broker.name = 'test'
         mock_ib = MagicMock()
         mock_ib.isConnected.return_value = True
-        mock_ib.qualifyContractsAsync = AsyncMock()
+        # qualifyContractsAsync must succeed (set conId on the contract)
+        async def _qualify(contract):
+            contract.conId = 12345
+            return [contract]
+        mock_ib.qualifyContractsAsync = _qualify
         # placeOrder raises insufficient funds
         mock_ib.placeOrder.side_effect = Exception("Order rejected: insufficient equity")
         # Positions show 50 shares held
         mock_pos = MagicMock()
+        mock_pos.contract = MagicMock()
         mock_pos.contract.symbol = 'AAPL'
         mock_pos.position = 50
         mock_ib.positions.return_value = [mock_pos]

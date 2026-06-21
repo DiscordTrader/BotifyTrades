@@ -369,6 +369,9 @@ class UnifiedPriceHub:
     def get_quote_price(self, symbol: str, allow_stale: bool = False) -> Optional[float]:
         quote = self.get_quote(symbol)
         if quote and quote.last > 0:
+            # When allow_stale=False, check freshness
+            if not allow_stale and hasattr(quote, 'age_seconds') and quote.age_seconds > 30:
+                return None
             return quote.last
         return None
 

@@ -19037,6 +19037,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _option_kwargs['_signal_price_fallback'] = _signal_price_fallback
                         if _skip_retry:
                             _option_kwargs['_skip_internal_retry'] = True
+                    _tif = signal.get('tif') or signal.get('time_in_force')
+                    if _tif:
+                        _option_kwargs['tif'] = _tif
                     result = await broker_instance.place_option_order(**_option_kwargs)
                 elif broker_upper in india_brokers:
                     # Indian brokers (Zerodha, Upstox, DhanQ) use standardized interface
@@ -19366,6 +19369,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _stk_kwargs['channel_id'] = signal.get('channel_id')
                     if signal.get('_sizing_mode') in ('start_of_day', 'pre_market'):
                         _stk_kwargs['_sizing_mode'] = signal['_sizing_mode']
+                    _tif = signal.get('tif') or signal.get('time_in_force')
+                    if _tif:
+                        _stk_kwargs['tif'] = _tif
                     if 'WEBULL' in broker_upper and _stock_signal_fallback:
                         _stk_kwargs['_signal_price_fallback'] = _stock_signal_fallback
                     result = await broker_instance.place_stock_order(**_stk_kwargs)

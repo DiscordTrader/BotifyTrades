@@ -2926,6 +2926,8 @@ class BrokerSyncService:
                     normalized_broker = 'ALPACA_PAPER'
                 elif broker_name.upper() == 'ALPACA_LIVE':
                     normalized_broker = 'ALPACA_LIVE'
+                elif 'IBKR' in broker_name.upper():
+                    normalized_broker = 'IBKR'
                 
                 trade_data = {
                     'symbol': symbol,
@@ -3198,7 +3200,7 @@ class BrokerSyncService:
                                 _cur = _conn.cursor()
                                 _cur.execute(
                                     "SELECT broker_order_id, symbol FROM pending_order_metadata "
-                                    "WHERE broker='IBKR' AND status='PENDING'"
+                                    "WHERE broker LIKE 'IBKR%' AND status='PENDING'"
                                 )
                                 for _row in _cur.fetchall():
                                     _oid = str(_row['broker_order_id'])
@@ -3208,13 +3210,13 @@ class BrokerSyncService:
                                     update_pending_order_status('IBKR', _oid, 'CANCELLED')
                                     _cur.execute(
                                         "UPDATE execution_lots SET status='CANCELLED', remaining_qty=0 "
-                                        "WHERE broker='IBKR' AND broker_order_id=? AND status='OPEN'",
+                                        "WHERE broker LIKE 'IBKR%' AND broker_order_id=? AND status='OPEN'",
                                         (_oid,)
                                     )
                                     _cur.execute(
                                         "UPDATE trades SET status='CANCELLED', "
                                         "close_reason='Order cancelled or expired at broker' "
-                                        "WHERE broker='IBKR' AND order_id=? AND status='PENDING'",
+                                        "WHERE broker LIKE 'IBKR%' AND order_id=? AND status='PENDING'",
                                         (_oid,)
                                     )
                                 _conn.commit()
