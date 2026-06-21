@@ -703,9 +703,10 @@ class BrokerSyncService:
                 if hasattr(broker_instance, 'ib') and broker_instance.ib.isConnected():
                     try:
                         ib = broker_instance.ib
-                        raw_positions = await asyncio.to_thread(ib.positions)
+                        # Use ib.portfolio() first — it includes marketPrice for P&L
+                        raw_positions = await asyncio.to_thread(ib.portfolio)
                         if not raw_positions:
-                            raw_positions = await asyncio.to_thread(ib.portfolio)
+                            raw_positions = await asyncio.to_thread(ib.positions)
 
                         for pos in raw_positions:
                             contract = pos.contract
@@ -723,12 +724,17 @@ class BrokerSyncService:
                                 else:
                                     expiry = expiry_raw
 
+                                _mkt_price = float(getattr(pos, 'marketPrice', 0) or 0)
+                                _IB_SENTINEL = 1.7976931348623157e+308
+                                if _mkt_price <= 0 or _mkt_price >= _IB_SENTINEL:
+                                    _mkt_price = 0
+                                _unrealized = float(getattr(pos, 'unrealizedPNL', 0) or 0)
                                 result['positions'].append({
                                     'symbol': symbol,
                                     'quantity': quantity,
                                     'avg_price': avg_cost / 100 if avg_cost > 0 else 0,
-                                    'current_price': 0,
-                                    'unrealized_pnl': 0,
+                                    'current_price': _mkt_price,
+                                    'unrealized_pnl': _unrealized,
                                     'position_id': contract.conId,
                                     'asset_type': 'option',
                                     'strike': contract.strike,
@@ -736,12 +742,17 @@ class BrokerSyncService:
                                     'call_put': contract.right
                                 })
                             else:
+                                _mkt_price = float(getattr(pos, 'marketPrice', 0) or 0)
+                                _IB_SENTINEL = 1.7976931348623157e+308
+                                if _mkt_price <= 0 or _mkt_price >= _IB_SENTINEL:
+                                    _mkt_price = 0
+                                _unrealized = float(getattr(pos, 'unrealizedPNL', 0) or 0)
                                 result['positions'].append({
                                     'symbol': symbol,
                                     'quantity': quantity,
                                     'avg_price': avg_cost,
-                                    'current_price': 0,
-                                    'unrealized_pnl': 0,
+                                    'current_price': _mkt_price,
+                                    'unrealized_pnl': _unrealized,
                                     'position_id': contract.conId,
                                     'asset_type': 'stock'
                                 })

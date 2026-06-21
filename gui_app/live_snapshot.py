@@ -608,7 +608,20 @@ def _fetch_schwab(bot) -> List[Dict]:
         return []
 
 
+# Cache last known good prices to prevent $0 flicker when IB data is between refreshes.
+# Keyed by position_id (conId). Thread-safe — only accessed from snapshot daemon thread
+# or ThreadPoolExecutor workers under _broker_position_cache_lock.
+_ibkr_last_good_prices: Dict[str, float] = {}
+_ibkr_last_good_prices_lock = threading.Lock()
+
 def _fetch_ibkr(bot) -> List[Dict]:
+    """Fetch IBKR positions — hub-first architecture.
+    
+    Priority chain (eliminates the $0 flicker):
+      1. IBKRDataHub cached positions + streaming quotes (zero API calls, sub-ms)
+      2. Fallback: get_positions_detailed() via asyncio bridge (legacy path)
+      3. Last-good-price cache (prevents any $0 from reaching the dashboard)
+    """
     try:
         ibkr_broker = None
         if hasattr(bot, 'ibkr_broker') and bot.ibkr_broker:
@@ -616,7 +629,93 @@ def _fetch_ibkr(bot) -> List[Dict]:
         elif hasattr(bot, 'broker_manager') and hasattr(bot.broker_manager, 'ibkr_broker'):
             ibkr_broker = bot.broker_manager.ibkr_broker
 
-        if not ibkr_broker or not hasattr(ibkr_broker, 'get_positions_detailed'):
+        if not ibkr_broker:
+            return []
+
+        # ── Path 1: IBKRDataHub (streaming, zero API calls) ──────────────
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            ibkr_hub = get_ibkr_data_hub()
+            if ibkr_hub and ibkr_hub.is_streaming():
+                hub_positions = ibkr_hub.get_positions(max_age_seconds=30)
+                if hub_positions and len(hub_positions) > 0:
+                    _IB_SENTINEL = 1.7976931348623157e+308
+                    positions = []
+                    for p in hub_positions:
+                        symbol = p.get('symbol', '')
+                        asset = p.get('asset', 'stock')
+                        qty = float(p.get('quantity', 0))
+                        if qty == 0:
+                            continue
+                        avg_cost = float(p.get('avg_cost', 0))
+                        pos_id = str(p.get('position_id', f"IBKR_{symbol}"))
+                        raw_sym = p.get('raw_symbol', '')
+
+                        # Price waterfall: streaming quote → portfolio price → last-good cache
+                        cur_price = 0.0
+
+                        # 1) Streaming quote from reqMktData (freshest, sub-ms)
+                        _lookup = raw_sym if asset == 'option' and raw_sym else symbol
+                        _q = ibkr_hub.get_quote(_lookup)
+                        if _q and _q.last and _q.last > 0 and _q.last < _IB_SENTINEL:
+                            cur_price = float(_q.last)
+                        elif _q and _q.bid and _q.ask and _q.bid > 0 and _q.ask > 0:
+                            cur_price = round((float(_q.bid) + float(_q.ask)) / 2, 4)
+
+                        # 2) Portfolio market price (from ib.portfolio event)
+                        if cur_price <= 0:
+                            mp = float(p.get('market_price', 0) or p.get('current_price', 0) or 0)
+                            if 0 < mp < _IB_SENTINEL:
+                                cur_price = mp
+
+                        # 3) Allow-stale hub price (up to 300s old — better than $0)
+                        if cur_price <= 0:
+                            sp = ibkr_hub.get_quote_price(_lookup, allow_stale=True)
+                            if sp and sp > 0 and sp < _IB_SENTINEL:
+                                cur_price = sp
+
+                        # 4) Last-good-price cache (absolute backstop against $0)
+                        with _ibkr_last_good_prices_lock:
+                            if cur_price > 0:
+                                _ibkr_last_good_prices[pos_id] = cur_price
+                            elif pos_id in _ibkr_last_good_prices:
+                                cur_price = _ibkr_last_good_prices[pos_id]
+
+                        # Compute P&L
+                        unrealized = float(p.get('unrealized_pnl', 0) or 0)
+                        if unrealized == 0 and cur_price > 0 and avg_cost > 0:
+                            unrealized = (cur_price - avg_cost) * qty
+                            if asset == 'option':
+                                unrealized *= 100
+                        pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 and cur_price > 0 else 0.0
+
+                        positions.append(_make_position(
+                            pos_id=pos_id,
+                            symbol=symbol,
+                            asset_type='option' if asset == 'option' else 'stock',
+                            strike=p.get('strike'),
+                            expiry=p.get('expiry'),
+                            call_put=p.get('direction', ''),
+                            quantity=qty,
+                            entry_price=avg_cost,
+                            current_price=cur_price,
+                            last=cur_price,
+                            bid=float(_q.bid) if _q and _q.bid else 0,
+                            ask=float(_q.ask) if _q and _q.ask else 0,
+                            mid=round((float(_q.bid) + float(_q.ask)) / 2, 4) if _q and _q.bid and _q.ask and _q.bid > 0 and _q.ask > 0 else 0,
+                            unrealized_pnl=unrealized,
+                            pnl_pct=pnl_pct,
+                            broker='IBKR',
+                            source='live_brokerage',
+                            raw_symbol=raw_sym,
+                        ))
+                    if positions:
+                        return positions
+        except Exception as hub_err:
+            _log(f"IBKR hub path error (falling back to REST): {hub_err}")
+
+        # ── Path 2: Legacy get_positions_detailed (fallback) ──────────────
+        if not hasattr(ibkr_broker, 'get_positions_detailed'):
             return []
         if not hasattr(bot, 'loop') or bot.loop is None or bot.loop.is_closed():
             return []
@@ -632,12 +731,25 @@ def _fetch_ibkr(bot) -> List[Dict]:
             qty = float(pos.get('quantity', 0))
             avg_cost = float(pos.get('avg_cost', 0))
             cur_price = float(pos.get('current_price', 0))
+            pos_id = pos.get('position_id', f"IBKR_{pos.get('symbol', '')}")
+
+            # Last-good-price guard
+            with _ibkr_last_good_prices_lock:
+                if cur_price > 0:
+                    _ibkr_last_good_prices[pos_id] = cur_price
+                elif pos_id in _ibkr_last_good_prices:
+                    cur_price = _ibkr_last_good_prices[pos_id]
+
             unrealized = float(pos.get('unrealized_pl', 0))
-            pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
+            if cur_price > 0 and avg_cost > 0 and unrealized == 0:
+                unrealized = (cur_price - avg_cost) * qty
+                if pos.get('asset') == 'option':
+                    unrealized *= 100
+            pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 and cur_price > 0 else 0.0
             asset = pos.get('asset', 'stock')
 
             positions.append(_make_position(
-                pos_id=pos.get('position_id', f"IBKR_{pos.get('symbol', '')}"),
+                pos_id=pos_id,
                 symbol=pos.get('symbol', ''),
                 asset_type='option' if asset == 'option' else 'stock',
                 strike=pos.get('strike'),
@@ -651,6 +763,7 @@ def _fetch_ibkr(bot) -> List[Dict]:
                 pnl_pct=pnl_pct,
                 broker='IBKR',
                 source='live_brokerage',
+                raw_symbol=pos.get('raw_symbol', ''),
             ))
         return positions
     except Exception as e:
@@ -879,6 +992,15 @@ def _fetch_webull_official(bot) -> List[Dict]:
             expiry = pos.get('expiry_date')
             pos_id = f"WO_{sym}_{idx}" if not is_option else f"WO_{sym}_{strike}_{expiry}_{call_put}"
 
+            raw_symbol = ''
+            if is_option and sym and expiry and strike and call_put:
+                try:
+                    _exp = str(expiry).replace('-', '')[2:]  # '2025-06-20' -> '250620'
+                    _strike_int = int(round(float(strike) * 1000))
+                    raw_symbol = f"{sym.upper()}{_exp}{call_put}{_strike_int:08d}"
+                except (ValueError, TypeError):
+                    raw_symbol = ''
+
             positions.append(_make_position(
                 pos_id=pos_id,
                 symbol=sym,
@@ -894,6 +1016,7 @@ def _fetch_webull_official(bot) -> List[Dict]:
                 pnl_pct=pnl_pct,
                 broker=broker_label,
                 source='live_brokerage',
+                raw_symbol=raw_symbol,
             ))
 
         with _wo_cache_lock:
@@ -1171,7 +1294,11 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
 
 
 def _apply_streaming_quote(pos, quote, streaming_meta):
-    if not quote or quote.get('last', 0) <= 0:
+    if not quote:
+        return
+    last = quote.get('last', 0)
+    # Enterprise guard: NEVER overlay a zero/negative price — it would clobber a valid cached price
+    if not last or last <= 0:
         return
     pos['current_price'] = quote['last']
     pos['last'] = quote['last']
@@ -1199,12 +1326,14 @@ def _apply_streaming_quote(pos, quote, streaming_meta):
 
 
 def _overlay_streaming_prices(positions: List[Dict]) -> Dict[str, Any]:
-    streaming_meta = {'webull': False, 'schwab': False, 'sources': {}}
+    streaming_meta = {'webull': False, 'schwab': False, 'ibkr': False, 'sources': {}}
 
     wb_hub = None
     wb_streaming = False
     sch_hub = None
     sch_streaming = False
+    ibkr_hub = None
+    ibkr_streaming = False
 
     try:
         from src.services.webull_data_hub import get_webull_data_hub
@@ -1221,6 +1350,15 @@ def _overlay_streaming_prices(positions: List[Dict]) -> Dict[str, Any]:
         sch_streaming = sch_hub.is_streaming()
         if sch_streaming:
             streaming_meta['schwab'] = True
+    except Exception:
+        pass
+
+    try:
+        from src.services.ibkr_data_hub import get_ibkr_data_hub
+        ibkr_hub = get_ibkr_data_hub()
+        ibkr_streaming = ibkr_hub.is_streaming()
+        if ibkr_streaming:
+            streaming_meta['ibkr'] = True
     except Exception:
         pass
 
@@ -1255,6 +1393,28 @@ def _overlay_streaming_prices(positions: List[Dict]) -> Dict[str, Any]:
                     price = sch_hub.get_quote_price(symbol)
                     if price and price > 0:
                         quote = {'last': price, 'bid': 0, 'ask': 0}
+        elif 'IBKR' in broker and ibkr_hub:
+            # IBKR streaming overlay — IBKRDataHub caches reqMktData ticks
+            if asset_type == 'option':
+                raw_sym = pos.get('raw_symbol', '')
+                if raw_sym and ibkr_streaming:
+                    _q = ibkr_hub.get_quote(raw_sym)
+                    if _q and _q.last and _q.last > 0:
+                        quote = {'last': _q.last, 'bid': _q.bid or 0, 'ask': _q.ask or 0, 'timestamp': _q.timestamp}
+                if not quote:
+                    _q = ibkr_hub.get_quote(symbol)
+                    if _q and _q.last and _q.last > 0:
+                        quote = {'last': _q.last, 'bid': _q.bid or 0, 'ask': _q.ask or 0, 'timestamp': _q.timestamp}
+            else:
+                if ibkr_streaming:
+                    _q = ibkr_hub.get_quote(symbol)
+                    if _q and _q.last and _q.last > 0:
+                        quote = {'last': _q.last, 'bid': _q.bid or 0, 'ask': _q.ask or 0, 'timestamp': _q.timestamp}
+                if not quote or quote.get('last', 0) <= 0:
+                    # Fallback: hub quote price even if streaming flag is stale
+                    price = ibkr_hub.get_quote_price(symbol, allow_stale=True)
+                    if price and price > 0:
+                        quote = {'last': price, 'bid': 0, 'ask': 0}
         elif 'TRADING212' in broker:
             if wb_streaming:
                 quote = wb_hub.get_quote_detailed(symbol)
@@ -1266,16 +1426,64 @@ def _overlay_streaming_prices(positions: List[Dict]) -> Dict[str, Any]:
     return streaming_meta
 
 
+# Global last-known-good prices — prevents $0 from ever reaching the API/frontend.
+# Keyed by position id. Updated every snapshot cycle.
+_last_good_prices_global: Dict[str, Dict[str, float]] = {}
+_last_good_prices_global_lock = threading.Lock()
+
 def _build_prices(positions: List[Dict]) -> Dict:
+    """Build prices dict for API response with zero-price suppression.
+    
+    Enterprise rule: a position that had a real price NEVER drops to $0.
+    If current cycle returns 0, use the last known good price.
+    """
     prices = {}
-    for pos in positions:
-        pid = pos.get('id')
-        if pid is not None:
-            prices[str(pid)] = {
-                'bid': pos.get('bid', 0),
-                'ask': pos.get('ask', 0),
-                'mid': pos.get('mid', 0),
-                'last': pos.get('last', pos.get('current_price', 0)),
+    # SNAP-7: Single lock acquisition for entire loop — not per-position
+    with _last_good_prices_global_lock:
+        # Evict stale entries for positions no longer in the current set (SNAP-5)
+        current_ids = {str(p.get('id')) for p in positions if p.get('id') is not None}
+        stale_keys = [k for k in _last_good_prices_global if k not in current_ids]
+        for k in stale_keys:
+            del _last_good_prices_global[k]
+
+        for pos in positions:
+            pid = pos.get('id')
+            if pid is None:
+                continue
+            pid_str = str(pid)
+            bid = pos.get('bid', 0)
+            ask = pos.get('ask', 0)
+            mid = pos.get('mid', 0)
+            last = pos.get('last', pos.get('current_price', 0))
+
+            # Zero-price suppression: use last known good price
+            prev = _last_good_prices_global.get(pid_str)
+            if last and last > 0:
+                _last_good_prices_global[pid_str] = {'bid': bid, 'ask': ask, 'mid': mid, 'last': last}
+            elif prev and prev.get('last', 0) > 0:
+                bid = prev.get('bid', bid)
+                ask = prev.get('ask', ask)
+                mid = prev.get('mid', mid)
+                last = prev['last']
+                pos['current_price'] = last
+                pos['last'] = last
+                pos['bid'] = bid
+                pos['ask'] = ask
+                pos['mid'] = mid
+                entry = pos.get('entry_price', 0)
+                qty = pos.get('quantity', 0)
+                if entry and entry > 0:
+                    pnl = (last - entry) * qty
+                    if pos.get('asset_type') == 'option':
+                        pnl *= 100
+                    pos['unrealized_pnl'] = round(pnl, 2)
+                    pos['pnl_pct'] = round(((last - entry) / entry) * 100, 2)
+
+            prices[pid_str] = {
+                'bid': bid,
+                'ask': ask,
+                'mid': mid,
+                'last': last,
             }
     return prices
 
@@ -1336,22 +1544,32 @@ def _refresh_snapshot(bot_instance, force_all: bool = False):
                     broker_name = future_map[f]
                     try:
                         result = f.result(timeout=10)
+                        # SNAP-10: Only update cache with empty result if broker had
+                        # positions before. An empty list from a successful fetch is valid
+                        # (no positions held). But fetchers return [] on exceptions too,
+                        # so we check: if we HAD positions and now get [], keep old cache
+                        # and mark as degraded — prevents positions vanishing on transient errors.
                         with _broker_position_cache_lock:
-                            _broker_position_cache[broker_name] = result
+                            prev = _broker_position_cache.get(broker_name, [])
+                            if result or not prev:
+                                _broker_position_cache[broker_name] = result
+                            # else: keep previous good data — fetcher returned [] but we had positions
                         with _broker_last_fetch_lock:
                             _broker_last_fetch[broker_name] = time.time()
+                        final_count = len(_broker_position_cache.get(broker_name, []))
                         broker_status[broker_name] = {
-                            'connected': len(result) > 0 or True,
+                            'connected': True,
                             'last_updated': time.time(),
-                            'error': None,
-                            'position_count': len(result),
+                            'error': None if result else 'fetch returned empty (using cached)',
+                            'position_count': final_count,
                         }
                     except Exception as e:
+                        # SNAP-10: Do NOT overwrite cache on error — keep previous positions
                         broker_status[broker_name] = {
                             'connected': False,
                             'last_updated': time.time(),
                             'error': str(e),
-                            'position_count': 0,
+                            'position_count': len(_broker_position_cache.get(broker_name, [])),
                         }
                         _log(f"{broker_name} future error: {e}")
 

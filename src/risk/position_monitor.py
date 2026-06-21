@@ -3588,23 +3588,54 @@ class RiskManager:
                         if hub_pos is not None and len(hub_pos) > 0:
                             broker_label = 'IBKR_LIVE' if not getattr(self.ibkr_broker, 'paper_trade', True) else 'IBKR_PAPER'
                             snapshots = []
+                            _IB_SENTINEL = 1.7976931348623157e+308
                             for p in hub_pos:
                                 _ibkr_asset = p.get('asset', 'stock')
                                 _ibkr_sym = p.get('symbol', '')
                                 if _ibkr_asset == 'stock' and (_ibkr_sym or '').upper() in self._INDEX_TO_CANONICAL:
                                     _ibkr_asset = 'option'
                                     print(f"[RISK] ✓ INDEX GUARD: Forced IBKR hub {_ibkr_sym} to option")
+                                # === GAP-15 FIX: Resolve best price at construction ===
+                                # Price waterfall: hub streaming → position dict → UPH → 0
+                                _raw = p.get('raw_symbol', p.get('symbol', ''))
+                                _price = None
+
+                                # 1) Hub streaming quote cache (reqMktData + portfolio seed)
+                                if _raw:
+                                    _price = ibkr_hub.get_quote_price(_raw, allow_stale=True)
+                                if not _price and _ibkr_sym:
+                                    _price = ibkr_hub.get_quote_price(_ibkr_sym, allow_stale=True)
+
+                                # 2) Position dict market_price (from ib.portfolio)
+                                if not _price:
+                                    _mp = float(p.get('market_price', 0) or p.get('current_price', 0) or 0)
+                                    if 0 < _mp < _IB_SENTINEL:
+                                        _price = _mp
+
+                                # 3) UPH cross-broker price (stocks only — option keys differ)
+                                if not _price and _ibkr_asset == 'stock':
+                                    try:
+                                        from src.services.unified_price_hub import get_unified_price_hub
+                                        _uph = get_unified_price_hub()
+                                        _price = _uph.get_quote_price(_ibkr_sym)
+                                    except Exception:
+                                        pass
+
+                                # Reject IB sentinel and negative prices
+                                if _price and (_price < 0 or _price >= _IB_SENTINEL):
+                                    _price = None
+
                                 snap = PositionSnapshot(
                                     symbol=_ibkr_sym,
                                     quantity=p.get('quantity', 0),
                                     avg_cost=p.get('avg_cost', 0),
-                                    current_price=0,
+                                    current_price=_price or 0,
                                     asset=_ibkr_asset,
                                     broker=broker_label,
                                     strike=p.get('strike', 0),
                                     expiry=p.get('expiry', ''),
                                     direction=p.get('direction', ''),
-                                    raw_symbol=p.get('raw_symbol', p.get('symbol', ''))
+                                    raw_symbol=_raw
                                 )
                                 snapshots.append(snap)
                             self._last_ibkr_positions = snapshots
@@ -3935,7 +3966,7 @@ class RiskManager:
                         symbol=normalize_index_symbol(symbol),
                         quantity=quantity,
                         avg_cost=avg_cost / 100 if avg_cost > 0 else 0,
-                        current_price=current_price / 100 if current_price > 0 else 0,
+                        current_price=current_price,
                         asset='option',
                         broker=broker_label,
                         strike=contract.strike,
@@ -4391,13 +4422,42 @@ class RiskManager:
                         print(f"[RISK] ⚠️ Auto-import error for {pos_key}: {e}")
         
         if not position.current_price or position.current_price <= 0:
-            if not hasattr(self, '_zero_price_logged'):
-                self._zero_price_logged = set()
-            if pos_key not in self._zero_price_logged:
-                self._zero_price_logged.add(pos_key)
-                print(f"[RISK] 🛡️ ZERO PRICE GUARD: {pos_key} has current_price=${position.current_price or 0} — "
-                      f"skipping ALL risk evaluation until valid price arrives (entry=${position.avg_cost:.2f})")
-            return
+            # === GAP-15: Last-resort price recovery before skipping ===
+            _recovered_price = None
+            if 'IBKR' in (position.broker or '').upper():
+                try:
+                    from src.services.ibkr_data_hub import get_ibkr_data_hub
+                    _hub = get_ibkr_data_hub()
+                    _lk = position.raw_symbol or position.symbol
+                    _recovered_price = _hub.get_quote_price(_lk, allow_stale=True)
+                    if not _recovered_price and position.symbol:
+                        _recovered_price = _hub.get_quote_price(position.symbol, allow_stale=True)
+                except Exception:
+                    pass
+            if not _recovered_price:
+                try:
+                    from src.services.unified_price_hub import get_unified_price_hub
+                    _uph = get_unified_price_hub()
+                    _recovered_price = _uph.get_quote_price(position.symbol)
+                except Exception:
+                    pass
+            if _recovered_price and _recovered_price > 0:
+                position.current_price = _recovered_price
+                if not hasattr(self, '_zero_price_recovered'):
+                    self._zero_price_recovered = set()
+                if pos_key not in self._zero_price_recovered:
+                    self._zero_price_recovered.add(pos_key)
+                    print(f"[RISK] 🔧 ZERO PRICE RECOVERED: {pos_key} was $0 → ${_recovered_price:.4f} "
+                          f"(resolved from hub/UPH at evaluation time)")
+                # Fall through to normal evaluation
+            else:
+                if not hasattr(self, '_zero_price_logged'):
+                    self._zero_price_logged = set()
+                if pos_key not in self._zero_price_logged:
+                    self._zero_price_logged.add(pos_key)
+                    print(f"[RISK] 🛡️ ZERO PRICE GUARD: {pos_key} has current_price=${position.current_price or 0} — "
+                          f"skipping ALL risk evaluation until valid price arrives (entry=${position.avg_cost:.2f})")
+                return
 
         self.cache.update_highest_price(pos_key, position.current_price, trade_id=trade_id)
 
@@ -4618,6 +4678,19 @@ class RiskManager:
                     self._enqueue_broker_op(pos_key, 'REPLACE_STOP_AFTER_PT', 10,
                         lambda _p=position, _c=cache, _sp=_sl_price: self._sync_stop_to_broker(_p, _c, _sp))
 
+
+        # Webull Official options: DAY TIF STOP_LOSS_LIMIT expires at market close.
+        # Re-place on new trading day if the position still has bracket mode enabled.
+        if (cache.broker_orders_placed and 'WEBULL_OFFICIAL' in (position.broker or '').upper()
+                and position.asset in ('option', 'options')
+                and getattr(cache, 'broker_sl_order_type', '') == 'STOP_LOSS_LIMIT'):
+            import datetime as _dt_replay
+            _today = _dt_replay.date.today().isoformat()
+            _placed_date = getattr(cache, 'broker_sl_placed_date', None)
+            if _placed_date and _placed_date < _today and not getattr(cache, '_sl_replay_today', None) == _today:
+                cache._sl_replay_today = _today
+                self._enqueue_broker_op(pos_key, 'DAY_TIF_REPLAY', 5,
+                    lambda _p=position, _c=cache, _cs=channel_settings: self._replace_expired_option_sl(_p, _c, _cs))
         # Check exit_strategy_mode - if 'signal', skip automated risk evaluation
         # 'signal' mode = follow trader exit signals only, no automated exits
         # 'risk' mode = use automated risk management only
@@ -4960,6 +5033,20 @@ class RiskManager:
         )
         if should_activate:
             self.cache.activate_trailing_stop(position.position_key, trade_id=trade_id)
+            # Webull Official stocks: switch from STOP_LOSS to native TRAILING_STOP_LOSS
+            # Native trailing survives bot crash — Webull manages it server-side.
+            _wo_broker = position.broker.upper() if hasattr(position, 'broker') else ''
+            _wo_is_option = position.asset in ('option', 'options') if hasattr(position, 'asset') else False
+            _wo_bbm = getattr(channel_settings, 'broker_bracket_mode', 'none') if channel_settings else 'none'
+            if ('WEBULL_OFFICIAL' in _wo_broker and not _wo_is_option
+                    and _wo_bbm != 'none' and getattr(channel_settings, 'allows_broker_sl', False)
+                    and trailing_pct > 0 and not getattr(cache, '_native_trailing_placed', False)):
+                _trail_amount = round(position.current_price * trailing_pct / 100, 2)
+                if _trail_amount > 0:
+                    pos_key = position.position_key
+                    self._enqueue_broker_op(pos_key, 'NATIVE_TRAIL', 8,
+                        lambda _p=position, _c=cache, _ta=_trail_amount: self._place_native_trailing_stop(
+                            _p, _c, _ta))
         if decision.should_exit:
             if _staleness_is_blocking:
                 _trail_stop = cache.highest_price * (1 - trailing_pct / 100) if cache is not None and cache.highest_price > 0 else 0
@@ -5938,7 +6025,7 @@ class RiskManager:
                         if _ibkr_oca_group:
                             sl_order.ocaGroup = _ibkr_oca_group
                             sl_order.ocaType = 2
-                        sl_trade = await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, contract, sl_order)
+                        sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
                         await asyncio.sleep(1)
                         if sl_trade and sl_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_stop_order_id = str(sl_trade.order.orderId)
@@ -5953,7 +6040,7 @@ class RiskManager:
                         if _ibkr_oca_group:
                             pt_order.ocaGroup = _ibkr_oca_group
                             pt_order.ocaType = 2
-                        pt_trade = await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, contract, pt_order)
+                        pt_trade = self.ibkr_broker.ib.placeOrder(contract, pt_order)
                         await asyncio.sleep(1)
                         if pt_trade and pt_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_pt_order_id = str(pt_trade.order.orderId)
@@ -6164,47 +6251,131 @@ class RiskManager:
 
             elif 'WEBULL_OFFICIAL' in broker_name and broker_instance:
                 try:
-                    if sl_price and sl_price > 0 and not is_option:
-                        _sl_price_r = round(sl_price, 4 if sl_price < 1.0 else 2)
-                        sl_result = await broker_instance.place_stop_order(
-                            symbol=symbol, quantity=qty, stop_price=_sl_price_r, side='sell'
-                        )
-                        if sl_result and sl_result.success and sl_result.order_id:
-                            cache.broker_stop_order_id = str(sl_result.order_id)
-                            print(f"[RISK] ✅ Broker SL placed: Webull Official stop #{sl_result.order_id} at ${sl_price:.2f}")
-                        else:
-                            msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
-                            print(f"[RISK] ⚠️ Webull Official SL order failed: {msg}")
-                    elif sl_price and sl_price > 0 and is_option:
-                        print(f"[RISK] ⚠️ Webull Official does not support stop orders for options — SL monitored locally")
+                    _allows_sl = getattr(channel_settings, 'allows_broker_sl', True)
+                    _allows_pt = getattr(channel_settings, 'allows_broker_pt', True)
+                    _has_both = (sl_price and sl_price > 0 and _allows_sl) and (pt1_price and pt1_price > 0 and pt1_qty > 0 and _allows_pt)
 
-                    if pt1_price and pt1_price > 0 and pt1_qty > 0:
+                    # ── OCO path: both SL + PT → linked OCO combo ─────────
+                    if _has_both:
+                        _sl_price_r = round(sl_price, 4 if sl_price < 1.0 else 2)
+                        _pt_price_r = round(pt1_price, 4 if pt1_price < 1.0 else 2)
+
+                        # Determine SL order type from channel setting
+                        _ch_sl_mode = getattr(channel_settings, 'sl_order_mode', 'limit')
+                        if is_option:
+                            _sl_type = 'STOP_LOSS_LIMIT'  # Options only support STOP_LOSS_LIMIT
+                        else:
+                            _sl_type = 'STOP_LOSS' if _ch_sl_mode == 'market' else 'STOP_LOSS_LIMIT'
+
+                        oco_result = await broker_instance.place_oco_bracket(
+                            symbol=position.symbol if is_option else symbol,
+                            quantity=qty,
+                            sl_price=_sl_price_r,
+                            pt_price=_pt_price_r,
+                            is_option=is_option,
+                            strike=position.strike if is_option else None,
+                            expiry=position.expiry or '' if is_option else None,
+                            option_type=position.direction or 'C' if is_option else None,
+                            sl_order_type=_sl_type,
+                            pt_qty=pt1_qty,
+                        )
+
+                        if oco_result and (oco_result.combo_order_id or oco_result.client_combo_order_id):
+                            cache.broker_oco_order_id = str(oco_result.combo_order_id or oco_result.client_combo_order_id)
+                            cache.broker_stop_order_id = str(oco_result.sl_client_order_id or '')
+                            cache.broker_pt_order_id = str(oco_result.pt_client_order_id or '')
+                            cache.broker_oco_sl_price = sl_price
+                            cache.broker_oco_pt_price = pt1_price
+                            cache.broker_oco_qty = qty
+                            cache.broker_pt_tier = _target_tier
+                            cache.broker_sl_order_type = _sl_type
+                            if is_option:
+                                cache.broker_sl_placed_date = __import__('datetime').date.today().isoformat()
+                            cache.broker_orders_placed = True
+                            _tif_label = 'DAY' if is_option else 'GTC'
+                            print(f"[RISK] ✅ OCO bracket placed: Webull Official #{cache.broker_oco_order_id} "
+                                  f"SL=${sl_price:.2f} ({_sl_type}) PT{_target_tier}=${pt1_price:.2f} LIMIT "
+                                  f"(qty={qty}, pt_qty={pt1_qty}, {_tif_label})")
+                            await self._register_pt_with_chaser(str(oco_result.pt_client_order_id or ''), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                        else:
+                            # OCO failed — fall back to independent orders
+                            print(f"[RISK] ⚠️ OCO bracket failed — falling back to independent SL+PT orders")
+                            # SL standalone
+                            if not is_option:
+                                sl_result = await broker_instance.place_stop_order(
+                                    symbol=symbol, quantity=qty, stop_price=round(sl_price, 2), side='sell')
+                            else:
+                                sl_result = await broker_instance.place_option_stop_limit(
+                                    symbol=position.symbol, strike=position.strike,
+                                    expiry=position.expiry or '', option_type=position.direction or 'C',
+                                    quantity=qty, stop_price=sl_price)
+                            if sl_result and sl_result.success and sl_result.order_id:
+                                cache.broker_stop_order_id = str(sl_result.order_id)
+                                cache.broker_sl_order_type = 'STOP_LOSS' if not is_option else 'STOP_LOSS_LIMIT'
+                                if is_option:
+                                    cache.broker_sl_placed_date = __import__('datetime').date.today().isoformat()
+                                print(f"[RISK] ✅ Fallback SL placed: #{sl_result.order_id} at ${sl_price:.2f}")
+                            # PT standalone
+                            if is_option:
+                                pt_result = await broker_instance.place_option_order(
+                                    symbol=position.symbol, strike=position.strike,
+                                    expiry=position.expiry or '', option_type=position.direction or 'C',
+                                    action='STC', quantity=pt1_qty, price=pt1_price)
+                            else:
+                                pt_result = await broker_instance.place_stock_order(
+                                    symbol=symbol, quantity=pt1_qty, action='STC',
+                                    order_type='LIMIT', price=round(pt1_price, 2), duration='GTC')
+                            if pt_result and pt_result.success and pt_result.order_id:
+                                cache.broker_pt_order_id = str(pt_result.order_id)
+                                cache.broker_pt_tier = _target_tier
+                                print(f"[RISK] ✅ Fallback PT placed: #{pt_result.order_id} at ${pt1_price:.2f}")
+                                await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                            cache.broker_orders_placed = bool(cache.broker_stop_order_id or cache.broker_pt_order_id)
+
+                    # ── SL-only path: standalone stop order ─────────
+                    elif sl_price and sl_price > 0 and _allows_sl:
+                        if not is_option:
+                            _sl_price_r = round(sl_price, 4 if sl_price < 1.0 else 2)
+                            sl_result = await broker_instance.place_stop_order(
+                                symbol=symbol, quantity=qty, stop_price=_sl_price_r, side='sell')
+                            if sl_result and sl_result.success and sl_result.order_id:
+                                cache.broker_stop_order_id = str(sl_result.order_id)
+                                cache.broker_sl_order_type = 'STOP_LOSS'
+                                print(f"[RISK] ✅ Broker SL placed: Webull Official STOP_LOSS #{sl_result.order_id} at ${sl_price:.2f} (GTC)")
+                        else:
+                            sl_result = await broker_instance.place_option_stop_limit(
+                                symbol=position.symbol, strike=position.strike,
+                                expiry=position.expiry or '', option_type=position.direction or 'C',
+                                quantity=qty, stop_price=sl_price)
+                            if sl_result and sl_result.success and sl_result.order_id:
+                                cache.broker_stop_order_id = str(sl_result.order_id)
+                                cache.broker_sl_order_type = 'STOP_LOSS_LIMIT'
+                                cache.broker_sl_placed_date = __import__('datetime').date.today().isoformat()
+                                print(f"[RISK] ✅ Broker SL placed: Webull Official STOP_LOSS_LIMIT #{sl_result.order_id} at ${sl_price:.2f} (DAY)")
+                        cache.broker_orders_placed = bool(cache.broker_stop_order_id)
+
+                    # ── PT-only path: standalone limit order ─────────
+                    elif pt1_price and pt1_price > 0 and pt1_qty > 0 and _allows_pt:
                         if is_option:
                             pt_result = await broker_instance.place_option_order(
-                                symbol=position.symbol,
-                                strike=position.strike,
-                                expiry=position.expiry or '',
-                                option_type=position.direction or 'C',
-                                action='STC',
-                                quantity=pt1_qty,
-                                price=pt1_price,
-                            )
+                                symbol=position.symbol, strike=position.strike,
+                                expiry=position.expiry or '', option_type=position.direction or 'C',
+                                action='STC', quantity=pt1_qty, price=pt1_price)
                         else:
                             _pt_price_r = round(pt1_price, 4 if pt1_price < 1.0 else 2)
                             pt_result = await broker_instance.place_stock_order(
                                 symbol=symbol, quantity=pt1_qty, action='STC',
-                                order_type='LIMIT', price=_pt_price_r, duration='GTC',
-                            )
+                                order_type='LIMIT', price=_pt_price_r, duration='GTC')
                         if pt_result and pt_result.success and pt_result.order_id:
                             cache.broker_pt_order_id = str(pt_result.order_id)
                             cache.broker_pt_tier = _target_tier
-                            print(f"[RISK] ✅ Broker PT1 placed: Webull Official limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                            print(f"[RISK] ✅ Broker PT placed: Webull Official limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
                             await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
-                        else:
-                            msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
-                            print(f"[RISK] ⚠️ Webull Official PT1 order failed: {msg}")
+                        cache.broker_orders_placed = bool(cache.broker_pt_order_id)
 
-                    cache.broker_orders_placed = bool(cache.broker_stop_order_id or cache.broker_pt_order_id)
+                    else:
+                        cache.broker_orders_placed = True  # No orders needed
+
                 except Exception as e:
                     print(f"[RISK] ⚠️ Webull Official initial bracket error: {e}")
 
@@ -6593,7 +6764,7 @@ class RiskManager:
                     pt_order.ocaType = 2
                     cache.broker_oco_order_id = _oca_group
 
-                pt_trade = await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, _pt_contract, pt_order)
+                pt_trade = self.ibkr_broker.ib.placeOrder(_pt_contract, pt_order)
                 await asyncio.sleep(1)
                 _ibkr_pt_ok = ('Submitted', 'PreSubmitted', 'PendingSubmit', 'Filled', 'ApiPending')
                 if pt_trade and pt_trade.orderStatus.status in _ibkr_pt_ok:
@@ -7066,7 +7237,7 @@ class RiskManager:
                         sl_order.ocaGroup = _oca_group
                         sl_order.ocaType = 2
                         cache.broker_oco_order_id = _oca_group
-                    sl_trade = await asyncio.to_thread(self.ibkr_broker.ib.placeOrder, contract, sl_order)
+                    sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
                     await asyncio.sleep(1)
                     _ibkr_sync_ok = ('Submitted', 'PreSubmitted', 'PendingSubmit', 'Filled', 'ApiPending')
                     if sl_trade and sl_trade.orderStatus.status in _ibkr_sync_ok:
@@ -7147,22 +7318,139 @@ class RiskManager:
                         print(f"[RISK] ⚠️ Robinhood stop sync failed: {msg}")
 
                 elif 'WEBULL_OFFICIAL' in broker_name and broker_instance:
-                    if _is_opt:
-                        print(f"[RISK] ⚠️ Webull Official options don't support stop orders — dynamic SL monitored locally")
-                        return
-                    if cache.broker_stop_order_id:
-                        await broker_instance.cancel_order_by_id(cache.broker_stop_order_id)
-                        cache.broker_stop_order_id = None
                     _stp_r = round(new_stop_price, 4 if new_stop_price < 1.0 else 2)
-                    sl_result = await broker_instance.place_stop_order(
-                        symbol=symbol, quantity=qty, stop_price=_stp_r, side='sell'
-                    )
-                    if sl_result and sl_result.success and sl_result.order_id:
-                        cache.broker_stop_order_id = str(sl_result.order_id)
-                        print(f"[RISK] ✅ Broker stop synced: Webull Official stop #{sl_result.order_id} at ${new_stop_price:.2f}")
+
+                    # ── OCO active: cancel combo → re-place with updated SL + same PT ──
+                    if cache.broker_oco_order_id:
+                        _oco_id = cache.broker_oco_order_id
+                        _pt_price = cache.broker_oco_pt_price or 0
+                        try:
+                            await broker_instance.cancel_order(_oco_id)
+                        except Exception:
+                            pass  # OCO cancel may 404 if already partially filled
+                        self._clear_bracket_state(cache)
+
+                        if _pt_price > 0:
+                            _sl_type = 'STOP_LOSS_LIMIT' if _is_opt else (
+                                'STOP_LOSS' if getattr(channel_settings, 'sl_order_mode', 'limit') == 'market' else 'STOP_LOSS_LIMIT')
+                            oco_result = await broker_instance.place_oco_bracket(
+                                symbol=position.symbol if _is_opt else symbol,
+                                quantity=qty, sl_price=_stp_r, pt_price=round(_pt_price, 2),
+                                is_option=_is_opt,
+                                strike=position.strike if _is_opt else None,
+                                expiry=position.expiry or '' if _is_opt else None,
+                                option_type=position.direction or 'C' if _is_opt else None,
+                                sl_order_type=_sl_type,
+                            )
+                            if oco_result and (oco_result.combo_order_id or oco_result.client_combo_order_id):
+                                cache.broker_oco_order_id = str(oco_result.combo_order_id or oco_result.client_combo_order_id)
+                                cache.broker_stop_order_id = str(oco_result.sl_client_order_id or '')
+                                cache.broker_pt_order_id = str(oco_result.pt_client_order_id or '')
+                                cache.broker_oco_sl_price = new_stop_price
+                                cache.broker_oco_pt_price = _pt_price
+                                cache.broker_oco_qty = qty
+                                cache.broker_orders_placed = True
+                                if _is_opt:
+                                    cache.broker_sl_placed_date = __import__('datetime').date.today().isoformat()
+                                print(f"[RISK] ✅ OCO bracket re-placed: #{cache.broker_oco_order_id} "
+                                      f"SL=${_stp_r:.2f} PT=${_pt_price:.2f} [escalated from #{_oco_id}]")
+                            else:
+                                print(f"[RISK] ⚠️ OCO re-place failed after SL escalation — placing standalone SL")
+                                if not _is_opt:
+                                    sl_result = await broker_instance.place_stop_order(symbol=symbol, quantity=qty, stop_price=_stp_r, side='sell')
+                                else:
+                                    sl_result = await broker_instance.place_option_stop_limit(
+                                        symbol=position.symbol, strike=position.strike,
+                                        expiry=position.expiry or '', option_type=position.direction or 'C',
+                                        quantity=qty, stop_price=_stp_r)
+                                if sl_result and sl_result.success and sl_result.order_id:
+                                    cache.broker_stop_order_id = str(sl_result.order_id)
+                                    cache.broker_orders_placed = True
+                                    print(f"[RISK] ✅ Fallback SL placed: #{sl_result.order_id} at ${_stp_r:.2f}")
+                        else:
+                            # No PT price — just place standalone SL
+                            if not _is_opt:
+                                sl_result = await broker_instance.place_stop_order(symbol=symbol, quantity=qty, stop_price=_stp_r, side='sell')
+                            else:
+                                sl_result = await broker_instance.place_option_stop_limit(
+                                    symbol=position.symbol, strike=position.strike,
+                                    expiry=position.expiry or '', option_type=position.direction or 'C',
+                                    quantity=qty, stop_price=_stp_r)
+                            if sl_result and sl_result.success and sl_result.order_id:
+                                cache.broker_stop_order_id = str(sl_result.order_id)
+                                cache.broker_orders_placed = True
+                                print(f"[RISK] ✅ Standalone SL placed (no PT to pair): #{sl_result.order_id} at ${_stp_r:.2f}")
+                        return
+
+                    if _is_opt:
+                        # Options: STOP_LOSS_LIMIT (the only stop-type Webull supports for options)
+                        if cache.broker_stop_order_id:
+                            # In-place replace — zero-gap modification via Replace API
+                            _limit_r = max(0.01, round(_stp_r - max(0.05, _stp_r * 0.03), 2))
+                            _mod = await broker_instance.replace_stop_price(
+                                cache.broker_stop_order_id, _stp_r, new_limit_price=_limit_r)
+                            if _mod.get('success'):
+                                cache.broker_sl_placed_date = __import__('datetime').date.today().isoformat()
+                                print(f"[RISK] ✅ Broker stop synced: Webull Official STOP_LOSS_LIMIT "
+                                      f"#{cache.broker_stop_order_id} modified to ${_stp_r:.2f} (limit=${_limit_r:.2f}) [in-place]")
+                            else:
+                                # Replace failed — cancel and re-place
+                                print(f"[RISK] ⚠️ Webull Official option stop replace failed: {_mod.get('error', '?')} — cancel+re-place")
+                                await broker_instance.cancel_order_by_id(cache.broker_stop_order_id)
+                                cache.broker_stop_order_id = None
+                                sl_result = await broker_instance.place_option_stop_limit(
+                                    symbol=position.symbol, strike=position.strike,
+                                    expiry=position.expiry or '', option_type=position.direction or 'C',
+                                    quantity=qty, stop_price=_stp_r)
+                                if sl_result and sl_result.success and sl_result.order_id:
+                                    cache.broker_stop_order_id = str(sl_result.order_id)
+                                    cache.broker_sl_placed_date = __import__('datetime').date.today().isoformat()
+                                    print(f"[RISK] ✅ Broker stop re-placed: Webull Official STOP_LOSS_LIMIT #{sl_result.order_id} at ${_stp_r:.2f}")
+                                else:
+                                    msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                                    print(f"[RISK] ⚠️ Webull Official option stop re-place failed: {msg}")
+                        else:
+                            # No existing stop — place fresh STOP_LOSS_LIMIT
+                            sl_result = await broker_instance.place_option_stop_limit(
+                                symbol=position.symbol, strike=position.strike,
+                                expiry=position.expiry or '', option_type=position.direction or 'C',
+                                quantity=qty, stop_price=_stp_r)
+                            if sl_result and sl_result.success and sl_result.order_id:
+                                cache.broker_stop_order_id = str(sl_result.order_id)
+                                cache.broker_sl_placed_date = __import__('datetime').date.today().isoformat()
+                                print(f"[RISK] ✅ Broker stop placed: Webull Official STOP_LOSS_LIMIT #{sl_result.order_id} at ${_stp_r:.2f} (options)")
+                            else:
+                                msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                                print(f"[RISK] ⚠️ Webull Official option stop failed: {msg}")
                     else:
-                        msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
-                        print(f"[RISK] ⚠️ Webull Official stop sync failed: {msg}")
+                        # Stocks: use Replace API for zero-gap in-place modification
+                        if cache.broker_stop_order_id:
+                            _mod = await broker_instance.replace_stop_price(cache.broker_stop_order_id, _stp_r)
+                            if _mod.get('success'):
+                                print(f"[RISK] ✅ Broker stop synced: Webull Official STOP_LOSS "
+                                      f"#{cache.broker_stop_order_id} modified to ${_stp_r:.2f} [in-place, zero gap]")
+                            else:
+                                # Replace failed — fall back to cancel+new
+                                print(f"[RISK] ⚠️ Webull Official stock stop replace failed: {_mod.get('error', '?')} — cancel+re-place")
+                                await broker_instance.cancel_order_by_id(cache.broker_stop_order_id)
+                                cache.broker_stop_order_id = None
+                                sl_result = await broker_instance.place_stop_order(
+                                    symbol=symbol, quantity=qty, stop_price=_stp_r, side='sell')
+                                if sl_result and sl_result.success and sl_result.order_id:
+                                    cache.broker_stop_order_id = str(sl_result.order_id)
+                                    print(f"[RISK] ✅ Broker stop re-placed: Webull Official stop #{sl_result.order_id} at ${_stp_r:.2f}")
+                                else:
+                                    msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                                    print(f"[RISK] ⚠️ Webull Official stock stop re-place failed: {msg}")
+                        else:
+                            sl_result = await broker_instance.place_stop_order(
+                                symbol=symbol, quantity=qty, stop_price=_stp_r, side='sell')
+                            if sl_result and sl_result.success and sl_result.order_id:
+                                cache.broker_stop_order_id = str(sl_result.order_id)
+                                print(f"[RISK] ✅ Broker stop placed: Webull Official stop #{sl_result.order_id} at ${_stp_r:.2f} (GTC)")
+                            else:
+                                msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                                print(f"[RISK] ⚠️ Webull Official stop failed: {msg}")
 
                 elif 'WEBULL' in broker_name:
                     if _is_opt:
@@ -7201,6 +7489,100 @@ class RiskManager:
 
             except Exception as e:
                 print(f"[RISK] ⚠️ {broker_name} broker stop sync error: {e}")
+
+
+    async def _place_native_trailing_stop(self, position, cache, trail_amount: float):
+        """Switch from STOP_LOSS to native TRAILING_STOP_LOSS for Webull Official stocks.
+
+        Native trailing lives on Webull's servers — survives bot crash.
+        Only for stocks; Webull does not support TRAILING_STOP_LOSS for options.
+        """
+        broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
+        if 'WEBULL_OFFICIAL' not in broker_name:
+            return
+        if not self.webull_official_broker:
+            return
+
+        symbol = getattr(position, 'raw_symbol', None) or position.symbol
+        qty = int(position.quantity)
+        broker = self.webull_official_broker
+
+        # Cancel existing STOP_LOSS before placing TRAILING_STOP_LOSS
+        if cache.broker_stop_order_id:
+            try:
+                await broker.cancel_order_by_id(cache.broker_stop_order_id)
+                print(f"[RISK] 🔄 Cancelled STOP_LOSS #{cache.broker_stop_order_id} for native trailing upgrade")
+                cache.broker_stop_order_id = None
+            except Exception as e:
+                print(f"[RISK] ⚠️ Cancel old stop for trailing upgrade failed: {e}")
+                return
+
+        try:
+            trail_result = await broker.place_trailing_stop(
+                symbol=symbol, quantity=qty, trail_amount=trail_amount, side='sell')
+            if trail_result and trail_result.success and trail_result.order_id:
+                cache.broker_stop_order_id = str(trail_result.order_id)
+                cache.broker_sl_order_type = 'TRAILING_STOP_LOSS'
+                cache._native_trailing_placed = True
+                print(f"[RISK] ✅ Native trailing stop placed: Webull Official TRAILING_STOP_LOSS "
+                      f"#{trail_result.order_id} trail=${trail_amount:.2f} (survives bot crash)")
+            else:
+                msg = getattr(trail_result, 'message', 'unknown') if trail_result else 'no result'
+                print(f"[RISK] ⚠️ Webull Official trailing stop failed: {msg} — trailing monitored locally")
+        except Exception as e:
+            print(f"[RISK] ⚠️ Webull Official trailing stop error: {e}")
+
+    async def _replace_expired_option_sl(self, position, cache, channel_settings):
+        """Re-place Webull Official option STOP_LOSS_LIMIT orders that expired at market close.
+
+        Webull restricts option sell-side TIF to DAY only. These orders expire daily.
+        Called from the monitoring cycle when a new trading day is detected.
+        """
+        broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
+        if 'WEBULL_OFFICIAL' not in broker_name or not self.webull_official_broker:
+            return
+        if not channel_settings or not getattr(channel_settings, 'allows_broker_sl', False):
+            return
+        if position.asset not in ('option', 'options'):
+            return
+
+        import datetime
+        today = datetime.date.today().isoformat()
+        placed_date = getattr(cache, 'broker_sl_placed_date', None)
+
+        # Only re-place if the SL was placed on a previous trading day
+        if placed_date and placed_date >= today:
+            return
+
+        # Determine current SL price: dynamic SL → early trailing stop → configured SL
+        sl_price = getattr(cache, 'dynamic_sl_price', None) or getattr(cache, 'early_stop_price', None)
+        if not sl_price and channel_settings.stop_loss_pct > 0 and cache.entry_price > 0:
+            sl_price = cache.entry_price * (1 - channel_settings.stop_loss_pct / 100)
+        if not sl_price or sl_price <= 0:
+            return
+
+        broker = self.webull_official_broker
+        qty = int(position.quantity)
+
+        # Clear old (expired) order ID
+        cache.broker_stop_order_id = None
+
+        try:
+            sl_result = await broker.place_option_stop_limit(
+                symbol=position.symbol, strike=position.strike,
+                expiry=position.expiry or '', option_type=position.direction or 'C',
+                quantity=qty, stop_price=sl_price)
+            if sl_result and sl_result.success and sl_result.order_id:
+                cache.broker_stop_order_id = str(sl_result.order_id)
+                cache.broker_sl_placed_date = today
+                cache.broker_sl_order_type = 'STOP_LOSS_LIMIT'
+                print(f"[RISK] ✅ DAY TIF re-placed: Webull Official STOP_LOSS_LIMIT #{sl_result.order_id} "
+                      f"at ${sl_price:.2f} (option, new trading day)")
+            else:
+                msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                print(f"[RISK] ⚠️ DAY TIF re-placement failed: {msg}")
+        except Exception as e:
+            print(f"[RISK] ⚠️ DAY TIF re-placement error: {e}")
 
     async def _replace_broker_pt(self, position_key: str, new_pt_price: float, trade_id: int = None):
         """Replace the live broker PT order with a new price (signal target update).
@@ -7397,19 +7779,33 @@ class RiskManager:
                 _opt_expiry = None
                 _opt_dir = 'C'
                 if _is_opt:
-                    try:
-                        _pk_parts = position_key.rsplit('_', 3)
-                        if len(_pk_parts) == 4:
-                            _opt_dir = _pk_parts[3].upper()
-                            _opt_dir = 'C' if _opt_dir in ('C', 'CALL') else 'P'
-                            _opt_expiry = _pk_parts[2]
-                            _opt_strike = float(_pk_parts[1])
-                            # Extract real symbol from broker+symbol prefix (e.g. 'WEBULL_OFFICIAL_LIVE_SPY' → 'SPY')
-                            _sym_from_key = _pk_parts[0].rsplit('_', 1)[-1]
-                            if not cache.raw_symbol or str(cache.raw_symbol).isdigit():
-                                symbol = _sym_from_key
-                    except (ValueError, IndexError):
-                        pass
+                    # Primary: use position object's known attributes (most reliable)
+                    _pos_strike = getattr(position, 'strike', None)
+                    _pos_expiry = getattr(position, 'expiry', None) or getattr(position, 'expiration', None)
+                    _pos_dir = getattr(position, 'direction', None) or getattr(position, 'call_put', None)
+                    if _pos_strike and _pos_expiry:
+                        _opt_strike = float(_pos_strike)
+                        _opt_expiry = str(_pos_expiry)
+                        _opt_dir = (str(_pos_dir) or 'C').upper()
+                        _opt_dir = 'C' if _opt_dir in ('C', 'CALL') else 'P'
+                    else:
+                        # Fallback: parse position_key
+                        try:
+                            _pk_parts = position_key.rsplit('_', 3)
+                            if len(_pk_parts) == 4:
+                                _opt_dir = _pk_parts[3].upper()
+                                _opt_dir = 'C' if _opt_dir in ('C', 'CALL') else 'P'
+                                _opt_expiry = _pk_parts[2]
+                                _opt_strike = float(_pk_parts[1])
+                                _sym_from_key = _pk_parts[0].rsplit('_', 1)[-1]
+                                if not cache.raw_symbol or str(cache.raw_symbol).isdigit():
+                                    symbol = _sym_from_key
+                        except (ValueError, IndexError):
+                            pass
+                    # Final guard: reject zero strike (would create invalid option order)
+                    if _opt_strike is None or _opt_strike <= 0:
+                        print(f"[RISK] ⚠️ WO PT cascade: cannot determine option params for {position_key} — skipping")
+                        return False
 
                 _new_pt_r = round(new_pt_price, 4 if new_pt_price < 1.0 else 2)
                 if _is_opt:
@@ -8154,10 +8550,11 @@ class RiskManager:
                 }
                 if broker_upper in ('WEBULL', 'WEBULL_PAPER', 'SCHWAB', 'WEBULL_OFFICIAL'):
                     option_kwargs['_risk_management_order'] = True
-                if broker_upper in ('WEBULL', 'WEBULL_PAPER', 'SCHWAB'):
-                    # Old Webull/Schwab need cached price as fallback when market order; WEBULL_OFFICIAL fetches live bid/ask itself
+                if broker_upper in ('WEBULL', 'WEBULL_PAPER', 'SCHWAB', 'WEBULL_OFFICIAL', 'WEBULL_OFFICIAL_LIVE', 'WEBULL_OFFICIAL_PAPER'):
+                    # WO-11: Inject fallback price for all Webull/Schwab brokers
                     if order_price is None:
                         option_kwargs['price'] = stc_signal['price']
+                    option_kwargs['_signal_price_fallback'] = stc_signal.get('price', 0)
                 if broker_upper in ('WEBULL', 'WEBULL_PAPER'):
                     option_kwargs['option_id'] = stc_signal.get('option_id')
                 result = await broker_instance.place_option_order(**option_kwargs)

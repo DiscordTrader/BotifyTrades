@@ -36,17 +36,20 @@ class WebullMarketStream:
 
         self._mqtt_client = mqtt.Client(
             client_id=self._session_id,
-            transport="tcp",
+            transport="websockets",
             protocol=mqtt.MQTTv311,
         )
         self._mqtt_client.username_pw_set(self._config.app_key, "password")
+        # WO-8: Enable TLS for encrypted MQTT transport (WSS port 8883)
+        self._mqtt_client.tls_set()
+        self._mqtt_client.ws_set_options(path="/mqtt")
         self._mqtt_client.on_connect = self._on_connect
         self._mqtt_client.on_message = self._on_message
         self._mqtt_client.on_disconnect = self._on_disconnect
 
         self._mqtt_client.connect_async(
             self._config.mqtt_host,
-            self._config.mqtt_port,
+            8883,
             keepalive=30,
         )
         self._mqtt_client.loop_start()
@@ -292,8 +295,11 @@ class TradeEventPoller:
                             self._emit("terminal", {"client_order_id": order.client_order_id, "status": "FILLED", "symbol": order.symbol})
                 except asyncio.CancelledError:
                     break
-                except Exception as e:
-                    log.warning(f"[WEBULL-OFF] Order history catchup error: {e}")
+            # Prune _known_fills: remove entries not seen in last 2 cycles
+            if _cycle % 20 == 0 and len(self._known_fills) > 200:
+                # Keep only the most recent 200 entries
+                recent = dict(list(self._known_fills.items())[-200:])
+                self._known_fills = recent
 
             try:
                 await asyncio.sleep(self._interval)

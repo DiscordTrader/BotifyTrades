@@ -15367,6 +15367,137 @@ def cleanup_old_order_events(days: int = 30):
 
 # Initialize tables — init_db() MUST run first to create base tables (channels, trades, settings)
 # before any migrations that ALTER those tables
+
+# ============ AI FORMAT CANDIDATES ============
+
+def _init_ai_format_candidates_table():
+    """Create the ai_format_candidates table if it doesn't exist."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ai_format_candidates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL,
+            channel_name TEXT DEFAULT '',
+            original_text TEXT NOT NULL,
+            text_hash TEXT NOT NULL,
+            action TEXT DEFAULT '',
+            asset_type TEXT DEFAULT '',
+            symbol TEXT DEFAULT '',
+            ai_confidence REAL DEFAULT 0,
+            ai_result_json TEXT DEFAULT '{}',
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at TIMESTAMP,
+            reviewed_by TEXT DEFAULT '',
+            learned_pattern_id INTEGER,
+            UNIQUE(text_hash)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
+def save_ai_format_candidate(channel_id, channel_name, original_text, ai_result, confidence):
+    """Store an AI-parsed signal as a format candidate for user approval."""
+    import json, hashlib
+    # Deduplicate: hash the format structure (not the exact text)
+    # Two signals like '### CAR 6/26 185p $5.09' and '### ROST 6/26 232.5p $2.7' have the same FORMAT
+    _action = ai_result.get('action', '')
+    _asset = ai_result.get('asset', '')
+    _format_sig = f"{_action}_{_asset}"
+    _text_hash = hashlib.md5(original_text.encode()).hexdigest()[:12]
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Ensure table exists
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ai_format_candidates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL,
+            channel_name TEXT DEFAULT '',
+            original_text TEXT NOT NULL,
+            text_hash TEXT NOT NULL,
+            action TEXT DEFAULT '',
+            asset_type TEXT DEFAULT '',
+            symbol TEXT DEFAULT '',
+            ai_confidence REAL DEFAULT 0,
+            ai_result_json TEXT DEFAULT '{}',
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at TIMESTAMP,
+            reviewed_by TEXT DEFAULT '',
+            learned_pattern_id INTEGER,
+            UNIQUE(text_hash)
+        )
+    ''')
+
+    try:
+        cursor.execute('''
+            INSERT OR IGNORE INTO ai_format_candidates
+            (channel_id, channel_name, original_text, text_hash, action, asset_type, symbol, ai_confidence, ai_result_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            channel_id, channel_name, original_text, _text_hash,
+            _action, _asset, ai_result.get('symbol', ''),
+            confidence, json.dumps(ai_result)
+        ))
+        conn.commit()
+        if cursor.rowcount > 0:
+            print(f"[AI_LEARN] ✓ Format candidate stored: {_action} {ai_result.get('symbol', '')} (confidence={confidence:.2f})")
+    except Exception as e:
+        print(f"[AI_LEARN] ⚠️ Failed to store candidate: {e}")
+    finally:
+        conn.close()
+
+
+def get_pending_ai_format_candidates(limit=50):
+    """Get pending AI format candidates for user review."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, channel_id, channel_name, original_text, action, asset_type, symbol,
+               ai_confidence, ai_result_json, status, created_at
+        FROM ai_format_candidates
+        WHERE status = 'pending'
+        ORDER BY created_at DESC
+        LIMIT ?
+    ''', (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(zip(['id', 'channel_id', 'channel_name', 'original_text', 'action', 'asset_type',
+                      'symbol', 'ai_confidence', 'ai_result_json', 'status', 'created_at'], row)) for row in rows]
+
+
+def get_ai_format_stats():
+    """Get statistics for AI format candidates."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM ai_format_candidates WHERE status = "pending"')
+    pending = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM ai_format_candidates WHERE status = "approved"')
+    approved = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM ai_format_candidates WHERE status = "dismissed"')
+    dismissed = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM ai_format_candidates')
+    total = cursor.fetchone()[0]
+    conn.close()
+    return {'pending': pending, 'approved': approved, 'dismissed': dismissed, 'total': total}
+
+
+def update_ai_format_candidate_status(candidate_id, status, reviewed_by='user', learned_pattern_id=None):
+    """Update the status of an AI format candidate."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE ai_format_candidates
+        SET status = ?, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, learned_pattern_id = ?
+        WHERE id = ?
+    ''', (status, reviewed_by, learned_pattern_id, candidate_id))
+    conn.commit()
+    conn.close()
+
 init_db()
 
 init_channel_messages_table()
@@ -15380,3 +15511,4 @@ init_upstox_settings()
 init_service_orchestrator_tables()
 init_order_chase_settings()
 init_order_events_table()
+_init_ai_format_candidates_table()

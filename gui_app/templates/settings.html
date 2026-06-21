@@ -1314,6 +1314,18 @@ input:checked + .slider:before {
             </div>
         </div>
 
+        <!-- Auto-Learn Formats -->
+        <div style="background:rgba(17,24,39,0.4);border:1px solid rgba(99,102,241,0.08);border-radius:10px;padding:14px;margin-top:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <span style="font-weight:600;color:#E2E8F0;font-size:0.88rem;">🧠 Auto-Learn Signal Formats</span>
+                <label class="switch">
+                    <input type="checkbox" id="ai-auto-learn-enabled" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div style="font-size:0.75rem;color:#94A3B8;line-height:1.5;">When AI fallback parses an unrecognized signal, save it as a format candidate for your approval in the Dashboard. Approved formats become instant regex matches — no future AI calls needed.</div>
+            <div id="ai-learn-stats" style="margin-top:8px;display:flex;gap:12px;font-size:0.72rem;color:#71717A;"></div>
+
         <!-- Hidden model field - auto-set by provider selection -->
         <input type="hidden" id="ai-model" value="gpt-4o-mini">
 
@@ -3350,6 +3362,24 @@ async function checkAiStatus() {
         analysis.style.color = analysisOn ? '#34D399' : '#6B7280';
         if (analysisOn) analysis.innerHTML = '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10B981;margin-right:4px;box-shadow:0 0 6px rgba(16,185,129,0.6);"></span>Enabled';
 
+        // Load auto-learn stats
+        try {
+            const statsResp = await fetch('/api/ai/format-candidates/stats');
+            const stats = await statsResp.json();
+            const learnStats = document.getElementById('ai-learn-stats');
+            if (learnStats) {
+                learnStats.innerHTML = `<span style="color:#FBBF24;">⏳ ${stats.pending} pending</span><span style="color:#4ADE80;">✅ ${stats.approved} learned</span><span style="color:#71717A;">${stats.total} total</span>`;
+            }
+        } catch (e) {}
+
+        // Load auto-learn toggle state
+        try {
+            const autoLearnEl = document.getElementById('ai-auto-learn-enabled');
+            if (autoLearnEl && data.ai_auto_learn_enabled !== undefined) {
+                autoLearnEl.checked = data.ai_auto_learn_enabled;
+            }
+        } catch (e) {}
+
         if (data.message) {
             msgEl.style.display = 'block';
             msgEl.textContent = data.message;
@@ -3387,7 +3417,8 @@ document.getElementById('save-api-keys').addEventListener('click', async () => {
     const analysisData = {
         enabled: document.getElementById('ai-enabled').checked,
         model: document.getElementById('ai-model').value,
-        sentiment_enabled: document.getElementById('sentiment-enabled').checked
+        sentiment_enabled: document.getElementById('sentiment-enabled').checked,
+        ai_auto_learn_enabled: document.getElementById('ai-auto-learn-enabled').checked
     };
 
     try {

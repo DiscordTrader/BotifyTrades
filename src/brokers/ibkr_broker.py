@@ -303,15 +303,25 @@ class IBKRBroker(BrokerInterface):
             return None
     
     async def get_positions(self) -> Dict[str, Any]:
-        """Get current positions"""
+        """Get current positions with composite keys to avoid flattening.
+
+        Returns dict keyed by composite key:
+        - Stocks: 'AAPL' (plain symbol)
+        - Options: 'AAPL_20240120_150.0_C' (symbol_expiry_strike_right)
+        """
         try:
             positions = await asyncio.to_thread(self.ib.positions)
             result = {}
             for pos in positions:
                 if hasattr(pos.contract, 'symbol'):
-                    symbol = pos.contract.symbol
+                    contract = pos.contract
                     quantity = int(pos.position)
-                    result[symbol] = quantity
+                    if contract.secType == 'OPT':
+                        expiry = contract.lastTradeDateOrContractMonth or ''
+                        key = f"{contract.symbol}_{expiry}_{contract.strike}_{contract.right}"
+                    else:
+                        key = contract.symbol
+                    result[key] = quantity
             return result
         except Exception as e:
             print(f"[{self.name}] Error getting positions: {e}")
@@ -451,10 +461,14 @@ class IBKRBroker(BrokerInterface):
                 return []
 
             portfolio_prices = {}
+            _IB_SENTINEL = 1.7976931348623157e+308
             try:
                 for item in await asyncio.to_thread(self.ib.portfolio):
                     if item.contract and item.marketPrice and item.marketPrice > 0:
-                        portfolio_prices[item.contract.conId] = float(item.marketPrice)
+                        mp = float(item.marketPrice)
+                        # Reject IB sentinel "not available" value
+                        if mp < _IB_SENTINEL:
+                            portfolio_prices[item.contract.conId] = mp
             except Exception:
                 pass
 
@@ -469,11 +483,12 @@ class IBKRBroker(BrokerInterface):
                 is_option = contract.secType == 'OPT'
 
                 current_price = 0.0
+                # 1) Live tickers from reqMktData (most fresh)
                 try:
                     tickers = await asyncio.to_thread(self.ib.tickers)
                     for t in tickers:
                         if t.contract and t.contract.conId == contract.conId:
-                            if t.last and t.last > 0:
+                            if t.last and t.last > 0 and t.last < _IB_SENTINEL:
                                 current_price = float(t.last)
                             elif t.bid and t.ask and t.bid > 0 and t.ask > 0:
                                 current_price = (float(t.bid) + float(t.ask)) / 2
@@ -481,8 +496,10 @@ class IBKRBroker(BrokerInterface):
                 except Exception:
                     pass
 
+                # 2) Portfolio marketPrice (from ib.portfolio)
                 if current_price <= 0:
                     current_price = portfolio_prices.get(contract.conId, 0.0)
+                # 3) IBKRDataHub streaming cache (allow_stale=True — stale price beats $0 on dashboard)
                 if current_price <= 0:
                     try:
                         from src.services.ibkr_data_hub import get_ibkr_data_hub
@@ -493,10 +510,10 @@ class IBKRBroker(BrokerInterface):
                             f"{contract.symbol}_{expiry_raw}_{contract.strike}_{contract.right}"
                             if is_option else contract.symbol
                         )
-                        hub_price = hub.get_quote_price(_hub_key)
+                        hub_price = hub.get_quote_price(_hub_key, allow_stale=True)
                         if not hub_price or hub_price <= 0:
-                            hub_price = hub.get_quote_price(contract.symbol)
-                        if hub_price and hub_price > 0:
+                            hub_price = hub.get_quote_price(contract.symbol, allow_stale=True)
+                        if hub_price and hub_price > 0 and hub_price < _IB_SENTINEL:
                             current_price = hub_price
                     except Exception:
                         pass
@@ -537,13 +554,19 @@ class IBKRBroker(BrokerInterface):
         action: str,
         quantity: int,
         price: Optional[float] = None,
-        _auto_adjust_depth: int = 0
+        _auto_adjust_depth: int = 0,
+        tif: Optional[str] = None
     ) -> OrderResult:
         """Place a stock order"""
         if not self.ib.isConnected():
             return OrderResult(success=False, message="IBKR not connected to TWS/Gateway", symbol=symbol, action=action)
         try:
             # Create contract
+
+            if not quantity or quantity <= 0:
+                return OrderResult(success=False, message=f"Invalid quantity: {quantity}", symbol=symbol, action=action)
+            if price is not None and price <= 0:
+                return OrderResult(success=False, message=f"Invalid limit price: {price}", symbol=symbol, action=action)
             contract = Stock(symbol, 'SMART', 'USD')
             
             await self.ib.qualifyContractsAsync(contract)
@@ -565,6 +588,8 @@ class IBKRBroker(BrokerInterface):
                 order = LimitOrder(side, quantity, price)
 
             order.outsideRth = self._get_extended_hours_enabled()
+            if tif:
+                order.tif = tif
 
             # placeOrder is synchronous — do NOT wrap in asyncio.to_thread.
             # asyncio.to_thread runs in a threadpool thread with no event loop, causing
@@ -574,6 +599,19 @@ class IBKRBroker(BrokerInterface):
             filled_price = await self._wait_for_fill(trade, symbol, timeout=10)
 
             status = trade.orderStatus.status if trade and trade.orderStatus else 'Unknown'
+            # If still pending after timeout, report as pending (not success)
+            if status in ('PreSubmitted', 'PendingSubmit'):
+                print(f"[{self.name}] ⚠️ Stock order {trade.order.orderId} still {status} after 10s timeout")
+                avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus and trade.orderStatus.avgFillPrice else 0
+                return OrderResult(
+                    success=True,
+                    order_id=str(trade.order.orderId),
+                    message=f"Order submitted but not yet confirmed (status: {status})",
+                    price=avg_price or price,
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
+                )
             if status in ('Cancelled', 'Inactive'):
                 await asyncio.sleep(2)
                 status = trade.orderStatus.status if trade and trade.orderStatus else status
@@ -600,6 +638,20 @@ class IBKRBroker(BrokerInterface):
             error_msg = str(e)
 
             if 'insufficient' in error_msg.lower() and _auto_adjust_depth < 1:
+                # For sell orders, don't recalculate from buying power — use position quantity
+                if action in ('STC', 'SELL'):
+                    try:
+                        positions = self.ib.positions()
+                        for pos in positions:
+                            if hasattr(pos.contract, 'symbol') and pos.contract.symbol == symbol:
+                                held_qty = abs(int(pos.position))
+                                if 0 < held_qty < quantity:
+                                    print(f"[{self.name}] ⚠️ Auto-adjusting STC qty: {quantity} → {held_qty} (actual position)")
+                                    return await self.place_stock_order(symbol, action, held_qty, price, _auto_adjust_depth=_auto_adjust_depth + 1, tif=tif)
+                    except Exception as pos_err:
+                        print(f"[{self.name}] Position lookup for STC auto-adjust failed: {pos_err}")
+                    return OrderResult(success=False, message=f"STC failed: {error_msg}", symbol=symbol, action=action)
+
                 try:
                     account_info = await self.get_account_info()
                     buying_power = account_info['buying_power']
@@ -608,7 +660,7 @@ class IBKRBroker(BrokerInterface):
                         max_qty = int(buying_power / current_price)
                         if 0 < max_qty < quantity:
                             print(f"[{self.name}] Auto-adjusting: {quantity} → {max_qty} shares")
-                            return await self.place_stock_order(symbol, action, max_qty, price, _auto_adjust_depth=1)
+                            return await self.place_stock_order(symbol, action, max_qty, price, _auto_adjust_depth=1, tif=tif)
                 except Exception as adjust_error:
                     print(f"[{self.name}] Auto-adjust failed: {adjust_error}")
             
@@ -627,7 +679,8 @@ class IBKRBroker(BrokerInterface):
         option_type: str,
         action: str,
         quantity: int,
-        price: Optional[float] = None
+        price: Optional[float] = None,
+        tif: Optional[str] = None
     ) -> OrderResult:
         """Place an options order"""
         if not self.ib.isConnected():
@@ -654,6 +707,8 @@ class IBKRBroker(BrokerInterface):
             
             # Enable extended hours trading if configured
             order.outsideRth = self._get_extended_hours_enabled()
+            if tif:
+                order.tif = tif
 
             # placeOrder is synchronous — do NOT wrap in asyncio.to_thread (same reason as stock orders above).
             trade = self.ib.placeOrder(contract, order)

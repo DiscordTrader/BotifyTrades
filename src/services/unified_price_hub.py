@@ -366,7 +366,7 @@ class UnifiedPriceHub:
             self._stats['misses'] += 1
         return None
 
-    def get_quote_price(self, symbol: str) -> Optional[float]:
+    def get_quote_price(self, symbol: str, allow_stale: bool = False) -> Optional[float]:
         quote = self.get_quote(symbol)
         if quote and quote.last > 0:
             return quote.last

@@ -1786,6 +1786,40 @@ function buildSizingTab(ch) {
     const t212Note = isT212OnlyChannel(ch)
         ? '<div style="margin-bottom: 12px; padding: 8px 12px; background: rgba(0,163,255,0.08); border: 1px solid rgba(0,163,255,0.15); border-radius: 8px; font-size: 11px; color: #90CAF9;">📊 T212 stocks-only channel — Position sizing uses T212 account balance. Options signals will be auto-skipped.</div>'
         : '';
+
+    // Conflict detection: both default_quantity AND position_size_pct set
+    const hasBothExec = ch.default_quantity && ch.default_quantity > 0 && ch.position_size_pct && ch.position_size_pct > 0;
+    const hasBothTrack = ch.tracking_default_quantity && ch.tracking_default_quantity > 0 && ch.tracking_position_size_pct && ch.tracking_position_size_pct > 0;
+    const noSizingExec = ch.execute_enabled && !ch.default_quantity && !ch.position_size_pct;
+    const execConflictBanner = hasBothExec
+        ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:6px;font-size:11px;color:#FDE68A;">
+            ⚠️ <strong>Both Default Qty and Position Size % are set.</strong> Default Qty takes priority — Position Size % is ignored.
+            <span style="color:#A1A1AA;">Clear Default Qty to use % sizing, or clear Position Size % to avoid confusion.</span>
+           </div>`
+        : '';
+    const noSizingBanner = noSizingExec
+        ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:6px;font-size:11px;color:#FCA5A5;">
+            🔴 <strong>No sizing configured.</strong> Trades will use signal qty or fall back to 1 contract/share.
+            Set Position Size % or Default Qty to control order size.
+           </div>`
+        : '';
+    const trackConflictBanner = hasBothTrack
+        ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:6px;font-size:11px;color:#FDE68A;">
+            ⚠️ <strong>Both Default Qty and Position Size % are set.</strong> Default Qty takes priority.
+           </div>`
+        : '';
+    // Active sizing indicator
+    const execSizingLabel = ch.default_quantity && ch.default_quantity > 0
+        ? `<span style="color:#4ADE80;font-size:10px;font-weight:600;">ACTIVE: Fixed ${ch.default_quantity} qty</span>`
+        : ch.position_size_pct && ch.position_size_pct > 0
+            ? `<span style="color:#22D3EE;font-size:10px;font-weight:600;">ACTIVE: ${ch.position_size_pct}% of buying power</span>`
+            : `<span style="color:#A1A1AA;font-size:10px;">Using signal qty or fallback</span>`;
+    const trackSizingLabel = ch.tracking_default_quantity && ch.tracking_default_quantity > 0
+        ? `<span style="color:#4ADE80;font-size:10px;font-weight:600;">ACTIVE: Fixed ${ch.tracking_default_quantity} qty</span>`
+        : ch.tracking_position_size_pct && ch.tracking_position_size_pct > 0
+            ? `<span style="color:#22D3EE;font-size:10px;font-weight:600;">ACTIVE: ${ch.tracking_position_size_pct}%</span>`
+            : `<span style="color:#A1A1AA;font-size:10px;">Using signal qty</span>`;
+
     return `
         ${t212Note}
         <div class="settings-row">
@@ -1801,18 +1835,23 @@ function buildSizingTab(ch) {
                         <span class="slider"></span>
                     </label>
                 </div>
-                <div class="settings-row" style="margin-top: 10px;">
+                <div style="margin-top:6px;margin-bottom:4px;">${execSizingLabel}</div>
+                <div class="settings-row" style="margin-top: 6px;">
                     <div class="settings-field">
                         <label>Position Size %</label>
-                        <input type="number" value="${ch.position_size_pct || ''}" placeholder="Auto" min="0.1" max="100" step="0.1"
-                               onchange="updatePositionSize(${ch.id}, this.value, 'execution')">
+                        <input type="number" id="exec-pct-${ch.id}" value="${ch.position_size_pct || ''}" placeholder="Auto" min="0.1" max="100" step="0.1"
+                               onchange="updatePositionSize(${ch.id}, this.value, 'execution')" ${ch.default_quantity > 0 ? 'style="opacity:0.5;border-color:rgba(251,191,36,0.3);"' : ''}>
+                        <div class="settings-helper">${ch.default_quantity > 0 ? '⚠️ Overridden by Default Qty above' : '% of buying power per trade'}</div>
                     </div>
                     <div class="settings-field">
                         <label>Default Qty</label>
-                        <input type="number" value="${ch.default_quantity || ''}" placeholder="Auto" min="1" max="1000" step="1"
+                        <input type="number" id="exec-qty-${ch.id}" value="${ch.default_quantity || ''}" placeholder="Auto" min="1" max="1000" step="1"
                                onchange="updateDefaultQuantity(${ch.id}, this.value)">
+                        <div class="settings-helper">Fixed qty per trade (overrides % sizing)</div>
                     </div>
                 </div>
+                ${execConflictBanner}
+                ${noSizingBanner}
                 <div class="settings-toggle-row">
                     <span>Force My Size %</span>
                     <label class="toggle-switch">
@@ -1843,18 +1882,22 @@ function buildSizingTab(ch) {
                         <span class="slider"></span>
                     </label>
                 </div>
-                <div class="settings-row" style="margin-top: 10px;">
+                <div style="margin-top:6px;margin-bottom:4px;">${trackSizingLabel}</div>
+                <div class="settings-row" style="margin-top: 6px;">
                     <div class="settings-field">
                         <label>Position Size %</label>
                         <input type="number" value="${ch.tracking_position_size_pct || ''}" placeholder="Auto" min="0.1" max="100" step="0.1"
-                               onchange="updatePositionSize(${ch.id}, this.value, 'tracking')">
+                               onchange="updatePositionSize(${ch.id}, this.value, 'tracking')" ${ch.tracking_default_quantity > 0 ? 'style="opacity:0.5;border-color:rgba(251,191,36,0.3);"' : ''}>
+                        <div class="settings-helper">${ch.tracking_default_quantity > 0 ? '⚠️ Overridden by Default Qty' : '% of paper balance'}</div>
                     </div>
                     <div class="settings-field">
                         <label>Default Qty</label>
                         <input type="number" value="${ch.tracking_default_quantity || ''}" placeholder="Auto" min="1" max="1000" step="1"
                                onchange="updateTrackingDefaultQuantity(${ch.id}, this.value)">
+                        <div class="settings-helper">Fixed qty for paper trades</div>
                     </div>
                 </div>
+                ${trackConflictBanner}
             </div>
         </div>
         <div class="settings-section amber">
@@ -1864,9 +1907,9 @@ function buildSizingTab(ch) {
             </div>
             <div class="settings-field" style="max-width: 280px;">
                 <label>Max Position $</label>
-                <input type="number" value="${ch.channel_max_position_size || ''}" placeholder="No limit" min="100" max="100000" step="100"
+                <input type="number" value="${ch.channel_max_position_size || ''}" placeholder="No limit" min="50" max="100000" step="50"
                        onchange="updateChannelMaxPositionSize(${ch.id}, this.value)">
-                <div class="settings-helper">Dollar cap on calculated position size</div>
+                <div class="settings-helper">Hard dollar cap — blocks any trade exceeding this amount. Applied to ALL sizing modes including Default Qty and AI signals.</div>
             </div>
         </div>
     `;

@@ -31,6 +31,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
         """Initialize rate limiters for US brokers."""
         self.rate_limiters = {
             'webull': RateLimitTracker('webull', 120),
+            'webull_official': RateLimitTracker('webull_official', 120),
             'alpaca': RateLimitTracker('alpaca', 200),
             'tastytrade': RateLimitTracker('tastytrade', 60),
             'ibkr': RateLimitTracker('ibkr', 100),

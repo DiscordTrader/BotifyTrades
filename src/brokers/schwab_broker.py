@@ -2417,8 +2417,17 @@ class SchwabBroker(BrokerInterface):
                     
                     if asset_type == 'option':
                         current_price = market_value / (qty * 100) if qty else 0
-                        if avg_price > 0 and current_price > 0 and avg_price > current_price * 50:
-                            avg_price = avg_price / 100.0
+                        # Schwab API inconsistency: averagePrice is sometimes per-share,
+                        # sometimes per-contract (includes 100x multiplier).
+                        # Detect by checking if normalizing by 100 brings avg_price
+                        # closer to current_price than the raw value.
+                        # Floor at $50 to avoid false positives on cheap options
+                        # (a $0.50/share option = $50/contract minimum).
+                        if avg_price > 50 and current_price > 0:
+                            raw_ratio = abs(avg_price / current_price - 1.0)
+                            normalized_ratio = abs((avg_price / 100.0) / current_price - 1.0)
+                            if normalized_ratio < raw_ratio:
+                                avg_price = avg_price / 100.0
                     else:
                         current_price = market_value / qty if qty else 0
                     

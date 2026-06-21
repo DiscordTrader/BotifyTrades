@@ -1,16 +1,22 @@
 import asyncio
 import time
 from collections import defaultdict
-from typing import Optional
 
 
 class RateLimiter:
+    """Per-category rate limiter for Webull Official API.
+
+    WO-7 fix: Uses per-category locks so that sleeping on account_data (2/2s)
+    never blocks concurrent order placement (600/60s).
+    """
+
     LIMITS = {
         "order": (600, 60),
         "account_data": (2, 2),
         "token": (10, 30),
         "account_list": (10, 30),
         "subscribe": (600, 60),
+        "quote": (120, 60),
     }
 
     ENDPOINT_CATEGORY = {
@@ -27,24 +33,30 @@ class RateLimiter:
         "/openapi/account/list": "account_list",
         "/openapi/auth/token/create": "token",
         "/openapi/auth/token/check": "token",
+        "/openapi/auth/token/refresh": "token",
         "/openapi/market-data/streaming/subscribe": "subscribe",
         "/openapi/market-data/streaming/unsubscribe": "subscribe",
+        "/openapi/quote/option/query": "quote",
     }
 
     def __init__(self):
         self._timestamps: dict[str, list[float]] = defaultdict(list)
-        self._lock: Optional[asyncio.Lock] = None
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    def _get_lock(self, category: str) -> asyncio.Lock:
+        if category not in self._locks:
+            self._locks[category] = asyncio.Lock()
+        return self._locks[category]
 
     async def acquire(self, path: str):
         category = self.ENDPOINT_CATEGORY.get(path)
         if not category:
             return
-        if self._lock is None:
-            self._lock = asyncio.Lock()
 
         max_requests, window_seconds = self.LIMITS[category]
+        lock = self._get_lock(category)
 
-        async with self._lock:
+        async with lock:
             now = time.monotonic()
             timestamps = self._timestamps[category]
 

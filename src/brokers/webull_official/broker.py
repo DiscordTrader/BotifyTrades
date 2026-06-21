@@ -164,6 +164,14 @@ class WebullOfficialBroker:
                 self._last_known_good_balance = acct_seed
             print(f"[{self.name}] ✅ Connected — Account: {self.account_id}, "
                   f"Balance: ${balance.total_net_liquidation:,.2f} BP: ${effective_bp:,.2f} (settled=${balance.settled_cash:,.2f})")
+
+            # Auto-start MQTT streaming for real-time prices (critical for risk engine SL latency)
+            try:
+                await self.start_streaming()
+                print(f"[{self.name}] ✅ MQTT streaming auto-started for real-time price monitoring")
+            except Exception as _se:
+                print(f"[{self.name}] ⚠️ MQTT streaming failed to start (risk engine will use REST fallback): {_se}")
+
             return True
 
         except Exception as e:
@@ -367,6 +375,28 @@ class WebullOfficialBroker:
                 otype = "LIMIT"
                 print(f"[{self.name}] ⏰ Extended hours MARKET→LIMIT: ${price}", flush=True)
 
+        # Order Preview: BUY-side only, fail-open (network error → place anyway)
+        if side == "BUY" and getattr(self._config, 'enable_order_preview', False):
+            try:
+                preview_body = {
+                    "account_id": self.account_id,
+                    "new_orders": [{
+                        "client_order_id": "preview_" + __import__('uuid').uuid4().hex[:8],
+                        "combo_type": "NORMAL", "instrument_type": "EQUITY", "entrust_type": "QTY",
+                        "symbol": symbol, "market": "US", "side": side,
+                        "order_type": otype, "time_in_force": tif,
+                        "quantity": str(quantity),
+                        **({"limit_price": str(price)} if price else {}),
+                    }],
+                }
+                preview_result = await self._orders.preview_order(preview_body)
+                if preview_result and preview_result.get("error_code"):
+                    err_msg = preview_result.get("message", "Preview rejected")
+                    print(f"[{self.name}] ❌ Order preview rejected: {err_msg}", flush=True)
+                    return OrderResult(success=False, message=f"Preview rejected: {err_msg}", symbol=symbol, action=action, quantity=quantity)
+            except Exception as _pe:
+                log.debug(f"[{self.name}] Preview failed (non-blocking): {_pe}")
+
         try:
             result = await self._orders.place_stock_order(
                 account_id=self.account_id,
@@ -423,7 +453,7 @@ class WebullOfficialBroker:
         return None
 
     async def place_option_order(self, symbol, quantity, action, order_type="LIMIT",
-                                 limit_price=None, option_type=None,
+                                 limit_price=None, stop_price=None, option_type=None,
                                  strike_price=None, expiry_date=None,
                                  strike=None, expiry=None, price=None,
                                  **kwargs) -> OrderResult:
@@ -519,6 +549,14 @@ class WebullOfficialBroker:
         # Sell-side STC/STO: DAY only (Webull Official restriction). Buy-side (BTO/BTC): allow GTC for PT brackets.
         tif = "DAY" if side == "SELL" else kwargs.get('time_in_force', 'GTC')
 
+        # WO-3: Map order types for Webull Official API (options)
+        _opt_type_map = {
+            'STOP_LIMIT': 'STOP_LOSS_LIMIT',
+            'STOP': 'STOP_LOSS',
+            'TRAILING_STOP': 'TRAILING_STOP_LOSS',
+        }
+        order_type = _opt_type_map.get(order_type.upper(), order_type.upper())
+
         try:
             result = await self._orders.place_option_order(
                 account_id=self.account_id,
@@ -529,8 +567,9 @@ class WebullOfficialBroker:
                 strike_price=effective_strike,
                 expiry_date=effective_expiry,
                 position_intent=position_intent,
-                order_type=order_type.upper(),
+                order_type=order_type,
                 limit_price=effective_limit,
+                stop_price=stop_price,
                 time_in_force=tif,
             )
             return OrderResult(
@@ -600,6 +639,13 @@ class WebullOfficialBroker:
             result = await self._orders.cancel_order(self.account_id, client_order_id)
             return {"success": True, "data": result}
         except Exception as e:
+            # WO-5: If cancel by client_order_id fails, try as broker order_id
+            if 'ORDER_NOT_FOUND' in str(e) or 'not found' in str(e).lower():
+                try:
+                    result = await self._orders.cancel_order_by_broker_id(self.account_id, client_order_id)
+                    return {"success": True, "data": result}
+                except Exception:
+                    pass
             return {"success": False, "error": str(e)}
 
     async def cancel_order_by_id(self, client_order_id: str) -> bool:
@@ -607,6 +653,13 @@ class WebullOfficialBroker:
             await self._orders.cancel_order(self.account_id, client_order_id)
             return True
         except Exception as e:
+            # WO-5: Fallback to broker order_id
+            if 'ORDER_NOT_FOUND' in str(e) or 'not found' in str(e).lower():
+                try:
+                    await self._orders.cancel_order_by_broker_id(self.account_id, client_order_id)
+                    return True
+                except Exception:
+                    pass
             print(f"[{self.name}] Cancel failed: {e}")
             return False
 
@@ -656,13 +709,188 @@ class WebullOfficialBroker:
             duration='GTC',
         )
 
-    async def modify_order(self, client_order_id: str, stop_price: float = None, limit_price: float = None) -> dict:
+    async def place_oco_bracket(
+        self, symbol: str, quantity: int,
+        sl_price: float, pt_price: float,
+        is_option: bool = False,
+        strike: float = None, expiry: str = None, option_type: str = None,
+        sl_order_type: str = 'STOP_LOSS',
+        sl_limit_price: float = None,
+        pt_qty: int = None,
+    ) -> 'PlaceOrderResult':
+        """Place OCO bracket — SL + PT linked. When one fills, broker auto-cancels the other.
+
+        For stocks: GTC, survives bot crash and overnight.
+        For options: DAY TIF only, must re-place daily via _replay_day_tif_option_sl().
+
+        Args:
+            sl_order_type: 'STOP_LOSS' (market trigger) or 'STOP_LOSS_LIMIT' (limit trigger).
+            sl_limit_price: Floor price for STOP_LOSS_LIMIT. Auto-calculated if None.
+            pt_qty: Quantity for PT leg (may differ from SL qty for partial trim). Defaults to full qty.
+        """
+        from .models import PlaceOrderResult
+
+        _sl_r = round(sl_price, 4 if sl_price < 1.0 else 2)
+        _pt_r = round(pt_price, 4 if pt_price < 1.0 else 2)
+        _pt_qty = pt_qty or quantity
+
+        # For STOP_LOSS_LIMIT, auto-calculate limit floor if not provided
+        _sl_lim = sl_limit_price
+        if sl_order_type == 'STOP_LOSS_LIMIT' and _sl_lim is None:
+            _sl_lim = max(0.01, round(_sl_r - max(0.05, _sl_r * 0.03), 2))
+
         try:
+            result = await self._orders.place_oco_order(
+                account_id=self.account_id,
+                symbol=symbol,
+                quantity=quantity,
+                pt_price=_pt_r,
+                sl_price=_sl_r,
+                sl_order_type=sl_order_type,
+                sl_limit_price=_sl_lim,
+                time_in_force='GTC' if not is_option else 'DAY',
+                option_type=option_type if is_option else None,
+                strike_price=strike if is_option else None,
+                expiry_date=expiry if is_option else None,
+            )
+            return result
+        except Exception as e:
+            log.error(f"[{self.name}] OCO bracket error: {e}")
+            return PlaceOrderResult(client_order_id="", order_id="")
+
+    async def place_option_stop_limit(
+        self, symbol: str, strike: float, expiry: str, option_type: str,
+        quantity: int, stop_price: float, limit_price: float = None,
+    ) -> 'OrderResult':
+        """Place STOP_LOSS_LIMIT for options.
+
+        When price drops to stop_price, a limit sell at limit_price is placed.
+        DAY TIF only for sell-side (Webull restriction) — risk engine re-places daily.
+
+        Args:
+            limit_price: Floor price. Defaults to stop_price - max(0.05, stop_price * 0.03).
+        """
+        if limit_price is None:
+            limit_price = stop_price - max(0.05, stop_price * 0.03)
+        limit_price = max(0.01, round(limit_price, 2))
+        stop_price = round(stop_price, 2) if stop_price >= 1.0 else round(stop_price, 4)
+
+        return await self.place_option_order(
+            symbol=symbol,
+            quantity=quantity,
+            action='STC',
+            order_type='STOP_LIMIT',
+            limit_price=limit_price,
+            stop_price=stop_price,
+            strike=strike,
+            expiry=expiry,
+            option_type=option_type,
+        )
+
+    async def place_option_stop(
+        self, symbol: str, strike: float, expiry: str, option_type: str,
+        quantity: int, stop_price: float,
+    ) -> 'OrderResult':
+        """Place STOP_LOSS for options — triggers market sell when stop_price is reached.
+
+        Per Webull Official API docs, options support STOP_LOSS (triggers market order).
+        Simpler than STOP_LOSS_LIMIT — no limit floor needed, guaranteed fill at stop.
+        DAY TIF only for sell-side (Webull restriction).
+        """
+        stop_price = round(stop_price, 2) if stop_price >= 1.0 else round(stop_price, 4)
+
+        return await self.place_option_order(
+            symbol=symbol,
+            quantity=quantity,
+            action='STC',
+            order_type='STOP',
+            stop_price=stop_price,
+            strike=strike,
+            expiry=expiry,
+            option_type=option_type,
+        )
+
+    async def replace_stop_price(self, client_order_id: str, new_stop_price: float,
+                                  new_limit_price: float = None) -> dict:
+        """In-place modify a stop order's trigger price via Webull Replace API.
+
+        For STOP_LOSS (stocks): modifies stop_price.
+        For STOP_LOSS_LIMIT (options): modifies both stop_price and limit_price.
+        Zero-gap alternative to cancel+new — the order stays active during modification.
+        """
+        new_stop_price = round(new_stop_price, 2) if new_stop_price >= 1.0 else round(new_stop_price, 4)
+        kwargs = {'stop_price': new_stop_price}
+        if new_limit_price is not None:
+            new_limit_price = max(0.01, round(new_limit_price, 2))
+            kwargs['limit_price'] = new_limit_price
+        return await self.modify_order(client_order_id, **kwargs)
+
+    async def place_trailing_stop(self, symbol: str, quantity: int,
+                                   trail_amount: float, side: str = 'sell',
+                                   trailing_type: str = 'AMOUNT') -> 'OrderResult':
+        """Place native TRAILING_STOP_LOSS order for stocks.
+
+        Webull manages the trailing on their servers — survives bot crash.
+        Not supported for options (Webull restriction).
+        """
+        _side = 'SELL' if side.lower() in ('sell', 'stc') else 'BUY'
+        try:
+            result = await self._orders.place_trailing_stop(
+                account_id=self.account_id,
+                symbol=symbol,
+                side=_side,
+                quantity=quantity,
+                trailing_type=trailing_type,
+                trailing_stop_step=trail_amount,
+            )
+            return OrderResult(
+                success=True,
+                order_id=result.client_order_id or result.order_id,
+                message=f"Trailing stop placed: {symbol} trail=${trail_amount:.2f}",
+                symbol=symbol,
+                action='STC',
+                quantity=quantity,
+            )
+        except Exception as e:
+            return OrderResult(
+                success=False,
+                message=str(e),
+                symbol=symbol,
+                action='STC',
+                quantity=quantity,
+            )
+    async def modify_order(self, client_order_id: str, stop_price: float = None,
+                           limit_price: float = None, quantity: float = None,
+                           time_in_force: str = None, trailing_stop_step: float = None,
+                           order_type: str = None, leg_id: str = None, leg_quantity: int = None) -> dict:
+        """Modify an existing order via Webull Replace API.
+
+        For options: must include leg_id and leg_quantity (from original placement).
+        For trailing stops: only trailing_stop_step can be modified.
+        """
+        try:
+            kwargs = {}
+            if stop_price is not None:
+                kwargs['stop_price'] = stop_price
+            if limit_price is not None:
+                kwargs['limit_price'] = limit_price
+            if quantity is not None:
+                kwargs['quantity'] = quantity
+            if time_in_force is not None:
+                kwargs['time_in_force'] = time_in_force
+            if trailing_stop_step is not None:
+                kwargs['trailing_stop_step'] = trailing_stop_step
+            if order_type is not None:
+                kwargs['order_type'] = order_type
+            # Option orders require legs array with id + quantity for Replace API
+            if leg_id:
+                kwargs['leg_id'] = leg_id
+                kwargs['leg_quantity'] = leg_quantity
+
             await self._orders.replace_order(
                 self.account_id,
                 client_order_id,
-                stop_price=stop_price,
-                limit_price=limit_price,
+                **kwargs,
             )
             return {'success': True, 'order_id': client_order_id}
         except Exception as e:

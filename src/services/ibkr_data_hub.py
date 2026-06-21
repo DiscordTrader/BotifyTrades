@@ -16,6 +16,7 @@ import time
 import asyncio
 import threading
 import logging
+import copy
 from typing import Dict, Optional, List, Any, Callable, Set
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,13 @@ class IBKRDataHub:
         self._consecutive_stale_checks = 0
         self._STALE_CHECK_THRESHOLD = 2
 
+        self._exec_details: List[Dict[str, Any]] = []
+        self._exec_details_lock = threading.Lock()
+        self._commissions: Dict[str, Dict[str, Any]] = {}  # execId -> commission data
+        self._commissions_lock = threading.Lock()
+        self._per_symbol_last_tick: Dict[str, float] = {}
+        self._PER_SYMBOL_DEAD_THRESHOLD = 60.0
+
         print("[IBKR_HUB] ✓ IBKRDataHub initialized (singleton)")
 
     def on(self, event: str, handler: Callable):
@@ -165,6 +173,9 @@ class IBKRDataHub:
                 old_ib.errorEvent -= self._on_error_event
                 old_ib.disconnectedEvent -= self._on_disconnected
                 old_ib.timeoutEvent -= self._on_timeout
+                old_ib.execDetailsEvent -= self._on_exec_details
+                old_ib.commissionReportEvent -= self._on_commission_report
+                old_ib.connectedEvent -= self._on_connected
             except Exception:
                 pass
         self._ib = None
@@ -186,6 +197,9 @@ class IBKRDataHub:
             self._ib.errorEvent -= self._on_error_event
             self._ib.disconnectedEvent -= self._on_disconnected
             self._ib.timeoutEvent -= self._on_timeout
+            self._ib.execDetailsEvent -= self._on_exec_details
+            self._ib.commissionReportEvent -= self._on_commission_report
+            self._ib.connectedEvent -= self._on_connected
         except Exception:
             pass
         self._ib.pendingTickersEvent += self._on_pending_tickers
@@ -194,6 +208,9 @@ class IBKRDataHub:
         self._ib.errorEvent += self._on_error_event
         self._ib.disconnectedEvent += self._on_disconnected
         self._ib.timeoutEvent += self._on_timeout
+        self._ib.execDetailsEvent += self._on_exec_details
+        self._ib.commissionReportEvent += self._on_commission_report
+        self._ib.connectedEvent += self._on_connected
         self._ib.setTimeout(30)
         print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders, errors, disconnect, timeout=30s)")
 
@@ -247,11 +264,40 @@ class IBKRDataHub:
                 else:
                     self._subscribe_fail_cache[symbol] = time.time() + 3600
                     self._subscribed_symbols.discard(symbol)
+        elif errorCode in (2104, 2106):
+            # Farm connection OK — informational
+            if errorCode == 2104:
+                print(f"[IBKR_HUB] ✓ Market data farm connection OK (code 2104: {errorString})")
+                self._streaming_active = True
+            else:
+                print(f"[IBKR_HUB] ✓ HMDS data farm connection OK (code 2106: {errorString})")
+        elif errorCode in (2107, 2108):
+            # Farm connection inactive — warning
+            if errorCode == 2107:
+                print(f"[IBKR_HUB] ⚠️ HMDS data farm connection is INACTIVE (code 2107: {errorString})")
+            else:
+                print(f"[IBKR_HUB] ⚠️ Market data farm connection is INACTIVE (code 2108: {errorString})")
+                self._streaming_active = False
+                self._emit('data_farm_disconnected', {'errorCode': errorCode, 'errorString': errorString})
 
     def _on_disconnected(self):
         print(f"[IBKR_HUB] ⚠️ TWS/Gateway DISCONNECTED — streaming prices will stop. Auto-reconnect will attempt in reconciliation loop.")
         self._streaming_active = False
         self._emit('disconnected', {})
+
+    def _on_connected(self):
+        print(f"[IBKR_HUB] ✓ TWS/Gateway CONNECTED event — streaming restored immediately")
+        self._streaming_active = True
+        self._consecutive_stale_checks = 0
+        # Re-subscribe all symbols that were pending
+        old_pending = set(self._pending_subscriptions)
+        for sym in old_pending:
+            with self._contract_lock:
+                contract = self._symbol_to_contract.get(sym)
+            if contract:
+                self._start_market_data(sym, contract)
+                self._pending_subscriptions.discard(sym)
+        self._emit('connected', {})
 
     def _on_timeout(self, idlePeriod):
         is_connected = self._ib and self._ib.isConnected()
@@ -305,6 +351,9 @@ class IBKRDataHub:
                     old_ib.errorEvent -= self._on_error_event
                     old_ib.disconnectedEvent -= self._on_disconnected
                     old_ib.timeoutEvent -= self._on_timeout
+                    old_ib.execDetailsEvent -= self._on_exec_details
+                    old_ib.commissionReportEvent -= self._on_commission_report
+                    old_ib.connectedEvent -= self._on_connected
                 except Exception:
                     pass
                 try:
@@ -477,6 +526,7 @@ class IBKRDataHub:
                 if has_real_data or is_new:
                     q.timestamp = now
                     updated_symbols.append(symbol)
+                    self._per_symbol_last_tick[symbol] = now
 
         if conid_updates:
             with self._contract_lock:
@@ -514,6 +564,54 @@ class IBKRDataHub:
         except Exception as e:
             print(f"[IBKR_HUB] Order status event error: {e}")
 
+    def _on_exec_details(self, trade, fill):
+        """Capture execution details: exact fill price, time, exchange, shares."""
+        try:
+            exec_data = {
+                'exec_id': fill.execution.execId if fill.execution else '',
+                'order_id': trade.order.orderId if trade.order else 0,
+                'symbol': trade.contract.symbol if trade.contract else '',
+                'sec_type': trade.contract.secType if trade.contract else '',
+                'side': fill.execution.side if fill.execution else '',
+                'shares': float(fill.execution.shares) if fill.execution else 0,
+                'price': float(fill.execution.price) if fill.execution else 0,
+                'exchange': fill.execution.exchange if fill.execution else '',
+                'time': str(fill.execution.time) if fill.execution else '',
+                'avg_price': float(fill.execution.avgPrice) if fill.execution and hasattr(fill.execution, 'avgPrice') else 0,
+                'cum_qty': float(fill.execution.cumQty) if fill.execution and hasattr(fill.execution, 'cumQty') else 0,
+            }
+            with self._exec_details_lock:
+                self._exec_details.append(exec_data)
+                # Keep last 500 executions
+                if len(self._exec_details) > 500:
+                    self._exec_details = self._exec_details[-500:]
+            self._emit('exec_details', exec_data)
+            logger.info(f"[IBKR_HUB] Fill: {exec_data['side']} {exec_data['shares']} {exec_data['symbol']} @ ${exec_data['price']:.4f} on {exec_data['exchange']}")
+        except Exception as e:
+            logger.warning(f"[IBKR_HUB] execDetails handler error: {e}")
+
+    def _on_commission_report(self, trade, fill, report):
+        """Capture commission report: cost per fill for accurate P&L."""
+        try:
+            exec_id = report.execId if report else ''
+            comm_data = {
+                'exec_id': exec_id,
+                'commission': float(report.commission) if report and report.commission else 0,
+                'currency': report.currency if report else 'USD',
+                'realized_pnl': float(report.realizedPNL) if report and hasattr(report, 'realizedPNL') and report.realizedPNL else 0,
+            }
+            with self._commissions_lock:
+                self._commissions[exec_id] = comm_data
+                # Keep last 500 commission reports
+                if len(self._commissions) > 500:
+                    oldest_keys = list(self._commissions.keys())[:len(self._commissions) - 500]
+                    for k in oldest_keys:
+                        del self._commissions[k]
+            self._emit('commission_report', comm_data)
+            logger.info(f"[IBKR_HUB] Commission: ${comm_data['commission']:.2f} {comm_data['currency']} (realized P&L: ${comm_data['realized_pnl']:.2f})")
+        except Exception as e:
+            logger.warning(f"[IBKR_HUB] commissionReport handler error: {e}")
+
     def _build_symbol_key(self, contract) -> str:
         if not contract:
             return ''
@@ -536,6 +634,7 @@ class IBKRDataHub:
             q.volume = int(quote_data.get('volume', q.volume) or q.volume)
             q.timestamp = now
             q.source = source
+        self._per_symbol_last_tick[symbol] = now
         self._last_quote_ts = now
         self._emit('quote_updated', {'symbol': symbol, 'source': source, 'quote': q})
 
@@ -544,10 +643,14 @@ class IBKRDataHub:
             q = self._quotes.get(symbol)
             if not q:
                 return None
+            # HUB-5: Reject quotes with no real price data
+            if q.last <= 0 and q.bid <= 0 and q.ask <= 0:
+                return None
             effective_max_age = max_age if max_age is not None else self.QUOTE_STALE_THRESHOLD
             if (time.time() - q.timestamp) > effective_max_age:
                 return None
-            return q
+            # HUB-1: Return defensive copy — prevents data race with streaming thread
+            return copy.copy(q)
 
     def get_quote_price(self, symbol: str, allow_stale: bool = False) -> Optional[float]:
         with self._quotes_lock:
@@ -594,6 +697,14 @@ class IBKRDataHub:
                 'timestamp': q.timestamp,
                 'source': q.source
             }
+
+    def get_recent_executions(self, limit: int = 50) -> List[Dict[str, Any]]:
+        with self._exec_details_lock:
+            return list(self._exec_details[-limit:])
+
+    def get_commission(self, exec_id: str) -> Optional[Dict[str, Any]]:
+        with self._commissions_lock:
+            return self._commissions.get(exec_id)
 
     def get_positions(self, max_age_seconds: Optional[int] = None) -> Optional[List[Dict[str, Any]]]:
         with self._positions_lock:
@@ -883,9 +994,20 @@ class IBKRDataHub:
                     entry['asset'] = 'stock'
                 parsed.append(entry)
 
+                # Market price from IB portfolio — used for both position dict and quote seed
+                mkt_price = float(getattr(pos, 'marketPrice', 0) or 0)
+
+                # Embed market_price in position dict — stored in SAME units as
+                # hub quote cache (per-share). IB's marketPrice is already per-share
+                # (no multiplier), unlike averageCost which includes 100x for options.
+                # MUST match get_quote_price() return value to avoid false SL triggers.
+                if 0 < mkt_price < _IB_SENTINEL:
+                    entry['market_price'] = mkt_price
+                else:
+                    entry['market_price'] = 0
+
                 # Seed IB's mark price into quotes so risk engine has a valid price even
                 # when reqMktData ticks are sparse (illiquid symbols like low-volume stocks).
-                mkt_price = float(getattr(pos, 'marketPrice', 0) or 0)
                 if 0 < mkt_price < _IB_SENTINEL:
                     self.update_quote(sym_key, {'last': mkt_price}, source='portfolio')
 
@@ -947,6 +1069,28 @@ class IBKRDataHub:
                     if not self._streaming_active:
                         self._streaming_active = True
                         print("[IBKR_HUB] ✓ Connection alive — restored streaming_active after timeout")
+
+                    # Per-symbol dead subscription detection — re-subscribe symbols that stopped receiving ticks
+                    now_dead_check = time.time()
+                    if self._per_symbol_last_tick:
+                        dead_symbols = []
+                        for sym in list(self._subscribed_symbols):
+                            last_tick = self._per_symbol_last_tick.get(sym, 0)
+                            if last_tick > 0 and (now_dead_check - last_tick) > self._PER_SYMBOL_DEAD_THRESHOLD:
+                                dead_symbols.append(sym)
+                        if dead_symbols:
+                            print(f"[IBKR_HUB] ⚠️ Dead subscriptions detected ({len(dead_symbols)} symbols, >{self._PER_SYMBOL_DEAD_THRESHOLD:.0f}s no ticks): {dead_symbols[:5]}")
+                            for sym in dead_symbols:
+                                self._subscribed_symbols.discard(sym)
+                                with self._contract_lock:
+                                    contract = self._symbol_to_contract.get(sym)
+                                if contract:
+                                    try:
+                                        self._ib.cancelMktData(contract)
+                                    except Exception:
+                                        pass
+                                    self._pending_subscriptions.add(sym)
+                                self._per_symbol_last_tick.pop(sym, None)
 
                     await self._refresh_positions_from_ib()
 

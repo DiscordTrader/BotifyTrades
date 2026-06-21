@@ -275,6 +275,125 @@ select.scanner-input option:checked { background:#238636; color:#fff; }
     </div>
 </div>
 
+<!-- AI Format Approval Panel -->
+<div id="ai-format-panel" style="display:none; margin-bottom:20px; background:linear-gradient(135deg, #1a1d28 0%, #1e2235 100%); border:1px solid rgba(99,102,241,0.2); border-radius:12px; overflow:hidden;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 18px; background:rgba(99,102,241,0.06); border-bottom:1px solid rgba(99,102,241,0.12);">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:18px;">🧠</span>
+            <span style="font-size:14px; font-weight:600; color:#A5B4FC;">AI Format Approval</span>
+            <span id="ai-format-count" style="background:#818CF8; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; min-width:20px; text-align:center;">0</span>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <span id="ai-format-stats" style="font-size:11px; color:#71717A;"></span>
+            <button onclick="loadAiFormatCandidates()" style="background:rgba(99,102,241,0.15); color:#A5B4FC; border:1px solid rgba(99,102,241,0.25); border-radius:6px; padding:4px 12px; font-size:11px; cursor:pointer; transition:all 0.15s;" onmouseover="this.style.background='rgba(99,102,241,0.3)'" onmouseout="this.style.background='rgba(99,102,241,0.15)'">Refresh</button>
+        </div>
+    </div>
+    <div id="ai-format-list" style="padding:12px 16px; max-height:400px; overflow-y:auto;">
+        <div style="color:#71717A; font-size:12px; text-align:center; padding:20px;">Loading format candidates...</div>
+    </div>
+</div>
+
+<script>
+async function loadAiFormatCandidates() {
+    try {
+        const [candResp, statsResp] = await Promise.all([
+            fetch('/api/ai/format-candidates'),
+            fetch('/api/ai/format-candidates/stats')
+        ]);
+        const candData = await candResp.json();
+        const statsData = await statsResp.json();
+        const panel = document.getElementById('ai-format-panel');
+        const countBadge = document.getElementById('ai-format-count');
+        const statsSpan = document.getElementById('ai-format-stats');
+        const listDiv = document.getElementById('ai-format-list');
+
+        const candidates = candData.candidates || [];
+        countBadge.textContent = candidates.length;
+
+        if (statsData.total > 0) {
+            statsSpan.textContent = `${statsData.approved} approved \u00b7 ${statsData.dismissed} dismissed \u00b7 ${statsData.total} total`;
+        }
+
+        if (candidates.length === 0) {
+            panel.style.display = 'none';
+            return;
+        }
+
+        panel.style.display = 'block';
+        listDiv.innerHTML = candidates.map(c => {
+            const aiResult = JSON.parse(c.ai_result_json || '{}');
+            const confPct = (c.ai_confidence * 100).toFixed(0);
+            const confColor = c.ai_confidence >= 0.95 ? '#4ADE80' : c.ai_confidence >= 0.85 ? '#FBBF24' : '#F87171';
+            const assetIcon = c.asset_type === 'option' ? '\ud83d\udcca' : '\ud83d\udcc8';
+            const strike = aiResult.strike ? ` $${aiResult.strike}` : '';
+            const optType = aiResult.option_type || '';
+            const expiry = aiResult.expiry || '';
+            const targets = aiResult.profit_targets ? aiResult.profit_targets.map(t => `$${t}`).join(', ') : '';
+            const sl = aiResult.stop_loss ? `SL: $${aiResult.stop_loss}` : (aiResult.stop_loss_pct ? `SL: ${aiResult.stop_loss_pct}%` : '');
+            const isConditional = aiResult.is_conditional ? '<span style="color:#22D3EE; font-size:10px; font-weight:600; margin-left:4px;">CONDITIONAL</span>' : '';
+
+            return `<div style="display:flex; align-items:flex-start; gap:12px; padding:10px 12px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px; transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(99,102,241,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'">
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                        <span style="color:${confColor}; font-size:11px; font-weight:700;">${confPct}%</span>
+                        <span style="font-size:12px;">${assetIcon}</span>
+                        <span style="color:#E6EDF3; font-size:13px; font-weight:600;">${c.action} ${c.symbol}${strike}${optType} ${expiry}</span>
+                        ${isConditional}
+                    </div>
+                    <div style="font-family:'SF Mono',monospace; font-size:11px; color:#A1A1AA; background:rgba(0,0,0,0.2); padding:4px 8px; border-radius:4px; margin-bottom:4px; word-break:break-all;">${c.original_text.substring(0, 120)}</div>
+                    <div style="display:flex; gap:8px; font-size:10px; color:#71717A;">
+                        <span>\ud83d\udce2 ${c.channel_name || 'Channel ' + c.channel_id.substring(0, 8)}</span>
+                        ${targets ? '<span style="color:#4ADE80;">PT: ' + targets + '</span>' : ''}
+                        ${sl ? '<span style="color:#F87171;">' + sl + '</span>' : ''}
+                        <span>${new Date(c.created_at).toLocaleTimeString()}</span>
+                    </div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px; flex-shrink:0;">
+                    <button onclick="approveAiFormat(${c.id})" style="background:rgba(34,197,94,0.15); color:#4ADE80; border:1px solid rgba(34,197,94,0.3); border-radius:6px; padding:5px 14px; font-size:11px; font-weight:600; cursor:pointer; transition:all 0.15s; white-space:nowrap;" onmouseover="this.style.background='rgba(34,197,94,0.3)'" onmouseout="this.style.background='rgba(34,197,94,0.15)'" title="Approve: AI will generate regex so this format is recognized instantly next time">\u2713 Learn Format</button>
+                    <button onclick="dismissAiFormat(${c.id})" style="background:rgba(239,68,68,0.08); color:#A1A1AA; border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:5px 14px; font-size:11px; cursor:pointer; transition:all 0.15s; white-space:nowrap;" onmouseover="this.style.background='rgba(239,68,68,0.15)';this.style.color='#F87171'" onmouseout="this.style.background='rgba(239,68,68,0.08)';this.style.color='#A1A1AA'" title="Dismiss: don't learn this format">\u2717 Dismiss</button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (err) {
+        console.error('AI format load error:', err);
+    }
+}
+
+async function approveAiFormat(id) {
+    try {
+        const btn = event.target;
+        btn.textContent = 'Learning...';
+        btn.disabled = true;
+        const resp = await fetch(`/api/ai/format-candidates/${id}/approve`, { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+            showNotification(`\u2705 Format learned! Regex: ${data.regex?.substring(0, 50)}...`);
+            loadAiFormatCandidates();
+        } else {
+            showNotification(`Failed to learn format: ${data.error}`, 'error');
+            btn.textContent = '\u2713 Learn Format';
+            btn.disabled = false;
+        }
+    } catch (err) {
+        showNotification('Error: ' + err.message, 'error');
+    }
+}
+
+async function dismissAiFormat(id) {
+    try {
+        await fetch(`/api/ai/format-candidates/${id}/dismiss`, { method: 'POST' });
+        loadAiFormatCandidates();
+    } catch (err) {
+        console.error('Dismiss error:', err);
+    }
+}
+
+// Load on page init and poll every 30s
+document.addEventListener('DOMContentLoaded', () => {
+    loadAiFormatCandidates();
+    setInterval(loadAiFormatCandidates, 30000);
+});
+</script>
 <!-- Live Trades Section -->
 <div class="table-container">
     <div class="table-header">

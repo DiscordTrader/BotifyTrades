@@ -13,6 +13,7 @@ Architecture:
 """
 
 import time
+import copy
 import asyncio
 import threading
 import logging
@@ -175,27 +176,37 @@ class WebullDataHub:
             existing.source = source
 
         self._last_quote_ts = time.time()
-        self._emit('quote_updated', {'symbol': symbol.upper(), 'quote': existing})
+        self._emit('quote_updated', {'symbol': symbol.upper(), 'quote': copy.copy(existing)})
 
     def get_quote(self, symbol: str, max_age: Optional[float] = None) -> Optional[WebullQuoteData]:
-        threshold = max_age if max_age is not None else self.QUOTE_STALE_THRESHOLD
         with self._quotes_lock:
             quote = self._quotes.get(symbol.upper())
-            if quote and (time.time() - quote.timestamp) < threshold:
-                return quote
-        resolved = self.get_symbol_by_ticker_id(symbol)
-        if resolved:
-            with self._quotes_lock:
-                quote = self._quotes.get(resolved.upper())
-                if quote and (time.time() - quote.timestamp) < threshold:
-                    return quote
-        return None
+            if not quote:
+                return None
+            # Zero-price guard — don't return quotes with no real price data
+            if quote.last <= 0 and quote.bid <= 0 and quote.ask <= 0:
+                return None
+            effective_max_age = max_age if max_age is not None else self.QUOTE_STALE_THRESHOLD
+            if (time.time() - quote.timestamp) > effective_max_age:
+                return None
+            return copy.copy(quote)
 
-    def get_quote_price(self, symbol: str) -> Optional[float]:
-        quote = self.get_quote(symbol)
-        if quote and quote.last > 0:
-            return quote.last
-        return None
+    def get_quote_price(self, symbol: str, allow_stale: bool = False) -> float:
+        with self._quotes_lock:
+            quote = self._quotes.get(symbol.upper())
+            if not quote:
+                return 0.0
+            if not allow_stale and (time.time() - quote.timestamp) > self.QUOTE_STALE_THRESHOLD:
+                return 0.0
+            if quote.last and quote.last > 0:
+                return quote.last
+            if quote.bid > 0 and quote.ask > 0:
+                return round((quote.bid + quote.ask) / 2, 4)
+            if quote.bid > 0:
+                return quote.bid
+            if quote.ask > 0:
+                return quote.ask
+            return 0.0
 
     def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
         quote = self.get_quote(symbol)
@@ -219,9 +230,7 @@ class WebullDataHub:
 
     def get_all_quotes(self) -> Dict[str, WebullQuoteData]:
         with self._quotes_lock:
-            now = time.time()
-            return {s: q for s, q in self._quotes.items()
-                    if (now - q.timestamp) < self.QUOTE_STALE_THRESHOLD}
+            return {s: copy.copy(q) for s, q in self._quotes.items()}
 
     def update_positions(self, positions: List[Dict[str, Any]], source: str = "rest"):
         with self._positions_lock:

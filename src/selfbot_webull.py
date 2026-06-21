@@ -14256,6 +14256,41 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     'detected_at': datetime.now().isoformat(),
                                                     'parsed_at': datetime.now().isoformat(),
                                                 }
+                                                # Wire channel sizing into AI fallback path — previously bypassed entirely
+                                                if channel_info:
+                                                    _ch_default_qty = channel_info.get('default_quantity')
+                                                    _ch_pct = channel_info.get('position_size_pct')
+                                                    _ch_max = channel_info.get('channel_max_position_size')
+                                                    if _ch_default_qty and int(_ch_default_qty) > 0:
+                                                        bto_signal['qty'] = int(_ch_default_qty)
+                                                        bto_signal['_used_default_qty'] = True
+                                                        print(f"[AI_FALLBACK] ✓ Channel default_qty={_ch_default_qty} applied")
+                                                    elif _ch_pct:
+                                                        bto_signal['_position_size_pct'] = float(_ch_pct)
+                                                        bto_signal['_pct_from_channel'] = True
+                                                        bto_signal['_calculate_qty'] = True
+                                                        print(f"[AI_FALLBACK] ✓ Channel position_size_pct={_ch_pct}% applied")
+                                                    if _ch_max:
+                                                        bto_signal['_channel_max_position_size'] = float(_ch_max)
+                                                        # Enforce max position size cap for fixed qty
+                                                        if bto_signal.get('_used_default_qty') and _ai_price and _ai_price > 0:
+                                                            _multiplier = 100 if _ai_asset == 'option' else 1
+                                                            _cost = _ai_price * _multiplier * bto_signal['qty']
+                                                            _max_val = float(_ch_max)
+                                                            if _cost > _max_val:
+                                                                _capped = max(1, int(_max_val / (_ai_price * _multiplier)))
+                                                                print(f"[AI_FALLBACK] ⚠️ MAX POSITION$ cap: {bto_signal['qty']} → {_capped} (${_cost:.0f} > ${_max_val:.0f})")
+                                                                bto_signal['qty'] = _capped
+                                                    # Attach channel risk settings
+                                                    _ch_risk = {}
+                                                    for _rk in ('stop_loss_pct', 'profit_target_1_pct', 'profit_target_2_pct',
+                                                                'profit_target_3_pct', 'profit_target_4_pct', 'trailing_stop_pct',
+                                                                'trailing_activation_pct', 'exit_strategy_mode', 'broker_bracket_mode'):
+                                                        _rv = channel_info.get(_rk)
+                                                        if _rv is not None:
+                                                            _ch_risk[_rk] = _rv
+                                                    if _ch_risk:
+                                                        bto_signal['_channel_risk_config'] = _ch_risk
                                                 if _ai_asset == 'option':
                                                     bto_signal['strike'] = _ai_result.get('strike')
                                                     bto_signal['opt_type'] = _ai_result.get('option_type')
@@ -14265,6 +14300,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     if _ai_sl:
                                                         bto_signal['stop_loss'] = _ai_sl
                                                 await self.order_queue.put(bto_signal)
+                                                # Auto-learn: store AI-parsed format as candidate for user approval
+                                                try:
+                                                    _auto_learn = db.get_setting('ai_auto_learn_enabled', '1') != '0'
+                                                    if _auto_learn and _ai_result.get('confidence', 0) >= 0.80:
+                                                        from gui_app.database import save_ai_format_candidate
+                                                        save_ai_format_candidate(
+                                                            channel_id=str(message.channel.id),
+                                                            channel_name=getattr(message.channel, 'name', ''),
+                                                            original_text=str(message.content),
+                                                            ai_result=_ai_result,
+                                                            confidence=_ai_result.get('confidence', 0),
+                                                        )
+                                                except Exception as _learn_err:
+                                                    print(f"[AI_FALLBACK] ⚠️ Auto-learn storage error: {_learn_err}")
                                             except Exception as _ai_exec_err:
                                                 print(f"[AI_FALLBACK] ⚠️ Execution error on {_ai_broker}: {_ai_exec_err}")
                                     elif _ai_action == 'STC':
@@ -14298,6 +14347,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     stc_signal['opt_type'] = _ai_result['option_type']
                                                     stc_signal['expiry'] = _ai_result['expiry']
                                                 await self.order_queue.put(stc_signal)
+                                                # Auto-learn: store AI-parsed format as candidate for user approval
+                                                try:
+                                                    _auto_learn = db.get_setting('ai_auto_learn_enabled', '1') != '0'
+                                                    if _auto_learn and _ai_result.get('confidence', 0) >= 0.80:
+                                                        from gui_app.database import save_ai_format_candidate
+                                                        save_ai_format_candidate(
+                                                            channel_id=str(message.channel.id),
+                                                            channel_name=getattr(message.channel, 'name', ''),
+                                                            original_text=str(message.content),
+                                                            ai_result=_ai_result,
+                                                            confidence=_ai_result.get('confidence', 0),
+                                                        )
+                                                except Exception as _learn_err:
+                                                    print(f"[AI_FALLBACK] ⚠️ Auto-learn storage error: {_learn_err}")
                                             except Exception as _ai_exec_err:
                                                 print(f"[AI_FALLBACK] ⚠️ Exit error on {_ai_broker}: {_ai_exec_err}")
                                         if _is_corrected and _aib_idx == 0:
@@ -16819,22 +16882,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if paper_trade_enabled:
                     print(f"[ROUTE] PAPER TRADING enabled - executing in PAPER mode")
                     
-                    # Add TRACKING position size percentage for paper trading
-                    # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
+                    # TRACKING position sizing — Priority: tracking_default_quantity > signal pct > channel tracking %
+                    tracking_default_qty = channel_info.get('tracking_default_quantity') if channel_info else None
                     track_position_size_pct = channel_info.get('tracking_position_size_pct') if channel_info else None
-                    print(f"[DEBUG] Channel tracking_position_size_pct from DB: {track_position_size_pct} (type: {type(track_position_size_pct).__name__})", flush=True)
-                    
-                    # Check if signal already has percentage from parsing
-                    signal_has_pct = opt.get('_position_size_pct') is not None and opt.get('_calculate_qty', False)
-                    
-                    if signal_has_pct:
-                        print(f"[POSITION SIZE] ✓ Using signal's {opt['_position_size_pct']}% (overrides channel's {track_position_size_pct}%)", flush=True)
+                    print(f"[DEBUG] Channel tracking_default_qty={tracking_default_qty}, tracking_position_size_pct={track_position_size_pct}", flush=True)
+
+                    if tracking_default_qty and int(tracking_default_qty) > 0:
+                        # Fixed tracking qty — highest priority (mirrors execute path default_quantity behavior)
+                        _track_qty = int(tracking_default_qty)
+                        signal_qty_val = opt.get('qty')
+                        qty_from_signal = opt.get('qty_specified', opt.get('_qty_from_signal', False))
+                        if signal_qty_val and signal_qty_val > 0 and qty_from_signal:
+                            opt['qty'] = min(signal_qty_val, _track_qty)
+                        else:
+                            opt['qty'] = _track_qty
+                        opt['_used_default_qty'] = True
+                        print(f"[POSITION SIZE] ✓ Tracking: using fixed qty={opt['qty']} (tracking_default_quantity={_track_qty})", flush=True)
+                    elif opt.get('_position_size_pct') is not None and opt.get('_calculate_qty', False):
+                        # Signal already has percentage from parsing — use it
+                        print(f"[POSITION SIZE] ✓ Tracking: using signal's {opt['_position_size_pct']}% (overrides channel's {track_position_size_pct}%)", flush=True)
                     elif track_position_size_pct:
                         opt['_position_size_pct'] = float(track_position_size_pct)
                         opt['_pct_from_channel'] = True
-                        print(f"[POSITION SIZE] ✓ Tracking configured for {track_position_size_pct}% of portfolio (channel setting)", flush=True)
+                        opt['_calculate_qty'] = True
+                        print(f"[POSITION SIZE] ✓ Tracking: configured for {track_position_size_pct}% of portfolio (channel setting)", flush=True)
                     else:
-                        print(f"[POSITION SIZE] ⚠️ No tracking_position_size_pct configured - using signal quantity as-is", flush=True)
+                        print(f"[POSITION SIZE] ⚠️ No tracking sizing configured — using signal quantity as-is", flush=True)
                     
                     # Add paper trading flag and channel config to signal
                     opt['_paper_trade_mode'] = True
@@ -17465,19 +17538,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if paper_trade_enabled:
                     print(f"[ROUTE] PAPER TRADING enabled - executing in PAPER mode")
                     
-                    # Add TRACKING position size percentage for paper trading
-                    # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
+                    # TRACKING position sizing — Priority: tracking_default_quantity > signal pct > channel tracking %
+                    tracking_default_qty = channel_info.get('tracking_default_quantity') if channel_info else None
                     track_position_size_pct = channel_info.get('tracking_position_size_pct') if channel_info else None
-                    
-                    # Check if signal already has percentage from parsing
-                    signal_has_pct = stk.get('_position_size_pct') is not None and stk.get('_calculate_qty', False)
-                    
-                    if signal_has_pct:
-                        print(f"[POSITION SIZE] ✓ Using signal's {stk['_position_size_pct']}% (overrides channel's {track_position_size_pct}%)")
+
+                    if tracking_default_qty and int(tracking_default_qty) > 0:
+                        _track_qty = int(tracking_default_qty)
+                        signal_qty_val = stk.get('qty')
+                        qty_from_signal = stk.get('qty_specified', stk.get('_qty_from_signal', False))
+                        if signal_qty_val and signal_qty_val > 0 and qty_from_signal:
+                            stk['qty'] = min(signal_qty_val, _track_qty)
+                        else:
+                            stk['qty'] = _track_qty
+                        stk['_used_default_qty'] = True
+                        print(f"[POSITION SIZE] ✓ Tracking: using fixed qty={stk['qty']} shares (tracking_default_quantity={_track_qty})")
+                    elif stk.get('_position_size_pct') is not None and stk.get('_calculate_qty', False):
+                        print(f"[POSITION SIZE] ✓ Tracking: using signal's {stk['_position_size_pct']}% (overrides channel's {track_position_size_pct}%)")
                     elif track_position_size_pct:
                         stk['_position_size_pct'] = float(track_position_size_pct)
                         stk['_pct_from_channel'] = True
-                        print(f"[POSITION SIZE] Tracking configured for {track_position_size_pct}% of portfolio (channel setting)")
+                        stk['_calculate_qty'] = True
+                        print(f"[POSITION SIZE] ✓ Tracking: configured for {track_position_size_pct}% of portfolio (channel setting)")
+                    else:
+                        print(f"[POSITION SIZE] ⚠️ No tracking sizing configured — using signal quantity as-is")
                     
                     # Add paper trading flag and channel config to signal
                     stk['_paper_trade_mode'] = True
@@ -17909,11 +17992,58 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'detected_at': datetime.now().isoformat(),
                                             'parsed_at': datetime.now().isoformat(),
                                         }
+                                        # Wire channel sizing into AI fallback path
+                                        if channel_info:
+                                            _ch_default_qty = channel_info.get('default_quantity')
+                                            _ch_pct = channel_info.get('position_size_pct')
+                                            _ch_max = channel_info.get('channel_max_position_size')
+                                            if _ch_default_qty and int(_ch_default_qty) > 0:
+                                                bto_signal['qty'] = int(_ch_default_qty)
+                                                bto_signal['_used_default_qty'] = True
+                                                print(f"[AI_FALLBACK] ✓ Channel default_qty={_ch_default_qty} applied")
+                                            elif _ch_pct:
+                                                bto_signal['_position_size_pct'] = float(_ch_pct)
+                                                bto_signal['_pct_from_channel'] = True
+                                                bto_signal['_calculate_qty'] = True
+                                                print(f"[AI_FALLBACK] ✓ Channel position_size_pct={_ch_pct}% applied")
+                                            if _ch_max:
+                                                bto_signal['_channel_max_position_size'] = float(_ch_max)
+                                                if bto_signal.get('_used_default_qty') and _ai_price and _ai_price > 0:
+                                                    _multiplier = 100 if _ai_asset == 'option' else 1
+                                                    _cost = _ai_price * _multiplier * bto_signal['qty']
+                                                    _max_val = float(_ch_max)
+                                                    if _cost > _max_val:
+                                                        _capped = max(1, int(_max_val / (_ai_price * _multiplier)))
+                                                        print(f"[AI_FALLBACK] ⚠️ MAX POSITION$ cap: {bto_signal['qty']} → {_capped} (${_cost:.0f} > ${_max_val:.0f})")
+                                                        bto_signal['qty'] = _capped
+                                            _ch_risk = {}
+                                            for _rk in ('stop_loss_pct', 'profit_target_1_pct', 'profit_target_2_pct',
+                                                        'profit_target_3_pct', 'profit_target_4_pct', 'trailing_stop_pct',
+                                                        'trailing_activation_pct', 'exit_strategy_mode', 'broker_bracket_mode'):
+                                                _rv = channel_info.get(_rk)
+                                                if _rv is not None:
+                                                    _ch_risk[_rk] = _rv
+                                            if _ch_risk:
+                                                bto_signal['_channel_risk_config'] = _ch_risk
                                         if _ai_asset == 'option':
                                             bto_signal['strike'] = _ai_result.get('strike')
                                             bto_signal['opt_type'] = _ai_result.get('option_type')
                                             bto_signal['expiry'] = _ai_result.get('expiry')
                                         await self.order_queue.put(bto_signal)
+                                        # Auto-learn: store AI-parsed format as candidate for user approval
+                                        try:
+                                            _auto_learn = db.get_setting('ai_auto_learn_enabled', '1') != '0'
+                                            if _auto_learn and _ai_result.get('confidence', 0) >= 0.80:
+                                                from gui_app.database import save_ai_format_candidate
+                                                save_ai_format_candidate(
+                                                    channel_id=str(message.channel.id),
+                                                    channel_name=getattr(message.channel, 'name', ''),
+                                                    original_text=str(message.content),
+                                                    ai_result=_ai_result,
+                                                    confidence=_ai_result.get('confidence', 0),
+                                                )
+                                        except Exception as _learn_err:
+                                            print(f"[AI_FALLBACK] ⚠️ Auto-learn storage error: {_learn_err}")
                                     except Exception as _ai_exec_err:
                                         print(f"[AI_FALLBACK] ⚠️ Execution error on {_ai_broker}: {_ai_exec_err}")
                             elif _ai_action == 'STC':
@@ -17941,6 +18071,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             stc_signal['opt_type'] = _ai_result['option_type']
                                             stc_signal['expiry'] = _ai_result['expiry']
                                         await self.order_queue.put(stc_signal)
+                                        # Auto-learn: store AI-parsed format as candidate for user approval
+                                        try:
+                                            _auto_learn = db.get_setting('ai_auto_learn_enabled', '1') != '0'
+                                            if _auto_learn and _ai_result.get('confidence', 0) >= 0.80:
+                                                from gui_app.database import save_ai_format_candidate
+                                                save_ai_format_candidate(
+                                                    channel_id=str(message.channel.id),
+                                                    channel_name=getattr(message.channel, 'name', ''),
+                                                    original_text=str(message.content),
+                                                    ai_result=_ai_result,
+                                                    confidence=_ai_result.get('confidence', 0),
+                                                )
+                                        except Exception as _learn_err:
+                                            print(f"[AI_FALLBACK] ⚠️ Auto-learn storage error: {_learn_err}")
                                     except Exception as _ai_exec_err:
                                         print(f"[AI_FALLBACK] ⚠️ Exit error on {_ai_broker}: {_ai_exec_err}")
                             return
@@ -18444,6 +18588,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception as e:
                     _original_print(f"[{broker_name}] [FUNDS] ⚠️ Could not check buying power: {e} - proceeding with order")
             
+            # ═══ ABSOLUTE FINAL GUARD: channel_max_position_size ═══
+            # This runs AFTER all sizing paths (pct, default_qty, AI_fallback, funds check).
+            # Catches any order that bypassed the sizing cascade (e.g., AI_FALLBACK path).
+            if signal['action'] == 'BTO':
+                _final_max_pos = signal.get('_channel_max_position_size')
+                if not _final_max_pos and channel_info:
+                    _final_max_pos = channel_info.get('channel_max_position_size')
+                if _final_max_pos:
+                    _final_max_pos = float(_final_max_pos)
+                    _final_price = signal.get('price') or signal.get('limit_price') or 0
+                    _final_qty = signal.get('qty', 1)
+                    _final_mult = 100 if signal.get('asset') == 'option' else 1
+                    if _final_price > 0 and _final_qty > 0:
+                        _final_cost = _final_price * _final_mult * _final_qty
+                        if _final_cost > _final_max_pos:
+                            _new_qty = int(_final_max_pos / (_final_price * _final_mult))
+                            if _new_qty <= 0:
+                                _original_print(f"[{broker_name}] [MAX POS$] ❌ BLOCKING: ${_final_cost:.0f} exceeds channel max ${_final_max_pos:.0f} — cannot afford even 1 unit")
+                                return {'success': False, 'error': f'Position ${_final_cost:.0f} exceeds channel max position size ${_final_max_pos:.0f}'}
+                            else:
+                                _original_print(f"[{broker_name}] [MAX POS$] ⚠️ FINAL CAP: {_final_qty} → {_new_qty} (${_final_cost:.0f} > max ${_final_max_pos:.0f})")
+                                signal['qty'] = _new_qty
+
             _original_print(f"[{broker_name}] Executing {signal['action']} {signal['qty']} {signal['symbol']}")
             
             # Bracket orders are now placed exclusively by the Risk Engine (position_monitor.py)

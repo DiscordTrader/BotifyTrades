@@ -22,20 +22,26 @@ class OrdersAPI:
         time_in_force: str = "DAY",
         extended_hours: bool = False,
         client_order_id: str = None,
+        total_cash_amount: float = None,
     ) -> PlaceOrderResult:
+        # Fractional shares: use entrust_type=AMOUNT with total_cash_amount instead of quantity
+        _entrust = "AMOUNT" if total_cash_amount is not None else "QTY"
         order = {
             "client_order_id": client_order_id or self._gen_client_order_id(),
             "combo_type": "NORMAL",
             "instrument_type": "EQUITY",
-            "entrust_type": "QTY",
+            "entrust_type": _entrust,
             "symbol": symbol,
             "market": "US",
             "side": side,
             "order_type": order_type,
             "time_in_force": time_in_force,
-            "quantity": str(quantity),
-            "support_trading_session": "CORE",
+            "support_trading_session": "ALL" if extended_hours else "CORE",
         }
+        if total_cash_amount is not None:
+            order["total_cash_amount"] = str(total_cash_amount)
+        else:
+            order["quantity"] = str(quantity)
         if limit_price is not None:
             order["limit_price"] = str(limit_price)
         if stop_price is not None:
@@ -62,6 +68,7 @@ class OrdersAPI:
         position_intent: str = None,
         order_type: str = "LIMIT",
         limit_price: float = None,
+        stop_price: float = None,
         time_in_force: str = "DAY",
         client_order_id: str = None,
     ) -> PlaceOrderResult:
@@ -96,6 +103,8 @@ class OrdersAPI:
         }
         if limit_price is not None:
             order["limit_price"] = str(limit_price)
+        if stop_price is not None:
+            order["stop_price"] = str(stop_price)
 
         body = {"account_id": account_id, "new_orders": [order]}
         data = await self._client.post("/openapi/trade/order/place", body)
@@ -184,6 +193,110 @@ class OrdersAPI:
             client_combo_order_id=combo_id,
         )
 
+    async def place_oco_order(
+        self,
+        account_id: str,
+        symbol: str,
+        quantity: int,
+        pt_price: float,
+        sl_price: float,
+        sl_order_type: str = "STOP_LOSS",
+        sl_limit_price: float = None,
+        time_in_force: str = "GTC",
+        extended_hours: bool = False,
+        # Option fields (None = stock order)
+        option_type: str = None,
+        strike_price: float = None,
+        expiry_date: str = None,
+    ) -> PlaceOrderResult:
+        """Place OCO (One Cancels Other) exit bracket — SL + PT linked.
+
+        When one leg fills, the broker auto-cancels the other.
+        Supports both stocks (EQUITY) and options (OPTION).
+
+        For stocks: GTC TIF, survives bot crash.
+        For options: DAY TIF only (Webull restriction), must re-place daily.
+        """
+        combo_id = self._gen_client_order_id()
+        pt_coid = self._gen_client_order_id()
+        sl_coid = self._gen_client_order_id()
+        is_option = option_type is not None and strike_price is not None
+        inst_type = "OPTION" if is_option else "EQUITY"
+        _tif = "DAY" if is_option else time_in_force
+        _session = "ALL" if extended_hours and not is_option else "CORE"
+
+        # PT leg — LIMIT sell at profit target
+        pt_leg = {
+            "client_order_id": pt_coid,
+            "combo_type": "OCO",
+            "instrument_type": inst_type,
+            "entrust_type": "QTY",
+            "symbol": symbol,
+            "market": "US",
+            "side": "SELL",
+            "order_type": "LIMIT",
+            "limit_price": str(pt_price),
+            "quantity": str(int(quantity)),
+            "time_in_force": _tif,
+        }
+        if not is_option:
+            pt_leg["support_trading_session"] = _session
+
+        # SL leg — STOP_LOSS or STOP_LOSS_LIMIT sell at stop price
+        sl_leg = {
+            "client_order_id": sl_coid,
+            "combo_type": "OCO",
+            "instrument_type": inst_type,
+            "entrust_type": "QTY",
+            "symbol": symbol,
+            "market": "US",
+            "side": "SELL",
+            "order_type": sl_order_type,
+            "stop_price": str(sl_price),
+            "quantity": str(int(quantity)),
+            "time_in_force": _tif,
+        }
+        if sl_limit_price is not None:
+            sl_leg["limit_price"] = str(sl_limit_price)
+        if not is_option:
+            sl_leg["support_trading_session"] = _session
+
+        # Option-specific: add legs[] array + option_strategy + position_intent
+        if is_option:
+            opt_leg_detail = {
+                "side": "SELL",
+                "quantity": str(int(quantity)),
+                "symbol": symbol,
+                "market": "US",
+                "instrument_type": "OPTION",
+                "strike_price": str(strike_price),
+                "option_expire_date": expiry_date or "",
+                "option_type": option_type.upper(),
+                "position_effect": "CLOSE",
+            }
+            pt_leg["option_strategy"] = "SINGLE"
+            pt_leg["position_intent"] = "SELL_TO_CLOSE"
+            pt_leg["legs"] = [opt_leg_detail.copy()]
+
+            sl_leg["option_strategy"] = "SINGLE"
+            sl_leg["position_intent"] = "SELL_TO_CLOSE"
+            sl_leg["legs"] = [opt_leg_detail.copy()]
+
+        body = {
+            "account_id": account_id,
+            "client_combo_order_id": combo_id,
+            "new_orders": [pt_leg, sl_leg],
+        }
+        data = await self._client.post("/openapi/trade/order/place", body)
+
+        return PlaceOrderResult(
+            client_order_id=data.get("client_order_id", ""),
+            combo_order_id=data.get("combo_order_id", ""),
+            client_combo_order_id=combo_id,
+            pt_client_order_id=pt_coid,
+            sl_client_order_id=sl_coid,
+        )
+
     async def place_trailing_stop(
         self,
         account_id: str,
@@ -223,6 +336,14 @@ class OrdersAPI:
         }
         return await self._client.post("/openapi/trade/order/cancel", body)
 
+    async def cancel_order_by_broker_id(self, account_id: str, order_id: str) -> dict:
+        """WO-5: Cancel using Webull's numeric order_id instead of client_order_id."""
+        body = {
+            "account_id": account_id,
+            "order_id": order_id,
+        }
+        return await self._client.post("/openapi/trade/order/cancel", body)
+
     async def replace_order(
         self,
         account_id: str,
@@ -231,6 +352,10 @@ class OrdersAPI:
         stop_price: float = None,
         quantity: float = None,
         time_in_force: str = None,
+        order_type: str = None,
+        trailing_stop_step: float = None,
+        leg_id: str = None,
+        leg_quantity: int = None,
     ) -> dict:
         modify = {"client_order_id": client_order_id}
         if limit_price is not None:
@@ -241,6 +366,13 @@ class OrdersAPI:
             modify["quantity"] = str(quantity)
         if time_in_force is not None:
             modify["time_in_force"] = time_in_force
+        if order_type is not None:
+            modify["order_type"] = order_type
+        if trailing_stop_step is not None:
+            modify["trailing_stop_step"] = str(trailing_stop_step)
+        # Option orders require legs array with id for Replace API
+        if leg_id is not None:
+            modify["legs"] = [{"id": leg_id, "quantity": str(leg_quantity or quantity or 1)}]
 
         body = {"account_id": account_id, "modify_orders": [modify]}
         return await self._client.post("/openapi/trade/order/replace", body)
@@ -286,4 +418,36 @@ class OrdersAPI:
             combo_type = group.get("combo_type", "NORMAL")
             for order in group.get("orders", [group]):
                 results.append(WebullOrder.from_api(order, combo_type))
+        return results
+
+    async def preview_order(self, order_body: dict) -> dict:
+        """Preview an order before placement — returns estimated cost, fees, buying power impact.
+
+        Uses the same body as place_stock_order/place_option_order but sends to /preview endpoint.
+        BUY-side only (STC exits skip preview for latency). Fail-open: network errors return None.
+        """
+        try:
+            return await self._client.post("/openapi/trade/order/preview", order_body)
+        except Exception as e:
+            log.warning(f"[WEBULL-OFF] Order preview failed (non-blocking): {e}")
+            return None
+
+    async def batch_place_orders(self, account_id: str, orders: list[dict]) -> list:
+        """Place multiple orders in a single API call.
+
+        Each order dict should be a complete order body (same as place_stock_order).
+        Returns list of PlaceOrderResult for each order.
+        """
+        body = {
+            "account_id": account_id,
+            "new_orders": orders,
+        }
+        data = await self._client.post("/openapi/trade/order/batch-place", body)
+        results = []
+        items = data if isinstance(data, list) else data.get("results", [data])
+        for item in items:
+            results.append(PlaceOrderResult(
+                client_order_id=item.get("client_order_id", ""),
+                order_id=item.get("order_id", ""),
+            ))
         return results

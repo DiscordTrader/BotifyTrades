@@ -9948,6 +9948,9 @@ def register_routes(app):
                     _chat_ai_cache.clear()
                 except Exception:
                     pass
+
+            if 'ai_auto_learn_enabled' in data:
+                db.save_setting('ai_auto_learn_enabled', '1' if data['ai_auto_learn_enabled'] else '0')
             
             if success:
                 return jsonify({
@@ -10065,6 +10068,10 @@ def register_routes(app):
                 status = 'no_key'
                 message = f'{provider_label} selected but no API key configured'
 
+            # Load auto-learn setting
+            _auto_learn_raw = db.get_setting('ai_auto_learn_enabled')
+            _auto_learn = _auto_learn_raw != '0' if _auto_learn_raw is not None else True  # default True
+
             return jsonify({
                 'success': True,
                 'provider': provider,
@@ -10073,6 +10080,7 @@ def register_routes(app):
                 'connected': connected,
                 'has_key': has_key,
                 'ai_analysis_enabled': ai_analysis_enabled,
+                'ai_auto_learn_enabled': _auto_learn,
                 'chatbot_ready': chatbot_ready,
                 'fallback_ready': fallback_ready,
                 'status': status,
@@ -10080,6 +10088,86 @@ def register_routes(app):
             })
         except Exception as e:
             return jsonify({'success': False, 'status': 'error', 'message': str(e)}), 500
+
+    # ============ AI FORMAT CANDIDATES API ============
+
+    @app.route('/api/ai/format-candidates', methods=['GET'])
+    def api_ai_format_candidates():
+        """Get pending AI format candidates for user approval."""
+        from gui_app.database import get_pending_ai_format_candidates
+        candidates = get_pending_ai_format_candidates()
+        return jsonify({'candidates': candidates})
+
+    @app.route('/api/ai/format-candidates/stats', methods=['GET'])
+    def api_ai_format_stats():
+        """Get AI format candidate statistics."""
+        from gui_app.database import get_ai_format_stats
+        return jsonify(get_ai_format_stats())
+
+    @app.route('/api/ai/format-candidates/<int:candidate_id>/approve', methods=['POST'])
+    def api_approve_format_candidate(candidate_id):
+        """Approve a format candidate — generates regex and registers as learned pattern."""
+        from gui_app.database import update_ai_format_candidate_status
+        import json as _json_mod
+        # Get the candidate
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT original_text, ai_result_json, channel_id FROM ai_format_candidates WHERE id = ?', (candidate_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'error': 'Candidate not found'}), 404
+        original_text, ai_json, channel_id = row
+
+        # Use format_trainer to generate regex from the example
+        try:
+            from gui_app.format_trainer import FormatTrainer
+            trainer = FormatTrainer()
+            result = trainer.learn_format_from_example(original_text)
+            if result and result.get('regex'):
+                from gui_app.database import add_learned_pattern, approve_learned_pattern
+                pattern_id = add_learned_pattern(
+                    name=f"ai_auto_{candidate_id}",
+                    pattern=result['regex'],
+                    example_text=original_text,
+                    description=f"Auto-learned from: {original_text[:80]}",
+                )
+                if pattern_id:
+                    approve_learned_pattern(pattern_id, approved_by='dashboard')
+                    update_ai_format_candidate_status(candidate_id, 'approved', learned_pattern_id=pattern_id)
+                    # Hot-reload registry
+                    try:
+                        from src.services.signal_format_registry import get_signal_format_registry
+                        get_signal_format_registry().reload_learned_patterns()
+                    except Exception:
+                        pass
+                    return jsonify({'success': True, 'pattern_id': pattern_id, 'regex': result['regex']})
+            return jsonify({'error': 'Failed to generate regex pattern'}), 500
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/ai/format-candidates/<int:candidate_id>/dismiss', methods=['POST'])
+    def api_dismiss_format_candidate(candidate_id):
+        """Dismiss a format candidate."""
+        from gui_app.database import update_ai_format_candidate_status
+        update_ai_format_candidate_status(candidate_id, 'dismissed')
+        return jsonify({'success': True})
+
+    @app.route('/api/ai/format-candidates/<int:candidate_id>/dismiss-all-similar', methods=['POST'])
+    def api_dismiss_similar_candidates(candidate_id):
+        """Dismiss all similar format candidates (same action/asset/channel)."""
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT action, asset_type, channel_id FROM ai_format_candidates WHERE id = ?', (candidate_id,))
+        row = cursor.fetchone()
+        if row:
+            cursor.execute('''
+                UPDATE ai_format_candidates SET status='dismissed', reviewed_at=CURRENT_TIMESTAMP
+                WHERE action=? AND asset_type=? AND channel_id=? AND status='pending'
+            ''', row)
+            conn.commit()
+        conn.close()
+        return jsonify({'success': True})
 
     # ============ TELEGRAM SETTINGS API ============
 

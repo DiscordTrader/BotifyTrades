@@ -2687,39 +2687,80 @@ const RISK_HELP_CONTENT = {
         ]
     },
     'broker-bracket-mode': {
-        title: 'Broker Bracket Orders',
+        title: '\ud83d\udee1\ufe0f Broker Bracket Orders',
         sections: [
             {
                 heading: 'What It Does',
-                body: 'Controls which bracket orders are placed directly on the broker when a position opens. The risk engine always monitors your positions — this setting only controls the <strong>broker-side</strong> stop-loss and profit-target orders.'
+                body: 'Places native stop-loss (SL) and profit-target (PT) orders directly on your broker when a position opens. These orders live on the broker\u2019s server \u2014 if the bot crashes or disconnects, your protection stays active. The risk engine always monitors your positions regardless of this setting.'
             },
             {
-                heading: 'Options',
-                body: `<div style="margin:8px 0;">
-                    <div style="margin-bottom:10px;padding:10px 14px;background:#1E1E24;border-radius:10px;border:1px solid #3A3A3C;">
-                        <strong style="color:#22D3EE;">Both (Default)</strong><br>
-                        <span style="color:#A1A1AA;font-size:13px;">Places both a stop-loss and profit-target order on the broker. Best for most setups.</span>
-                    </div>
-                    <div style="margin-bottom:10px;padding:10px 14px;background:#1E1E24;border-radius:10px;border:1px solid #3A3A3C;">
-                        <strong style="color:#F59E0B;">SL Only</strong><br>
-                        <span style="color:#A1A1AA;font-size:13px;">Only places the stop-loss order on the broker. Profit targets are handled by the risk engine. Useful when broker rejects simultaneous SL + PT orders (e.g., Webull options).</span>
-                    </div>
-                    <div style="margin-bottom:10px;padding:10px 14px;background:#1E1E24;border-radius:10px;border:1px solid #3A3A3C;">
-                        <strong style="color:#F59E0B;">PT Only</strong><br>
-                        <span style="color:#A1A1AA;font-size:13px;">Only places the profit-target order. Stop-loss is managed by the risk engine only.</span>
-                    </div>
-                    <div style="padding:10px 14px;background:#1E1E24;border-radius:10px;border:1px solid #3A3A3C;">
-                        <strong style="color:#EF4444;">Disabled</strong><br>
-                        <span style="color:#A1A1AA;font-size:13px;">No bracket orders placed on the broker. The risk engine handles all exits. Use when your broker doesn\u2019t support bracket orders or you prefer software-only risk management.</span>
-                    </div>
+                heading: 'Modes',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#4ADE80;">Both (SL + PT)</strong> \u2014 Places linked OCO (One-Cancels-Other) bracket: when SL fills, PT auto-cancels; when PT fills, SL auto-cancels. <em>Recommended for maximum protection.</em>
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">SL Only</strong> \u2014 Only stop-loss placed with broker. Profit targets managed by software risk engine. Use when broker rejects simultaneous SL + PT.
+                </div>
+                <div style="padding:8px 12px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#818CF8;">PT Only</strong> \u2014 Only profit target placed with broker. Stop loss managed by software risk engine only.
+                </div>
+                <div style="padding:8px 12px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#F87171;">Disabled</strong> \u2014 No broker orders. All exits managed by software risk engine. <em>\u26a0\ufe0f If bot crashes, no protection.</em>
+                </div>
                 </div>`
             },
             {
-                heading: 'When to Use',
+                heading: 'How It Works Per Broker',
+                body: `<div style="display:grid;gap:8px;">
+                <div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Webull Official</strong><br>
+                    \u2022 <strong>Stocks:</strong> OCO bracket (GTC) \u2014 SL uses STOP_LOSS, PT uses LIMIT. Survives overnight + bot crash. SL escalation cancels & replaces entire OCO.<br>
+                    \u2022 <strong>Options:</strong> OCO bracket (DAY only) \u2014 SL uses STOP_LOSS_LIMIT. Expires at 4pm ET, auto re-placed each morning.<br>
+                    \u2022 <strong>Trailing stop:</strong> Native server-side for stocks (survives crash). Not available for options.
+                </div>
+                <div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(99,102,241,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#818CF8;">Schwab</strong><br>
+                    \u2022 <strong>Stocks:</strong> OCO bracket (GTC) \u2014 same as Webull. SL + PT linked, auto-cancel on fill.<br>
+                    \u2022 <strong>Options:</strong> OCO bracket (DAY) \u2014 SL uses STOP_LIMIT. Trim Order Type locked to Limit when PT is active.
+                </div>
+                <div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(239,68,68,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#F87171;">IBKR (Interactive Brokers)</strong><br>
+                    \u2022 <strong>Stocks & Options:</strong> Independent SL (STOP) + PT (LIMIT) via ib.placeOrder. GTC for stocks, DAY for options.<br>
+                    \u2022 No OCO \u2014 software detects fill and cancels the other leg (~3-5s).<br>
+                    \u2022 SL escalation: in-place modify via ib.placeOrder (zero-gap, no cancel needed).
+                </div>
+                <div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,255,136,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#4ADE80;">Alpaca</strong><br>
+                    \u2022 <strong>Stocks:</strong> OCO bracket (GTC) \u2014 native Alpaca OCO API.<br>
+                    \u2022 <strong>Options:</strong> Not supported (Alpaca options API has no stop orders).
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example: Both Mode (OCO)',
                 body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
-                \u2022 <strong style="color:#4ADE80;">Webull Options:</strong> Set to <strong>SL Only</strong> — Webull rejects simultaneous SL + PT orders on options<br>
-                \u2022 <strong style="color:#4ADE80;">Broker doesn\u2019t support stops:</strong> Set to <strong>PT Only</strong> or <strong>Disabled</strong><br>
-                \u2022 <strong style="color:#4ADE80;">Prefer software exits:</strong> Set to <strong>Disabled</strong> — risk engine still monitors and exits
+                Entry: <strong style="color:#22D3EE;">BTO 10 AAPL @ $180</strong> | SL: <strong style="color:#F87171;">25%</strong> | PT1: <strong style="color:#4ADE80;">15%</strong><br><br>
+                After fill, bot places OCO bracket:<br>
+                \u2022 Leg 1 (PT): SELL LIMIT 10 AAPL @ <strong style="color:#4ADE80;">$207.00</strong> (+15%)<br>
+                \u2022 Leg 2 (SL): SELL STOP 10 AAPL @ <strong style="color:#F87171;">$135.00</strong> (-25%)<br>
+                \u2022 Linked via OCO \u2014 one fills, other auto-cancels<br><br>
+                <strong style="color:#FBBF24;">If AAPL hits $207:</strong> PT fills \u2192 SL auto-cancelled \u2192 risk engine places PT2 bracket<br>
+                <strong style="color:#F87171;">If AAPL drops to $135:</strong> SL fills \u2192 PT auto-cancelled \u2192 position closed
+                </div>`
+            },
+            {
+                heading: 'Important Notes',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    \u26a0\ufe0f <strong style="color:#FBBF24;">Options DAY TIF:</strong> Option sell orders expire at 4pm ET. The risk engine automatically re-places them each morning.
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    \u26a0\ufe0f <strong style="color:#FBBF24;">Trim Order Type lock:</strong> When PT is active (Both or PT Only), Trim Order Type is automatically locked to Limit.
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    \u26a0\ufe0f <strong style="color:#FBBF24;">Dynamic SL still works:</strong> When risk engine escalates the SL, the broker bracket is automatically updated (cancel + re-place with new SL price).
+                </div>
                 </div>`
             }
         ]

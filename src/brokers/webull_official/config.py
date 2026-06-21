@@ -7,6 +7,7 @@ class WebullConfig:
     app_secret: str
     account_id: str = ""
     environment: str = "production"
+    enable_order_preview: bool = False
 
     @property
     def base_url(self) -> str:

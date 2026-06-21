@@ -127,7 +127,12 @@ class PriceMonitor(ABC):
     def _update_price_timestamp(self, price: Optional[float] = None):
         """Update the last price update timestamp. Call after successful price fetch.
         Also tracks when price actually changes for staleness detection."""
-        now = time.time()
+        # Use actual hub quote timestamp if available, otherwise current time
+        actual_ts = getattr(self, '_last_hub_quote_ts', None)
+        if actual_ts and actual_ts > 0:
+            now = actual_ts
+        else:
+            now = time.time()
         self._last_price_update_time = now
         if price is not None and (self._last_changed_price is None or abs(price - self._last_changed_price) > 0.0001):
             self._last_changed_price = price
@@ -194,6 +199,7 @@ class StreamingPriceMonitor(PriceMonitor):
         self._rate_limiter: Optional[RateLimitTracker] = None
         self._price_event: Optional[asyncio.Event] = None
         self._ibkr_hub_handler = None
+        self._last_hub_quote_ts = 0
     
     def _try_subscribe_streaming(self):
         try:
@@ -404,7 +410,9 @@ class StreamingPriceMonitor(PriceMonitor):
                         self._last_hub_change_ts = now
 
                     frozen_seconds = now - self._last_hub_change_ts if self._last_hub_change_ts > 0 else 0
-                    if frozen_seconds >= self.FROZEN_THRESHOLD and (now - self._last_frozen_probe_ts) >= self.FROZEN_PROBE_COOLDOWN and self._is_us_market_hours():
+                    _in_market = self._is_us_market_hours()
+                    _effective_frozen_threshold = self.FROZEN_THRESHOLD if _in_market else self.FROZEN_THRESHOLD * 5
+                    if frozen_seconds >= _effective_frozen_threshold and (now - self._last_frozen_probe_ts) >= self.FROZEN_PROBE_COOLDOWN:
                         self._last_frozen_probe_ts = now
                         cross_price = self._try_cross_broker_hubs()
                         if cross_price and cross_price > 0 and abs(cross_price - price) > 0.0001:
@@ -494,6 +502,11 @@ class StreamingPriceMonitor(PriceMonitor):
         try:
             price = self.data_hub.get_quote_price(self.symbol, allow_stale=True)
             if price and price > 0:
+                # Track actual hub quote timestamp for staleness detection
+                if hasattr(self.data_hub, 'get_quote'):
+                    q = self.data_hub.get_quote(self.symbol)
+                    if q and hasattr(q, 'timestamp') and q.timestamp:
+                        self._last_hub_quote_ts = q.timestamp
                 return float(price)
         except TypeError:
             try:
@@ -752,6 +765,17 @@ class StreamingPriceMonitor(PriceMonitor):
                     sys.stderr.flush()
         except Exception:
             pass
+        # IBKR: unsubscribe via IBKRDataHub
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            _ibkr_hub = get_ibkr_data_hub()
+            if _ibkr_hub and hasattr(_ibkr_hub, 'unsubscribe_symbol'):
+                _ibkr_hub.unsubscribe_symbol(self.symbol)
+                sys.stderr.write(f"[STREAM_MON] ✓ Unsubscribed {self.symbol} from IBKR hub\n")
+                sys.stderr.flush()
+        except Exception as e:
+            sys.stderr.write(f"[STREAM_MON] IBKR unsubscribe error for {self.symbol}: {e}\n")
+            sys.stderr.flush()
 
     async def stop(self):
         self.is_running = False
@@ -2879,7 +2903,7 @@ class BaseConditionalOrderService(ABC):
                             future.cancel()
                             print(f"[CONDITIONAL] ⚠️ Callback timeout #{order_id} {symbol} — retrying once after 5s", flush=True)
                             self._log(f"Execution timeout #{order_id} — retrying")
-                            time.sleep(5)
+                            await asyncio.sleep(5)
                             try:
                                 retry_result = self.execution_callback(order, trigger_price)
                                 if asyncio.iscoroutine(retry_result):
@@ -2887,14 +2911,24 @@ class BaseConditionalOrderService(ABC):
                                     retry_future.result(timeout=30)
                                 print(f"[CONDITIONAL] ✅ Retry succeeded for #{order_id} {symbol}", flush=True)
                             except Exception as retry_err:
-                                callback_success = False
-                                print(f"[CONDITIONAL] ❌ Retry also failed #{order_id} {symbol}: {retry_err}", flush=True)
-                                self._log(f"Execution retry failed #{order_id}: {retry_err}")
-                                update_conditional_order_status(
-                                    order_id, 'ERROR',
-                                    event='EXECUTION_FAILED',
-                                    error_message=f"Callback timeout + retry failed: {str(retry_err)[:200]}"
-                                )
+                                # Second retry with longer timeout
+                                self._log(f"Retry 1 failed #{order_id}, attempting final retry with 45s timeout")
+                                await asyncio.sleep(3)
+                                try:
+                                    retry2_result = self.execution_callback(order, trigger_price)
+                                    if asyncio.iscoroutine(retry2_result):
+                                        retry2_future = asyncio.run_coroutine_threadsafe(retry2_result, self.main_event_loop)
+                                        retry2_future.result(timeout=45)
+                                    print(f"[CONDITIONAL] ✅ Retry 2 succeeded for #{order_id} {symbol}", flush=True)
+                                except Exception as retry2_err:
+                                    callback_success = False
+                                    print(f"[CONDITIONAL] ❌ All retries failed #{order_id} {symbol}: {retry2_err}", flush=True)
+                                    self._log(f"All execution retries failed #{order_id}: {retry2_err}")
+                                    update_conditional_order_status(
+                                        order_id, 'ERROR',
+                                        event='EXECUTION_FAILED',
+                                        error_message=f"Callback timeout + 2 retries failed: {str(retry2_err)[:200]}"
+                                    )
                         except Exception as e:
                             callback_success = False
                             print(f"[CONDITIONAL] ❌ Async callback error #{order_id} {symbol}: {e}", flush=True)

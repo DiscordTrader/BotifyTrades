@@ -51,19 +51,48 @@ class WebullClient:
             self._http = None
 
     async def get(self, path: str, params: dict = None) -> dict:
-        await self._rate_limiter.acquire(path)
-        host = urlparse(self._config.base_url).hostname
-        headers = self._token_headers(self._auth.sign_request("GET", path, host, query_params=params))
-        resp = await self._http.get(path, params=params, headers=headers)
-        return self._handle_response(resp, path)
+        try:
+            await self._rate_limiter.acquire(path)
+            host = urlparse(self._config.base_url).hostname
+            headers = self._token_headers(self._auth.sign_request("GET", path, host, query_params=params))
+            resp = await self._http.get(path, params=params, headers=headers)
+            return self._handle_response(resp, path)
+        except WebullAuthError:
+            # WO-6: Auto-retry on 401 with token refresh
+            if self._access_token and '/auth/token/' not in path:
+                refreshed = await self._refresh_token(self._access_token)
+                if refreshed:
+                    self._access_token = refreshed
+                    self.save_token(refreshed)
+                    log.info("Token refreshed on 401 — retrying %s", path)
+                    host = urlparse(self._config.base_url).hostname
+                    headers = self._token_headers(self._auth.sign_request("GET", path, host, query_params=params))
+                    resp = await self._http.get(path, params=params, headers=headers)
+                    return self._handle_response(resp, path)
+            raise
 
     async def post(self, path: str, body: dict = None) -> dict:
-        await self._rate_limiter.acquire(path)
-        host = urlparse(self._config.base_url).hostname
-        headers = self._token_headers(self._auth.sign_request("POST", path, host, body=body))
-        raw_body = json.dumps(body, separators=(",", ":")) if body else None
-        resp = await self._http.post(path, content=raw_body, headers=headers)
-        return self._handle_response(resp, path)
+        try:
+            await self._rate_limiter.acquire(path)
+            host = urlparse(self._config.base_url).hostname
+            headers = self._token_headers(self._auth.sign_request("POST", path, host, body=body))
+            raw_body = json.dumps(body, separators=(",", ":")) if body else None
+            resp = await self._http.post(path, content=raw_body, headers=headers)
+            return self._handle_response(resp, path)
+        except WebullAuthError:
+            # WO-6: Auto-retry on 401 with token refresh
+            if self._access_token and '/auth/token/' not in path:
+                refreshed = await self._refresh_token(self._access_token)
+                if refreshed:
+                    self._access_token = refreshed
+                    self.save_token(refreshed)
+                    log.info("Token refreshed on 401 — retrying POST %s", path)
+                    host = urlparse(self._config.base_url).hostname
+                    headers = self._token_headers(self._auth.sign_request("POST", path, host, body=body))
+                    raw_body = json.dumps(body, separators=(",", ":")) if body else None
+                    resp = await self._http.post(path, content=raw_body, headers=headers)
+                    return self._handle_response(resp, path)
+            raise
 
     def _handle_response(self, resp: httpx.Response, path: str) -> dict:
         if resp.status_code == 200:
@@ -81,6 +110,10 @@ class WebullClient:
 
         if resp.status_code == 401:
             raise WebullAuthError(resp.status_code, error_code, message)
+
+        if resp.status_code == 429:
+            from .exceptions import WebullRateLimitError
+            raise WebullRateLimitError(resp.status_code, error_code, message)
 
         if "order" in path:
             raise WebullOrderError(resp.status_code, error_code, message)

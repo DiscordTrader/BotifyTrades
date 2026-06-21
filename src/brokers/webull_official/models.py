@@ -126,9 +126,15 @@ class WebullOrder:
         )
 
 
+
 @dataclass
 class PlaceOrderResult:
     client_order_id: str
     order_id: str = ""
     combo_order_id: str = ""
     client_combo_order_id: str = ""
+    # OCO leg tracking — set when placing OCO combos
+    sl_order_id: str = ""
+    pt_order_id: str = ""
+    sl_client_order_id: str = ""
+    pt_client_order_id: str = ""

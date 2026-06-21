@@ -286,6 +286,23 @@ class TestOrdersAPI:
         _run(_test())
 
 
+def _mock_accounts_with_bp(broker, bp=100000):
+    """Set up mock accounts so buying power checks pass in tests."""
+    from brokers.webull_official.models import WebullBalance
+    mock_accounts = AsyncMock()
+    mock_accounts.get_balance.return_value = WebullBalance(
+        total_cash_balance=bp, total_market_value=bp,
+        total_unrealized_pnl=0, total_net_liquidation=bp,
+        total_day_pnl=0, buying_power=bp,
+        settled_cash=bp, unsettled_cash=0,
+        day_trades_left="3", option_buying_power=bp,
+    )
+    broker._accounts = mock_accounts
+    broker._account_info_cache = {"buying_power": bp, "option_buying_power": bp, "settled_cash": bp}
+    import time as _t
+    broker._account_info_cache_ts = _t.monotonic()
+
+
 class TestBrokerInterface:
     def test_get_account_info_returns_expected_keys(self):
         from brokers.webull_official.broker import WebullOfficialBroker
@@ -378,6 +395,7 @@ class TestBrokerInterface:
             broker = WebullOfficialBroker(name="TEST")
             broker.connected = True
             broker.account_id = "ACC001"
+            _mock_accounts_with_bp(broker)
             mock_orders = AsyncMock()
             mock_orders.place_stock_order.return_value = MagicMock(
                 client_order_id="c1", order_id="o1"
@@ -402,6 +420,7 @@ class TestBrokerInterface:
             broker = WebullOfficialBroker(name="TEST")
             broker.connected = True
             broker.account_id = "ACC001"
+            _mock_accounts_with_bp(broker)
             mock_orders = AsyncMock()
             mock_orders.place_stock_order.return_value = MagicMock(
                 client_order_id="c1", order_id="o1"
@@ -412,9 +431,11 @@ class TestBrokerInterface:
                 "STOP": "STOP_LOSS", "STOP_LIMIT": "STOP_LOSS_LIMIT",
             }
             for bot_type, api_type in mappings.items():
-                await broker.place_stock_order("AAPL", 10, "BUY", order_type=bot_type, limit_price=150)
+                # Mock _needs_extended_hours to False so MARKET doesn't auto-convert to LIMIT
+                broker._needs_extended_hours = lambda: False
+                await broker.place_stock_order("AAPL", 10, "SELL", order_type=bot_type, price=150.0)
                 call_kwargs = mock_orders.place_stock_order.call_args[1]
-                assert call_kwargs["order_type"] == api_type
+                assert call_kwargs["order_type"] == api_type, f"order_type {bot_type} should map to {api_type}, got {call_kwargs['order_type']}"
 
         _run(_test())
 
@@ -424,7 +445,7 @@ class TestBrokerInterface:
         async def _test():
             broker = WebullOfficialBroker(name="TEST")
             broker.connected = True
-            broker.account_id = "ACC001"
+            _mock_accounts_with_bp(broker)
             mock_orders = AsyncMock()
             mock_orders.place_option_order.return_value = MagicMock(
                 client_order_id="c1", order_id="o1"
@@ -468,12 +489,13 @@ class TestBrokerInterface:
             broker = WebullOfficialBroker(name="TEST")
             broker.connected = True
             broker.account_id = "ACC001"
+            _mock_accounts_with_bp(broker, bp=100000)
             mock_orders = AsyncMock()
             mock_orders.place_stock_order.side_effect = WebullOrderError(
                 417, "INVALID_PARAMETER", "Quantity must be positive"
             )
             broker._orders = mock_orders
-            result = await broker.place_stock_order("AAPL", -1, "BUY")
+            result = await broker.place_stock_order("AAPL", -1, "SELL")
             assert result.success is False
             assert "Quantity" in result.message or "INVALID" in result.message
 
@@ -573,12 +595,14 @@ class TestClientResponseHandling:
             broker = WebullOfficialBroker(name="TEST")
             broker.connected = True
             broker.account_id = "ACC001"
+            _mock_accounts_with_bp(broker)
             mock_orders = AsyncMock()
             mock_orders.place_stock_order.return_value = MagicMock(
                 client_order_id="lifecycle_1", order_id="WB_LT1",
             )
             broker._orders = mock_orders
-            result = await broker.place_stock_order("AAPL", 10, "BUY", "LIMIT", limit_price=150)
+            broker._needs_extended_hours = lambda: False
+            result = await broker.place_stock_order("AAPL", 10, "BUY", price=150.0, order_type="LIMIT")
             assert result.success is True
             mock_orders.get_open_orders.return_value = [
                 WebullOrder(
