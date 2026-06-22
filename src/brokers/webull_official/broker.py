@@ -965,11 +965,22 @@ class WebullOfficialBroker:
                     quote['bid'] = float(tick_data['bidPrice'])
                 if tick_data.get('askPrice') is not None:
                     quote['ask'] = float(tick_data['askPrice'])
-                if tick_data.get('close') is not None:
-                    quote['last'] = float(tick_data['close'])
-                elif tick_data.get('dealPrice') is not None:
+                # dealPrice = actual live trade price (real-time)
+                # close = previous session close price (NOT live)
+                # Priority: dealPrice > bid/ask mid > close (close is WRONG for live pricing)
+                if tick_data.get('dealPrice') is not None and float(tick_data['dealPrice']) > 0:
                     quote['last'] = float(tick_data['dealPrice'])
-                # When only snapshot close is present (no bid/ask), use last as bid fallback so SL exits have a meaningful price
+                elif quote.get('bid') and quote.get('ask') and quote['bid'] > 0 and quote['ask'] > 0:
+                    quote['last'] = round((quote['bid'] + quote['ask']) / 2, 4)
+                elif tick_data.get('tradePrice') is not None and float(tick_data['tradePrice']) > 0:
+                    quote['last'] = float(tick_data['tradePrice'])
+                # Store close separately — NOT as live price
+                if tick_data.get('close') is not None:
+                    quote['close'] = float(tick_data['close'])
+                    # Only use close as last if NO other price source available
+                    if not quote.get('last') and float(tick_data['close']) > 0:
+                        quote['last'] = float(tick_data['close'])
+                # When only snapshot close is present (no bid/ask), use last as bid fallback
                 if not quote.get('bid') and quote.get('last'):
                     quote['bid'] = quote['last']
                 if tick_data.get('volume') is not None:
