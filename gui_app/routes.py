@@ -10169,6 +10169,140 @@ def register_routes(app):
         conn.close()
         return jsonify({'success': True})
 
+    # ============ AI INTELLIGENCE MODULES API ============
+
+    @app.route('/api/ai/modules', methods=['GET'])
+    def api_ai_modules():
+        """Get status of all AI intelligence modules."""
+        try:
+            from src.ai.feature_flags import get_all_flags
+            flags = get_all_flags()
+        except Exception:
+            flags = {}
+        try:
+            from src.ai.cost_tracker import get_usage_summary
+            costs = get_usage_summary(30)
+        except Exception:
+            costs = {}
+        return jsonify({'flags': flags, 'costs': costs})
+
+    @app.route('/api/ai/modules/<feature_key>', methods=['PUT'])
+    def api_ai_module_toggle(feature_key):
+        """Enable/disable an AI module."""
+        try:
+            from src.ai.feature_flags import set_enabled
+            data = request.json or {}
+            enabled = data.get('enabled', False)
+            config = data.get('config')
+            set_enabled(feature_key, enabled, config)
+            return jsonify({'success': True, 'feature': feature_key, 'enabled': enabled})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/ai/channel-scores', methods=['GET'])
+    def api_ai_channel_scores():
+        """Get AI-computed reliability scores for all channels."""
+        try:
+            from src.ai.channel_scoring import get_all_scores
+            return jsonify({'scores': get_all_scores()})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/ai/market-regime', methods=['GET'])
+    def api_ai_market_regime():
+        """Get current market regime classification."""
+        try:
+            from src.ai.market_regime import get_current_regime
+            return jsonify(get_current_regime())
+        except Exception as e:
+            return jsonify({'regime': 'UNKNOWN', 'error': str(e)})
+
+    @app.route('/api/ai/execution-quality', methods=['GET'])
+    def api_ai_execution_quality():
+        """Get execution quality metrics per broker."""
+        try:
+            days = request.args.get('days', 30, type=int)
+            from src.ai.execution_quality import get_broker_stats
+            return jsonify(get_broker_stats(days))
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/ai/risk-recommendations', methods=['GET'])
+    def api_ai_risk_recommendations():
+        """Get pending AI risk-tuning recommendations."""
+        try:
+            from src.ai.risk_tuning import get_pending_recommendations
+            return jsonify({'recommendations': get_pending_recommendations()})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/ai/risk-recommendations/<int:rec_id>/apply', methods=['POST'])
+    def api_ai_apply_recommendation(rec_id):
+        """Apply an AI risk recommendation."""
+        try:
+            from src.ai.risk_tuning import apply_recommendation
+            result = apply_recommendation(rec_id)
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/ai/risk-recommendations/<int:rec_id>/dismiss', methods=['POST'])
+    def api_ai_dismiss_recommendation(rec_id):
+        """Dismiss an AI risk recommendation."""
+        try:
+            from src.ai.risk_tuning import dismiss_recommendation
+            result = dismiss_recommendation(rec_id)
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/ai/classifier/train', methods=['POST'])
+    def api_ai_train_classifier():
+        """Trigger training of the local signal classifier."""
+        try:
+            from src.ai.signal_classifier import get_classifier
+            result = get_classifier().train()
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/ai/consensus', methods=['GET'])
+    def api_ai_consensus():
+        """Get active multi-channel consensus signals."""
+        try:
+            from src.ai.consensus import get_active_consensus
+            return jsonify({'consensus': get_active_consensus()})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/ai/mcp/tools', methods=['GET'])
+    def api_mcp_tools():
+        """List all MCP tool definitions for Claude Desktop."""
+        try:
+            from src.ai.mcp_server import get_mcp_server
+            return jsonify({'tools': get_mcp_server().get_tool_definitions()})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/ai/mcp/call', methods=['POST'])
+    def api_mcp_call():
+        """Invoke an MCP tool by name via HTTP (Dashboard chat fallback)."""
+        data = request.json or {}
+        tool_name = data.get('tool')
+        params = data.get('params', {})
+        if not tool_name:
+            return jsonify({'error': 'tool name required'}), 400
+        import asyncio as _mcp_asyncio
+        from src.ai.mcp_server import get_mcp_server
+        loop = _mcp_asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(get_mcp_server().call_tool(tool_name, params))
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+        finally:
+            loop.close()
+
     # ============ TELEGRAM SETTINGS API ============
 
     @app.route('/api/settings/telegram', methods=['GET'])
