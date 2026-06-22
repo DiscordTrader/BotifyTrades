@@ -3278,7 +3278,12 @@ class RiskManager:
         if _force_global:
             self._force_rest_refresh = False
             self._wo_positions_cache_ts = 0
-            _REST_CACHE_TTL = 0  # Force immediate refresh when explicitly requested
+            # Fill watch: use short TTL (2s) not zero — avoids hammering REST every cycle
+            # The fill watch only needs to detect a new position appearing, not every-cycle refresh
+            if _any_streaming:
+                _REST_CACHE_TTL = 2  # quick check but not EVERY cycle
+            else:
+                _REST_CACHE_TTL = 0  # no streaming = REST is only source
 
         async def _fetch_webull_rest():
             if webull_snapshots is not None:
