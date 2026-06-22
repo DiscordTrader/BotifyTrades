@@ -9480,8 +9480,16 @@ class RiskManager:
         now = _t.time()
         session = self._get_market_session()
         rest_cooldown = 3.0 if session == 'regular' else (10.0 if session == 'extended' else 30.0)
-        _MAX_REST_REPAIRS_PER_CYCLE = 3
-        rest_repairs_this_cycle = 0
+        # When streaming is active, REST repair is a fallback — use longer cooldown
+        _any_hub_streaming = False
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            _any_hub_streaming = get_schwab_data_hub().is_streaming()
+        except Exception:
+            pass
+        if _any_hub_streaming and session == 'regular':
+            rest_cooldown = 10.0  # streaming provides prices; REST only for stuck detection
+        _MAX_REST_REPAIRS_PER_CYCLE = 2  # was 3 — reduce REST calls per cycle
 
         _tracked_keys = set(self.cache.get_all_trade_id_keys())
 
@@ -9530,9 +9538,41 @@ class RiskManager:
                             stuck_candidates.append((stuck_seconds, pos, key, tracker))
                             continue
 
-            effective_threshold = self._STUCK_PRICE_THRESHOLD
+            # Adaptive stuck threshold: when streaming is active, allow longer natural gaps
+            # Penny stocks and low-volume symbols naturally have 5-30s between ticks
+            effective_threshold = self._STUCK_PRICE_THRESHOLD  # default 2s
             if session == 'extended':
                 effective_threshold = 15.0
+            elif pos.current_price < 1.0:
+                effective_threshold = 15.0  # penny stocks: natural 10-30s gaps
+            elif pos.current_price < 5.0:
+                effective_threshold = 8.0   # low-price stocks: natural 5-15s gaps
+
+            # When streaming hub is providing prices, use even longer threshold
+            # (streaming gives us fresh data; stuck detection only needed for stream failures)
+            _pos_broker = pos.broker.upper() if pos.broker else ''
+            _has_streaming = False
+            if 'SCHWAB' in _pos_broker:
+                try:
+                    from src.services.schwab_data_hub import get_schwab_data_hub
+                    _has_streaming = get_schwab_data_hub().is_streaming()
+                except Exception:
+                    pass
+            elif 'WEBULL' in _pos_broker:
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    _has_streaming = get_webull_data_hub().is_streaming()
+                except Exception:
+                    pass
+            elif 'IBKR' in _pos_broker:
+                try:
+                    from src.services.ibkr_data_hub import get_ibkr_data_hub
+                    _has_streaming = get_ibkr_data_hub().is_streaming()
+                except Exception:
+                    pass
+            if _has_streaming:
+                effective_threshold = max(effective_threshold, 10.0)  # minimum 10s when streaming active
+
             if stuck_seconds < effective_threshold:
                 continue
             if (now - tracker.get('rest_refreshed', 0)) < rest_cooldown:
