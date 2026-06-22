@@ -1043,24 +1043,30 @@ function updatePricesInTable(prices, streamingMeta) {
             setTimeout(() => cell.classList.remove('price-flash-up', 'price-flash-down'), 500);
         }
 
-        if (bidCell && priceData.bid != null) {
+        if (bidCell && priceData.bid != null && priceData.bid > 0) {
             flashCell(bidCell, priceData.bid, prev.bid);
             bidCell.textContent = `$${priceData.bid.toFixed(2)}`;
         }
-        if (askCell && priceData.ask != null) {
+        if (askCell && priceData.ask != null && priceData.ask > 0) {
             flashCell(askCell, priceData.ask, prev.ask);
             askCell.textContent = `$${priceData.ask.toFixed(2)}`;
         }
-        if (midCell && priceData.mid != null) {
+        if (midCell && priceData.mid != null && priceData.mid > 0) {
             flashCell(midCell, priceData.mid, prev.mid);
             midCell.textContent = `$${priceData.mid.toFixed(2)}`;
         }
-        if (lastCell && priceData.last != null) {
+        if (lastCell && priceData.last != null && priceData.last > 0) {
             flashCell(lastCell, priceData.last, prev.last);
             lastCell.textContent = `$${priceData.last.toFixed(2)}`;
         }
 
-        previousPrices[tradeId] = { bid: priceData.bid, ask: priceData.ask, mid: priceData.mid, last: priceData.last };
+        // Only cache non-zero prices — prevents flash animation from real price to $0
+        previousPrices[tradeId] = {
+            bid: (priceData.bid > 0) ? priceData.bid : (prev.bid || 0),
+            ask: (priceData.ask > 0) ? priceData.ask : (prev.ask || 0),
+            mid: (priceData.mid > 0) ? priceData.mid : (prev.mid || 0),
+            last: (priceData.last > 0) ? priceData.last : (prev.last || 0),
+        };
 
         const trade = currentTrades.find(t => t.id == tradeId);
         if (trade) {
