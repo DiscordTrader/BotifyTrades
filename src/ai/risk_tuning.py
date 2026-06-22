@@ -43,6 +43,7 @@ def _ensure_table():
         conn.execute('CREATE INDEX IF NOT EXISTS idx_rr_status ON ai_risk_recommendations(status)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_rr_channel ON ai_risk_recommendations(channel_id)')
         conn.commit()
+        conn.close()
     except Exception as e:
         print(f'[AI_RISK] Table init error: {e}')
 
@@ -172,6 +173,7 @@ def _fetch_channel_trades(channel_id: str, days: int = 90) -> list:
                 'closed_at': row[9],
                 'asset_type': row[10],
             })
+        conn.close()
         return trades
     except Exception as e:
         print(f'[AI_RISK] trade fetch error for {channel_id}: {e}')
@@ -192,6 +194,7 @@ def _fetch_channel_settings(channel_id: str) -> Dict[str, Any]:
             LIMIT 1
         ''', (channel_id,))
         row = cursor.fetchone()
+        conn.close()
         if row:
             return {
                 'channel_name': row[0] or '',
@@ -229,7 +232,9 @@ def _get_active_channels() -> list:
             WHERE status = 'CLOSED' AND direction = 'BTO' AND channel_id IS NOT NULL
                   AND closed_at > datetime('now', '-90 days')
         ''')
-        return [row[0] for row in cursor.fetchall() if row[0]]
+        channels = [row[0] for row in cursor.fetchall() if row[0]]
+        conn.close()
+        return channels
     except Exception:
         return []
 
@@ -384,6 +389,7 @@ def _store_recommendation(channel_id: str, channel_name: str,
               evidence, improvement, confidence))
         conn.commit()
         rec_id = cursor.lastrowid
+        conn.close()
 
         return {
             'id': rec_id, 'channel_id': channel_id, 'channel_name': channel_name,
@@ -418,7 +424,6 @@ def get_pending_recommendations() -> List[Dict[str, Any]]:
         results = []
         for row in cursor.fetchall():
             rec = dict(zip(cols, row))
-            # Parse JSON fields
             try:
                 rec['current_settings'] = json.loads(rec['current_settings']) if isinstance(rec['current_settings'], str) else rec['current_settings']
             except Exception:
@@ -428,6 +433,7 @@ def get_pending_recommendations() -> List[Dict[str, Any]]:
             except Exception:
                 rec['proposed_settings'] = {}
             results.append(rec)
+        conn.close()
         return results
     except Exception as e:
         print(f'[AI_RISK] get_pending error: {e}')
@@ -460,6 +466,7 @@ def get_all_recommendations(limit: int = 50) -> List[Dict[str, Any]]:
             except Exception:
                 rec['proposed_settings'] = {}
             results.append(rec)
+        conn.close()
         return results
     except Exception as e:
         print(f'[AI_RISK] get_all error: {e}')
@@ -488,12 +495,14 @@ def apply_recommendation(rec_id: int) -> bool:
         row = cursor.fetchone()
         if not row:
             print(f'[AI_RISK] Recommendation {rec_id} not found')
+            conn.close()
             return False
 
         channel_id = row[0]
         status = row[2]
         if status != 'pending':
             print(f'[AI_RISK] Recommendation {rec_id} already {status}')
+            conn.close()
             return False
 
         try:
@@ -502,6 +511,7 @@ def apply_recommendation(rec_id: int) -> bool:
             proposed = {}
 
         if not proposed:
+            conn.close()
             return False
 
         # Build UPDATE for signal_routing_mappings
@@ -538,6 +548,7 @@ def apply_recommendation(rec_id: int) -> bool:
             WHERE id = ?
         ''', (rec_id,))
         conn.commit()
+        conn.close()
 
         print(f'[AI_RISK] ✓ Applied recommendation {rec_id} for channel {channel_id}')
         return True
@@ -557,6 +568,7 @@ def dismiss_recommendation(rec_id: int) -> bool:
             WHERE id = ? AND status = 'pending'
         ''', (rec_id,))
         conn.commit()
+        conn.close()
         return True
     except Exception as e:
         print(f'[AI_RISK] dismiss error: {e}')

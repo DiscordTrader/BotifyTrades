@@ -212,40 +212,24 @@ class UnifiedPriceHub:
 
                 quote_obj = event_data.get('quote')
                 if quote_obj is not None:
-                    data = {}
-                    for attr in ('bid', 'ask', 'last', 'volume', 'high', 'low',
-                                 'delta', 'gamma', 'theta', 'vega',
-                                 'open_price', 'close_price'):
-                        val = getattr(quote_obj, attr, None)
-                        if val is not None:
-                            data[attr] = val
-                    price = getattr(quote_obj, 'last', None) or getattr(quote_obj, 'price', None)
-                    if price and price > 0:
-                        data['last'] = price
-                    ts = getattr(quote_obj, 'timestamp', None)
-                    if ts:
-                        data['timestamp'] = ts
-                    if data.get('last', 0) > 0 or data.get('bid', 0) > 0:
-                        self._update_cache(symbol, data, hub_key)
-                        with self._stats_lock:
-                            self._stats['streaming_ticks'] += 1
+                    # Fast gate: only process ticks with real price data
+                    last = getattr(quote_obj, 'last', 0) or 0
+                    bid = getattr(quote_obj, 'bid', 0) or 0
+                    if last <= 0 and bid <= 0:
+                        return
+                    # Direct cache update from quote object — no intermediate dict
+                    self._update_cache_from_quote(symbol, quote_obj, hub_key)
+                    with self._stats_lock:
+                        self._stats['streaming_ticks'] += 1
                 else:
+                    # Fallback: pull from hub cache (rare — only when event has no quote)
                     try:
                         if hasattr(hub, 'get_quote'):
                             q = hub.get_quote(symbol)
-                            if q:
-                                data = {}
-                                for attr in ('bid', 'ask', 'last', 'volume', 'high', 'low'):
-                                    val = getattr(q, attr, None)
-                                    if val is not None:
-                                        data[attr] = val
-                                ts = getattr(q, 'timestamp', None)
-                                if ts:
-                                    data['timestamp'] = ts
-                                if data.get('last', 0) > 0 or data.get('bid', 0) > 0:
-                                    self._update_cache(symbol, data, hub_key)
-                                    with self._stats_lock:
-                                        self._stats['streaming_ticks'] += 1
+                            if q and (getattr(q, 'last', 0) > 0 or getattr(q, 'bid', 0) > 0):
+                                self._update_cache_from_quote(symbol, q, hub_key)
+                                with self._stats_lock:
+                                    self._stats['streaming_ticks'] += 1
                     except Exception:
                         pass
             except Exception:
@@ -341,6 +325,167 @@ class UnifiedPriceHub:
 
         self._emit('quote_updated', emit_data)
 
+        return existing
+
+    def get_price_and_ts(self, symbol: str, allow_stale: bool = False) -> tuple:
+        """Fast path: return (price, timestamp) without object copy.
+
+        Avoids the copy.copy() overhead of get_quote() when only the price
+        and timestamp are needed (e.g. StreamingPriceMonitor._query_hub).
+        Single lock acquisition, zero allocations on the hot path.
+        """
+        canonical = self._to_canonical(symbol)
+        with self._cache_lock:
+            q = self._cache.get(canonical)
+            if not q:
+                return (0.0, 0.0)
+            if not allow_stale and q.timestamp > 0 and (time.time() - q.timestamp) > 30:
+                return (0.0, 0.0)
+            price = q.last
+            if price <= 0:
+                if q.bid > 0 and q.ask > 0:
+                    price = round((q.bid + q.ask) / 2, 4)
+                elif q.bid > 0:
+                    price = q.bid
+                elif q.ask > 0:
+                    price = q.ask
+            return (price, q.timestamp) if price > 0 else (0.0, 0.0)
+
+    def _update_cache_from_quote(self, symbol: str, quote_obj, source_hub: str) -> Optional[UnifiedQuote]:
+        """Fast path: update cache directly from hub quote object.
+
+        Avoids the intermediate dict allocation and 15-getattr extraction loop
+        used by _update_cache(). Direct attribute reads via try/except are faster
+        in CPython 3.11 when the attribute exists (no function-call overhead of getattr).
+        """
+        canonical = self._to_canonical(symbol)
+        now = time.time()
+
+        with self._cache_lock:
+            existing = self._cache.get(canonical)
+            if existing is None:
+                existing = UnifiedQuote(symbol=symbol, canonical=canonical)
+                self._cache[canonical] = existing
+
+            # Timestamp gate
+            try:
+                incoming_ts = quote_obj.timestamp or now
+            except AttributeError:
+                incoming_ts = now
+            if existing.timestamp > 0 and incoming_ts < existing.timestamp - 1.0:
+                return existing
+
+            old_last = existing.last
+            old_bid = existing.bid
+            old_ask = existing.ask
+
+            # Direct attribute reads — no dict allocation, no iteration
+            try:
+                v = quote_obj.bid
+                if v and v > 0:
+                    existing.bid = float(v)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.ask
+                if v and v > 0:
+                    existing.ask = float(v)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.last
+                if v and v > 0:
+                    existing.last = float(v)
+            except AttributeError:
+                try:
+                    v = quote_obj.price
+                    if v and v > 0:
+                        existing.last = float(v)
+                except AttributeError:
+                    pass
+            try:
+                v = quote_obj.volume
+                if v is not None:
+                    existing.volume = int(v or 0)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.high
+                if v and v > 0:
+                    existing.high = float(v)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.low
+                if v and v > 0:
+                    existing.low = float(v)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.open_price
+                if v and v > 0:
+                    existing.open_price = float(v)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.close_price
+                if v and v > 0:
+                    existing.close_price = float(v)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.delta
+                if v is not None:
+                    existing.delta = float(v)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.gamma
+                if v is not None:
+                    existing.gamma = float(v)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.theta
+                if v is not None:
+                    existing.theta = float(v)
+            except AttributeError:
+                pass
+            try:
+                v = quote_obj.vega
+                if v is not None:
+                    existing.vega = float(v)
+            except AttributeError:
+                pass
+
+            existing.source_hub = source_hub
+            existing.timestamp = incoming_ts if incoming_ts > 0 else now
+
+            if existing.last > 0 and abs(existing.last - old_last) > 0.0001:
+                existing.last_changed_ts = now
+                existing.last_changed_price = existing.last
+
+            any_change = (abs(existing.last - old_last) > 0.0001
+                          or abs(existing.bid - old_bid) > 0.0001
+                          or abs(existing.ask - old_ask) > 0.0001)
+            if any_change:
+                existing.last_tick_ts = now
+
+            existing.freshness = self._classify_freshness(existing)
+
+            emit_data = {
+                'symbol': canonical,
+                'price': existing.last,
+                'bid': existing.bid,
+                'ask': existing.ask,
+                'source': source_hub,
+                'freshness': existing.freshness,
+            }
+
+        with self._stats_lock:
+            self._stats['total_updates'] += 1
+
+        self._emit('quote_updated', emit_data)
         return existing
 
     def get_quote(self, symbol: str) -> Optional[UnifiedQuote]:

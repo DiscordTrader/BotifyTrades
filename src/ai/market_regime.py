@@ -56,6 +56,7 @@ def _ensure_table():
         ''')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_regime_detected ON ai_market_regime(detected_at)')
         conn.commit()
+        conn.close()
     except Exception as e:
         print(f'[AI_REGIME] Table init error: {e}')
 
@@ -183,6 +184,8 @@ def update_regime() -> Optional[Dict[str, Any]]:
         except Exception:
             pass
 
+        conn.close()
+
         with _lock:
             _cached_regime = result
             _cache_ts = time.time()
@@ -211,6 +214,7 @@ def get_current_regime() -> Dict[str, Any]:
             FROM ai_market_regime ORDER BY id DESC LIMIT 1
         ''')
         row = cursor.fetchone()
+        conn.close()
         if row:
             result = {
                 'regime': row[0],
@@ -244,7 +248,9 @@ def get_regime_history(hours: int = 24) -> list:
             ORDER BY detected_at ASC
         ''', (f'-{hours}',))
         cols = ['regime', 'vix', 'spy_range_pct', 'confidence', 'sizing_multiplier', 'detected_at']
-        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        conn.close()
+        return rows
     except Exception as e:
         print(f'[AI_REGIME] get_regime_history error: {e}')
         return []

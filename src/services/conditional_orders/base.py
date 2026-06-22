@@ -355,23 +355,50 @@ class StreamingPriceMonitor(PriceMonitor):
 
         self._try_subscribe_streaming()
 
-        # Wire up event-driven wakeup from IBKR hub — eliminates the 250ms poll gap
+        # Wire event-driven wakeup from ALL broker hubs via UPH
+        # UPH aggregates IBKR/Schwab/Webull/Tastytrade into one event stream.
+        # This eliminates the 250ms poll gap for ALL brokers, not just IBKR.
         self._price_event = asyncio.Event()
         _loop = asyncio.get_event_loop()
+        _sym_upper = self.symbol.upper()
+
+        def _uph_quote_handler(data):
+            if not data or not isinstance(data, dict):
+                return
+            sym = data.get('symbol', '')
+            if sym and sym.upper() == _sym_upper:
+                try:
+                    _loop.call_soon_threadsafe(self._price_event.set)
+                except RuntimeError:
+                    pass
+
+        self._uph_handler = _uph_quote_handler
+
+        # Primary: subscribe to UPH (covers ALL brokers in one subscription)
+        try:
+            from src.services.unified_price_hub import get_unified_price_hub
+            _uph = get_unified_price_hub()
+            if _uph:
+                _uph.on('quote_updated', _uph_quote_handler)
+                sys.stderr.write(f"[STREAM_MON] ✓ Event-driven wakeup wired for {self.symbol} via UPH (all brokers)\n")
+                sys.stderr.flush()
+        except Exception:
+            pass
+
+        # Also subscribe directly to IBKR hub for lowest-latency path
+        # (IBKR ticks may arrive before UPH processes them)
         try:
             from src.services.ibkr_data_hub import get_ibkr_data_hub
             _ibkr_hub = get_ibkr_data_hub()
             if _ibkr_hub:
-                def _hub_quote_handler(data):
+                def _ibkr_handler(data):
                     if data and data.get('symbol') == self.symbol:
                         try:
                             _loop.call_soon_threadsafe(self._price_event.set)
-                        except Exception:
+                        except RuntimeError:
                             pass
-                self._ibkr_hub_handler = _hub_quote_handler
-                _ibkr_hub.on('quote_updated', _hub_quote_handler)
-                sys.stderr.write(f"[STREAM_MON] ✓ Event-driven wakeup wired for {self.symbol} via IBKR hub\n")
-                sys.stderr.flush()
+                self._ibkr_hub_handler = _ibkr_handler
+                _ibkr_hub.on('quote_updated', _ibkr_handler)
         except Exception:
             pass
 
@@ -499,14 +526,20 @@ class StreamingPriceMonitor(PriceMonitor):
                 await asyncio.sleep(1)
     
     def _query_hub(self) -> Optional[float]:
+        """Query hub for current price. Uses get_price_and_ts() fast path when
+        available (UPH) to avoid copy.copy() overhead and double cache read."""
         try:
+            # Fast path: single lock acquisition, no object copy (UPH only)
+            if hasattr(self.data_hub, 'get_price_and_ts'):
+                price, ts = self.data_hub.get_price_and_ts(self.symbol, allow_stale=True)
+                if price > 0:
+                    if ts > 0:
+                        self._last_hub_quote_ts = ts
+                    return price
+                return None
+            # Fallback for direct hub references (IBKRDataHub, SchwabDataHub, etc.)
             price = self.data_hub.get_quote_price(self.symbol, allow_stale=True)
             if price and price > 0:
-                # Track actual hub quote timestamp for staleness detection
-                if hasattr(self.data_hub, 'get_quote'):
-                    q = self.data_hub.get_quote(self.symbol)
-                    if q and hasattr(q, 'timestamp') and q.timestamp:
-                        self._last_hub_quote_ts = q.timestamp
                 return float(price)
         except TypeError:
             try:
@@ -780,6 +813,17 @@ class StreamingPriceMonitor(PriceMonitor):
     async def stop(self):
         self.is_running = False
         self._try_unsubscribe_streaming()
+        # Clean up UPH event handler to prevent leaked subscriptions
+        if hasattr(self, '_uph_handler') and self._uph_handler is not None:
+            try:
+                from src.services.unified_price_hub import get_unified_price_hub
+                _uph = get_unified_price_hub()
+                if _uph:
+                    _uph.off('quote_updated', self._uph_handler)
+            except Exception:
+                pass
+            self._uph_handler = None
+        # Clean up direct IBKR hub handler
         if self._ibkr_hub_handler is not None:
             try:
                 from src.services.ibkr_data_hub import get_ibkr_data_hub

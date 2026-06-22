@@ -418,12 +418,10 @@ class MCPServer:
         results = []
         # Try signal format registry
         try:
-            from src.services.signal_format_registry import get_registry
-            reg = get_registry()
-            if reg:
-                r = reg.parse_all_with_registry(text)
-                if r:
-                    results.append({'source': 'registry', 'format': r[0].get('_format_name'), 'result': r[0]})
+            from src.services.signal_format_registry import parse_all_with_registry
+            r = parse_all_with_registry(text)
+            if r:
+                results.append({'source': 'registry', 'format': r[0].get('_format_name'), 'result': r[0]})
         except Exception:
             pass
         # Try local classifier
@@ -438,7 +436,7 @@ class MCPServer:
         # Try AI API parser
         try:
             from src.services.ai_signal_parser import parse_signal_with_ai
-            r = parse_signal_with_ai(text)
+            r = await parse_signal_with_ai(text)
             if r:
                 results.append({'source': 'ai_api', 'confidence': r.get('confidence'), 'result': r})
         except Exception:

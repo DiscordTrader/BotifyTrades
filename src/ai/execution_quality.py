@@ -38,6 +38,7 @@ def _ensure_table():
         conn.execute('CREATE INDEX IF NOT EXISTS idx_eq_created ON ai_execution_quality(created_at)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_eq_trade ON ai_execution_quality(trade_id)')
         conn.commit()
+        conn.close()
     except Exception as e:
         print(f'[AI_EXEC_Q] Table init error: {e}')
 
@@ -96,6 +97,7 @@ def record_fill(trade_id: int, broker: str, signal_price: float, fill_price: flo
               signal_price, fill_price, slippage_pct, latency_ms,
               tod, regime))
         conn.commit()
+        conn.close()
 
         # Log significant slippage
         if abs(slippage_pct) > 1.0:
@@ -151,6 +153,7 @@ def get_broker_stats(days: int = 30) -> Dict[str, Dict[str, Any]]:
                 'positive_slippage_count': row[8] or 0,
                 'negative_slippage_count': row[9] or 0,
             }
+        conn.close()
         return stats
     except Exception as e:
         print(f'[AI_EXEC_Q] get_broker_stats error: {e}')
@@ -178,7 +181,9 @@ def get_worst_fills(limit: int = 10) -> List[Dict[str, Any]]:
         cols = ['trade_id', 'broker', 'symbol', 'asset_type', 'order_type',
                 'signal_price', 'fill_price', 'slippage_pct', 'latency_ms',
                 'time_of_day', 'market_regime', 'created_at']
-        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        conn.close()
+        return rows
     except Exception as e:
         print(f'[AI_EXEC_Q] get_worst_fills error: {e}')
         return []
@@ -201,7 +206,9 @@ def get_time_of_day_analysis(days: int = 30) -> List[Dict[str, Any]]:
             ORDER BY avg_slippage ASC
         ''', (f'-{days}',))
         cols = ['time_of_day', 'fill_count', 'avg_slippage', 'avg_latency']
-        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        conn.close()
+        return rows
     except Exception as e:
         print(f'[AI_EXEC_Q] get_time_of_day_analysis error: {e}')
         return []
@@ -225,11 +232,43 @@ def get_regime_analysis(days: int = 30) -> List[Dict[str, Any]]:
             ORDER BY avg_slippage ASC
         ''', (f'-{days}',))
         cols = ['market_regime', 'fill_count', 'avg_slippage', 'avg_latency']
-        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        conn.close()
+        return rows
     except Exception as e:
         print(f'[AI_EXEC_Q] get_regime_analysis error: {e}')
         return []
 
 
-# Bootstrap table on import
+# ---------------------------------------------------------------------------
+# Event bus integration
+# ---------------------------------------------------------------------------
+
+def _on_fill_detected(fill_data: dict):
+    """Event handler: auto-record fill when detected."""
+    try:
+        record_fill(
+            trade_id=fill_data.get('trade_id', 0),
+            broker=fill_data.get('broker', ''),
+            signal_price=fill_data.get('signal_price', 0),
+            fill_price=fill_data.get('fill_price', 0),
+            latency_ms=fill_data.get('latency_ms', 0),
+            symbol=fill_data.get('symbol', ''),
+            asset_type=fill_data.get('asset_type', 'stock'),
+            order_type=fill_data.get('order_type', 'market'),
+        )
+    except Exception:
+        pass
+
+
+def _register_events():
+    try:
+        from src.ai.event_bus import on, EVENT_FILL_DETECTED
+        on(EVENT_FILL_DETECTED, _on_fill_detected)
+    except Exception:
+        pass
+
+
+# Bootstrap
 _ensure_table()
+_register_events()

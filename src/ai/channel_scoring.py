@@ -43,6 +43,7 @@ def _ensure_table():
             )
         ''')
         conn.commit()
+        conn.close()
     except Exception as e:
         print(f'[AI_SCORING] Table init error: {e}')
 
@@ -130,7 +131,9 @@ def _fetch_trades(channel_id: str, days: Optional[int] = None) -> list:
                 WHERE channel_id = ? AND status = 'CLOSED' AND direction = 'BTO'
                 ORDER BY closed_at DESC
             ''', (channel_id,))
-        return [{'pnl_percent': r[0] or 0.0, 'closed_at': r[1]} for r in cursor.fetchall()]
+        rows = [{'pnl_percent': r[0] or 0.0, 'closed_at': r[1]} for r in cursor.fetchall()]
+        conn.close()
+        return rows
     except Exception as e:
         print(f'[AI_SCORING] Trade fetch error: {e}')
         return []
@@ -258,6 +261,7 @@ def update_score(channel_id: str) -> Optional[Dict[str, Any]]:
               result['sharpe_ratio'], result['total_trades'], result['streak_current'],
               result['auto_sizing_multiplier']))
         conn.commit()
+        conn.close()
 
         # Invalidate cache
         with _lock:
@@ -303,7 +307,9 @@ def get_all_scores() -> List[Dict[str, Any]]:
         cols = ['channel_id', 'score', 'win_rate_7d', 'win_rate_30d', 'win_rate_all',
                 'avg_pnl_pct', 'avg_win_pct', 'avg_loss_pct', 'profit_factor', 'sharpe_ratio',
                 'total_trades', 'streak_current', 'auto_sizing_multiplier', 'last_computed_at']
-        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        conn.close()
+        return rows
     except Exception as e:
         print(f'[AI_SCORING] get_all_scores error: {e}')
         return []
@@ -343,6 +349,7 @@ def _maybe_refresh_cache():
         new_cache = {}
         for row in cursor.fetchall():
             new_cache[row[0]] = {'score': row[1], 'auto_sizing_multiplier': row[2]}
+        conn.close()
         with _lock:
             _score_cache.update(new_cache)
             _cache_ts = time.time()
@@ -350,5 +357,28 @@ def _maybe_refresh_cache():
         pass
 
 
-# Bootstrap table on import
+# ---------------------------------------------------------------------------
+# Event bus integration
+# ---------------------------------------------------------------------------
+
+def _on_trade_close(trade_data: dict):
+    """Event handler: auto-update channel score when a trade closes."""
+    try:
+        channel_id = trade_data.get('channel_id')
+        if channel_id:
+            update_score(str(channel_id))
+    except Exception:
+        pass
+
+
+def _register_events():
+    try:
+        from src.ai.event_bus import on, EVENT_TRADE_CLOSE
+        on(EVENT_TRADE_CLOSE, _on_trade_close)
+    except Exception:
+        pass
+
+
+# Bootstrap
 _ensure_table()
+_register_events()
