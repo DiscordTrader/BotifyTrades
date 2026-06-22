@@ -18671,8 +18671,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             # Catches any order that bypassed the sizing cascade (e.g., AI_FALLBACK path).
             if signal['action'] == 'BTO':
                 _final_max_pos = signal.get('_channel_max_position_size')
-                if not _final_max_pos and channel_info:
-                    _final_max_pos = channel_info.get('channel_max_position_size')
+                if not _final_max_pos:
+                    # Try to read from channel_info if available (on_message scope)
+                    # Use locals().get to avoid NameError when called from conditional order callback
+                    _ci = locals().get('channel_info') or signal.get('_channel_info')
+                    if _ci and isinstance(_ci, dict):
+                        _final_max_pos = _ci.get('channel_max_position_size')
                 if _final_max_pos:
                     _final_max_pos = float(_final_max_pos)
                     _final_price = signal.get('price') or signal.get('limit_price') or 0
