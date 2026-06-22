@@ -2618,6 +2618,7 @@ class BaseConditionalOrderService(ABC):
 
     async def _execute_order(self, order_id: int, order: Dict, trigger_price: float):
         """Execute triggered order with safety checks."""
+        from gui_app.database import update_conditional_order_status
         symbol = order.get('symbol', 'UNKNOWN')
         channel_id = order.get('channel_id')
         
