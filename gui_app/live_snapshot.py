@@ -531,6 +531,9 @@ def _fetch_robinhood(bot) -> List[Dict]:
         _log(f"Robinhood fetch error: {e}")
         return []
 
+# Schwab last-good-price cache (same pattern as IBKR)
+_schwab_last_good_prices: Dict[str, float] = {}
+_schwab_last_good_prices_lock = threading.Lock()
 
 def _fetch_schwab(bot) -> List[Dict]:
     try:
@@ -569,6 +572,14 @@ def _fetch_schwab(bot) -> List[Dict]:
             except Exception:
                 raw = []
 
+        # Try streaming overlay from Schwab hub for real-time prices
+        _schwab_hub = None
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            _schwab_hub = get_schwab_data_hub()
+        except Exception:
+            pass
+
         positions = []
         for pos in raw:
             qty = float(pos.get('quantity', 0))
@@ -576,7 +587,27 @@ def _fetch_schwab(bot) -> List[Dict]:
             cur_price = float(pos.get('current_price', 0))
             unrealized = float(pos.get('unrealized_pl', 0))
             asset = pos.get('asset', 'stock')
-            
+            pos_id = pos.get('position_id', f"SCH_{pos.get('symbol', '')}")
+            symbol = pos.get('symbol', '')
+
+            # Price waterfall: streaming quote → REST price → last-good cache
+            if _schwab_hub and cur_price <= 0:
+                try:
+                    _sq = _schwab_hub.get_quote(symbol)
+                    if _sq and getattr(_sq, 'last', 0) > 0:
+                        cur_price = float(_sq.last)
+                    elif _sq and getattr(_sq, 'bid', 0) > 0 and getattr(_sq, 'ask', 0) > 0:
+                        cur_price = round((float(_sq.bid) + float(_sq.ask)) / 2, 4)
+                except Exception:
+                    pass
+
+            # Last-good-price cache (same pattern as IBKR)
+            with _schwab_last_good_prices_lock:
+                if cur_price > 0:
+                    _schwab_last_good_prices[pos_id] = cur_price
+                elif pos_id in _schwab_last_good_prices:
+                    cur_price = _schwab_last_good_prices[pos_id]
+
             if avg_cost > 0 and qty != 0:
                 cost_basis = avg_cost * abs(qty)
                 if asset == 'option':
@@ -586,8 +617,8 @@ def _fetch_schwab(bot) -> List[Dict]:
                 pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
 
             positions.append(_make_position(
-                pos_id=pos.get('position_id', f"SCH_{pos.get('symbol', '')}"),
-                symbol=pos.get('symbol', ''),
+                pos_id=pos_id,
+                symbol=symbol,
                 asset_type='option' if asset == 'option' else 'stock',
                 strike=pos.get('strike'),
                 expiry=pos.get('expiry'),
@@ -945,6 +976,8 @@ _wo_cache: List[Dict] = []
 _wo_cache_ts: float = 0.0
 _wo_cache_lock = threading.Lock()
 
+_wo_last_good_prices: Dict[str, float] = {}
+_wo_last_good_prices_lock = threading.Lock()
 
 def _fetch_webull_official(bot) -> List[Dict]:
     global _wo_cache, _wo_cache_ts
@@ -982,8 +1015,20 @@ def _fetch_webull_official(bot) -> List[Dict]:
                 continue
             avg_cost = float(pos.get('avg_cost', 0) or 0)
             cur_price = float(pos.get('current_price', 0) or 0)
+
+            # Streaming price overlay from WebullDataHub (zero API calls)
+            if cur_price <= 0:
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    _wb_hub = get_webull_data_hub()
+                    _wq = _wb_hub.get_quote(sym)
+                    if _wq and getattr(_wq, 'last', 0) > 0:
+                        cur_price = float(_wq.last)
+                except Exception:
+                    pass
+
             unrealized = float(pos.get('unrealized_pl', 0) or 0)
-            pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
+            pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 and cur_price > 0 else 0.0
             asset = pos.get('asset', 'stock')
             is_option = asset == 'option'
             ot = (pos.get('option_type') or '').upper()
@@ -991,6 +1036,13 @@ def _fetch_webull_official(bot) -> List[Dict]:
             strike = float(pos.get('strike_price') or 0) or None
             expiry = pos.get('expiry_date')
             pos_id = f"WO_{sym}_{idx}" if not is_option else f"WO_{sym}_{strike}_{expiry}_{call_put}"
+
+            # Last-good-price cache (prevents $0 flicker)
+            with _wo_last_good_prices_lock:
+                if cur_price > 0:
+                    _wo_last_good_prices[pos_id] = cur_price
+                elif pos_id in _wo_last_good_prices:
+                    cur_price = _wo_last_good_prices[pos_id]
 
             raw_symbol = ''
             if is_option and sym and expiry and strike and call_put:
