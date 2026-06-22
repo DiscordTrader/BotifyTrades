@@ -2539,17 +2539,8 @@ class BaseConditionalOrderService(ABC):
             self._trigger_first_seen.pop(order_id, None)
             self._executing_orders.add(order_id)
             self._log(f"TRIGGERED #{order_id} {symbol}")
-            print(f"[CONDITIONAL] 🎯 TRIGGERED #{order_id} {symbol} @ ${price:.4f} (trigger: {trigger_type} ${adjusted_trigger})", flush=True)
-            try:
-                notify_conditional_triggered(
-                    symbol=symbol,
-                    trigger_price=adjusted_trigger,
-                    current_price=price,
-                    broker=order.get('broker_primary', ''),
-                    order_id=order_id
-                )
-            except Exception as e:
-                self._log(f"Notification error (triggered): {e}")
+            print(f"[CONDITIONAL] 🎯 TRIGGERED #{order_id} {symbol} @ ${price:.4f} (trigger: {trigger_type} ${adjusted_trigger}) — executing...", flush=True)
+            # NOTE: Notification moved to AFTER _execute_order succeeds (was here before — sent false triggers)
             if order_id not in self._execution_locks:
                 self._execution_locks[order_id] = asyncio.Lock()
             async with self._execution_locks[order_id]:
@@ -2952,6 +2943,18 @@ class BaseConditionalOrderService(ABC):
                 if callback_success:
                     print(f"[CONDITIONAL] ✅ #{order_id} {symbol} execution callback succeeded — status → EXECUTING", flush=True)
                     update_conditional_order_status(order_id, 'EXECUTING')
+                    # Send trigger notification ONLY after execution succeeds
+                    # (was sent before _execute_order — caused false "TRIGGERED" when breakout reset blocked)
+                    try:
+                        notify_conditional_triggered(
+                            symbol=symbol,
+                            trigger_price=order.get('adjusted_trigger_price', trigger_price),
+                            current_price=trigger_price,
+                            broker=order.get('broker_primary', ''),
+                            order_id=order_id
+                        )
+                    except Exception as _nt_err:
+                        self._log(f"Notification error (triggered): {_nt_err}")
                 self._executing_orders.discard(order_id)
                 self._execution_locks.pop(order_id, None)
             except Exception as e:
