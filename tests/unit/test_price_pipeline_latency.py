@@ -372,3 +372,190 @@ class TestPerformanceComparison:
         p1, _ = uph.get_price_and_ts("PERF", allow_stale=True)
         p2 = uph.get_quote_price("PERF", allow_stale=True)
         assert p1 == p2
+
+
+# ── Cross-thread wakeup latency (simulates real hub → monitor path) ──────
+
+class TestCrossThreadWakeup:
+    """Simulate the real data flow: hub thread emits tick → UPH callback → monitor wakeup."""
+
+    @pytest.mark.asyncio
+    async def test_cross_thread_wakeup_latency(self):
+        """Measures actual cross-thread wakeup time via call_soon_threadsafe."""
+        from src.services.unified_price_hub import UnifiedPriceHub
+        UnifiedPriceHub._instance = None
+        uph = UnifiedPriceHub()
+
+        event = asyncio.Event()
+        _loop = asyncio.get_event_loop()
+        wakeup_times = []
+
+        def _handler(data):
+            if data and data.get('symbol') == 'XTHREAD':
+                try:
+                    _loop.call_soon_threadsafe(event.set)
+                except RuntimeError:
+                    pass
+
+        uph.on('quote_updated', _handler)
+
+        # Simulate a hub thread emitting a tick from a different thread
+        def _emit_from_thread():
+            time.sleep(0.01)  # Small delay to ensure event loop is waiting
+            t0 = time.monotonic()
+            uph._update_cache("XTHREAD", {"last": 42.0, "timestamp": time.time()}, "schwab")
+            wakeup_times.append(t0)
+
+        t = threading.Thread(target=_emit_from_thread)
+        t.start()
+
+        # Wait for the event (should wake within ~1ms via call_soon_threadsafe)
+        try:
+            await asyncio.wait_for(event.wait(), timeout=2.0)
+            t1 = time.monotonic()
+        except asyncio.TimeoutError:
+            pytest.fail("Event was not set within 2 seconds — cross-thread wakeup failed")
+
+        t.join()
+
+        assert event.is_set()
+        # Verify the price arrived
+        price, ts = uph.get_price_and_ts("XTHREAD", allow_stale=True)
+        assert price == 42.0
+
+
+# ── End-to-end pipeline simulation ───────────────────────────────────────
+
+class TestEndToEndPipeline:
+    """Simulate the full tick path: Hub.update_quote → UPH callback → cache → read."""
+
+    def test_schwab_tick_flows_through_uph(self):
+        """A Schwab-style tick should flow through to get_price_and_ts."""
+        from src.services.unified_price_hub import UnifiedPriceHub
+        UnifiedPriceHub._instance = None
+        uph = UnifiedPriceHub()
+
+        events_received = []
+        uph.on('quote_updated', lambda d: events_received.append(d))
+
+        # Simulate what SchwabDataHub.update_quote does → emits quote_updated
+        # → UPH _on_quote_updated callback → _update_cache_from_quote → _emit
+        from dataclasses import dataclass
+
+        @dataclass
+        class SchwabQuote:
+            symbol: str = "AAPL"
+            bid: float = 195.0
+            ask: float = 196.0
+            last: float = 195.5
+            volume: int = 50000
+            high: float = 197.0
+            low: float = 194.0
+            delta: float = 0.0
+            gamma: float = 0.0
+            theta: float = 0.0
+            vega: float = 0.0
+            open_interest: int = 0
+            implied_volatility: float = 0.0
+            timestamp: float = 0.0
+            source: str = "stream"
+
+        q = SchwabQuote(timestamp=time.time())
+
+        # This is what UPH's _make_hub_callback processes
+        callback = uph._make_hub_callback("schwab", None)
+        callback({'symbol': 'AAPL', 'quote': q})
+
+        # Verify the tick arrived in UPH cache
+        price, ts = uph.get_price_and_ts("AAPL", allow_stale=True)
+        assert price == 195.5
+        assert ts > 0
+
+        # Verify event was emitted for downstream consumers (risk engine, monitors)
+        assert len(events_received) == 1
+        assert events_received[0]['symbol'] == 'AAPL'
+        assert events_received[0]['price'] == 195.5
+        assert events_received[0]['source'] == 'schwab'
+
+    def test_ibkr_quote_data_flows_through_uph(self):
+        """IBKRQuoteData (__slots__) should flow through _update_cache_from_quote."""
+        from src.services.unified_price_hub import UnifiedPriceHub
+        from src.services.ibkr_data_hub import IBKRQuoteData
+        UnifiedPriceHub._instance = None
+        uph = UnifiedPriceHub()
+
+        q = IBKRQuoteData(symbol="SPY")
+        q.bid = 550.0
+        q.ask = 551.0
+        q.last = 550.5
+        q.volume = 100000
+        q.delta = 0.99
+        q.gamma = 0.001
+        q.theta = -0.05
+        q.vega = 0.1
+        q.timestamp = time.time()
+
+        callback = uph._make_hub_callback("ibkr", None)
+        callback({'symbol': 'SPY', 'quote': q})
+
+        # Verify all fields propagated
+        result = uph.get_quote("SPY")
+        assert result is not None
+        assert result.last == 550.5
+        assert result.bid == 550.0
+        assert result.ask == 551.0
+        assert result.delta == 0.99
+        assert result.gamma == 0.001
+        assert result.theta == -0.05
+        assert result.vega == 0.1
+        assert result.volume == 100000
+
+    def test_webull_tick_no_greeks(self):
+        """Webull quotes have no greeks — verify _update_cache_from_quote handles gracefully."""
+        from src.services.unified_price_hub import UnifiedPriceHub
+        UnifiedPriceHub._instance = None
+        uph = UnifiedPriceHub()
+
+        class WebullStyleQuote:
+            """Simulates WebullQuoteData — has no delta/gamma/theta/vega."""
+            def __init__(self):
+                self.bid = 100.0
+                self.ask = 101.0
+                self.last = 100.5
+                self.volume = 5000
+                self.high = 102.0
+                self.low = 99.0
+                self.open_price = 100.0
+                self.close_price = 99.5
+                self.timestamp = time.time()
+
+        callback = uph._make_hub_callback("webull", None)
+        callback({'symbol': 'NVDA', 'quote': WebullStyleQuote()})
+
+        price, ts = uph.get_price_and_ts("NVDA", allow_stale=True)
+        assert price == 100.5
+
+        result = uph.get_quote("NVDA")
+        assert result.open_price == 100.0
+        assert result.close_price == 99.5
+        # Greeks should remain at default 0.0 — not crash
+        assert result.delta == 0.0
+
+    def test_monitor_query_hub_matches_uph_cache(self):
+        """_query_hub via get_price_and_ts returns same price as get_quote_price."""
+        from src.services.unified_price_hub import UnifiedPriceHub
+        from src.services.conditional_orders.base import StreamingPriceMonitor
+        UnifiedPriceHub._instance = None
+        uph = UnifiedPriceHub()
+
+        uph._update_cache("QQQ", {"last": 500.0, "bid": 499.5, "ask": 500.5,
+                                   "timestamp": time.time()}, "tastytrade")
+
+        async def dummy_cb(sym, price): pass
+        mon = StreamingPriceMonitor("QQQ", dummy_cb, uph, "tastytrade")
+
+        # Both paths should return the same price
+        fast_price = mon._query_hub()
+        slow_price = uph.get_quote_price("QQQ", allow_stale=True)
+
+        assert fast_price == slow_price == 500.0

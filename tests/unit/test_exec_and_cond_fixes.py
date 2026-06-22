@@ -221,12 +221,12 @@ class TestCond1HubTimestamp:
         assert '_last_hub_quote_ts' in source
 
     def test_query_hub_tracks_timestamp(self):
-        """_query_hub must extract timestamp from hub quote."""
+        """_query_hub must track hub quote timestamp (via get_price_and_ts or get_quote)."""
         from src.services.conditional_orders.base import StreamingPriceMonitor
         source = inspect.getsource(StreamingPriceMonitor._query_hub)
         assert '_last_hub_quote_ts' in source
-        assert 'get_quote' in source
-        assert 'timestamp' in source
+        # Must use either the fast path (get_price_and_ts) or legacy path (get_quote)
+        assert 'get_price_and_ts' in source or 'get_quote' in source
 
     def test_update_price_timestamp_uses_hub_ts(self):
         """_update_price_timestamp must use actual hub timestamp when available."""
