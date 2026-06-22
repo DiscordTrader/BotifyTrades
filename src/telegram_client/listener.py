@@ -432,17 +432,60 @@ class TelegramListener:
         print(f"[TELEGRAM] ✓ Processing signal from {msg.chat_name} (execute={execute_enabled}, track={track_enabled})")
         
         signal = None
-        
-        for parser_name, parser_func in self._parsers.items():
+
+        # Priority 1: SignalFormatRegistry (50+ patterns — same as Discord)
+        try:
+            from src.services.signal_format_registry import get_registry
+            registry = get_registry()
+            if registry:
+                reg_results = registry.parse_all_with_registry(msg.content)
+                if reg_results:
+                    signal = reg_results[0]
+                    _print_flush(f"[TELEGRAM] ✓ FORMAT REGISTRY match: {signal.get('_format_name', '?')} → {signal.get('action', '')} {signal.get('symbol', '')}")
+        except Exception as e:
+            _print_flush(f"[TELEGRAM] Registry parse error (falling back): {e}")
+
+        # Priority 2: Base parsers (4 registered — stock/option US/India)
+        if not signal:
+            for parser_name, parser_func in self._parsers.items():
+                try:
+                    result = parser_func(msg.content)
+                    if result:
+                        signal = result
+                        _print_flush(f"[TELEGRAM] Signal parsed by {parser_name}: {result.get('action', '')} {result.get('symbol', '')}")
+                        break
+                except Exception as e:
+                    _print_flush(f"[TELEGRAM] Parser {parser_name} error: {e}")
+
+        # Priority 3: AI Fallback (same as Discord AI_FALLBACK path)
+        if not signal:
             try:
-                result = parser_func(msg.content)
-                if result:
-                    signal = result
-                    _print_flush(f"[TELEGRAM] Signal parsed by {parser_name}: {result.get('action', '')} {result.get('symbol', '')}")
-                    break
+                from src.services.ai_signal_parser import parse_signal_with_ai
+                ai_result = parse_signal_with_ai(msg.content)
+                if ai_result and ai_result.get('confidence', 0) >= 0.80:
+                    signal = ai_result
+                    signal['_ai_fallback'] = True
+                    _print_flush(f"[TELEGRAM] [AI_FALLBACK] ✓ AI parsed: {ai_result.get('action', '')} {ai_result.get('symbol', '')} (confidence={ai_result.get('confidence', 0):.2f})")
+
+                    # Auto-learn: store format candidate for Dashboard approval
+                    try:
+                        from gui_app.database import get_trading_settings, save_ai_format_candidate
+                        _auto_learn = get_trading_settings().get('ai_auto_learn_enabled', '1') != '0'
+                        if _auto_learn:
+                            save_ai_format_candidate(
+                                channel_id=str(msg.chat_id),
+                                channel_name=msg.chat_name or '',
+                                original_text=str(msg.content),
+                                ai_result=ai_result,
+                                confidence=ai_result.get('confidence', 0),
+                            )
+                    except Exception as _learn_err:
+                        _print_flush(f"[TELEGRAM] [AI_FALLBACK] ⚠️ Auto-learn error: {_learn_err}")
+                elif ai_result:
+                    _print_flush(f"[TELEGRAM] [AI_FALLBACK] ⚠️ Low confidence ({ai_result.get('confidence', 0):.2f}) — not executing: {ai_result.get('action', '')} {ai_result.get('symbol', '')}")
             except Exception as e:
-                _print_flush(f"[TELEGRAM] Parser {parser_name} error: {e}")
-        
+                _print_flush(f"[TELEGRAM] AI fallback error: {e}")
+
         if signal:
             from datetime import datetime as _dt
             signal['detected_at'] = _dt.now().isoformat()
@@ -453,71 +496,107 @@ class TelegramListener:
             signal['author_name'] = msg.author_name
             signal['timestamp'] = msg.timestamp.isoformat()
             signal['_db_channel_id'] = chat_config.get('id')
-            
+            signal['message_id'] = str(msg.message_id)
+
+            # Broker override
             broker_override = chat_config.get('broker_override')
             if broker_override:
                 signal['_broker_override'] = broker_override
-                print(f"[TELEGRAM] Broker override: {broker_override}")
-            
+
             enabled_brokers = chat_config.get('enabled_brokers')
             if enabled_brokers:
                 import json
                 try:
-                    if isinstance(enabled_brokers, str):
-                        signal['_enabled_brokers'] = json.loads(enabled_brokers)
-                    else:
-                        signal['_enabled_brokers'] = enabled_brokers
-                    print(f"[TELEGRAM] Broker selection: {signal['_enabled_brokers']}")
-                except Exception as e:
-                    print(f"[TELEGRAM] Failed to parse enabled_brokers: {e}")
-            
+                    signal['_enabled_brokers'] = json.loads(enabled_brokers) if isinstance(enabled_brokers, str) else enabled_brokers
+                except Exception:
+                    pass
+
+            # ── Channel Sizing (full cascade matching Discord) ──
             default_qty = chat_config.get('default_quantity')
-            has_explicit_qty = signal.get('_qty_from_signal') or signal.get('qty') or signal.get('lots')
-            if default_qty and not has_explicit_qty:
-                signal['qty'] = default_qty
-                signal['_qty_source'] = 'channel_default'
-                print(f"[TELEGRAM] Using channel default quantity: {default_qty}")
-            
             position_size_pct = chat_config.get('position_size_pct')
-            if position_size_pct:
-                signal['_position_size_pct'] = position_size_pct
+            channel_max = chat_config.get('channel_max_position_size')
+            has_explicit_qty = signal.get('_qty_from_signal') or signal.get('qty') or signal.get('lots')
+
+            if default_qty and int(default_qty) > 0:
+                if not has_explicit_qty:
+                    signal['qty'] = int(default_qty)
+                else:
+                    signal['qty'] = min(int(signal.get('qty', default_qty)), int(default_qty))
+                signal['_used_default_qty'] = True
+                signal['_qty_source'] = 'channel_default'
+                print(f"[TELEGRAM] [POSITION SIZE] ✓ Channel default_qty={default_qty}")
+            elif position_size_pct:
+                signal['_position_size_pct'] = float(position_size_pct)
+                signal['_pct_from_channel'] = True
                 signal['_calculate_qty'] = True
-                print(f"[TELEGRAM] Position sizing: {position_size_pct}% of portfolio")
-            
-            if chat_config.get('risk_management_enabled'):
-                signal['_risk_management'] = {
-                    'enabled': True,
-                    'profit_target_1_pct': chat_config.get('profit_target_1_pct'),
-                    'profit_target_2_pct': chat_config.get('profit_target_2_pct'),
-                    'profit_target_3_pct': chat_config.get('profit_target_3_pct'),
-                    'stop_loss_pct': chat_config.get('stop_loss_pct'),
-                    'trailing_stop_pct': chat_config.get('trailing_stop_pct'),
-                    'trailing_activation_pct': chat_config.get('trailing_activation_pct'),
-                }
-                print(f"[TELEGRAM] Per-channel risk management enabled")
-            
+                print(f"[TELEGRAM] [POSITION SIZE] ✓ Channel position_size_pct={position_size_pct}%")
+
+            # Channel max position size cap
+            if channel_max and signal.get('action', '').upper() in ('BTO', 'BUY'):
+                signal['_channel_max_position_size'] = float(channel_max)
+                _sig_price = signal.get('price') or signal.get('limit_price') or 0
+                _sig_qty = signal.get('qty', 1)
+                _mult = 100 if signal.get('asset') == 'option' else 1
+                if _sig_price and _sig_price > 0 and signal.get('_used_default_qty'):
+                    _cost = _sig_price * _mult * _sig_qty
+                    if _cost > float(channel_max):
+                        _capped = max(1, int(float(channel_max) / (_sig_price * _mult)))
+                        print(f"[TELEGRAM] [MAX POS$] ⚠️ Capped: {_sig_qty} → {_capped} (${_cost:.0f} > max ${float(channel_max):.0f})")
+                        signal['qty'] = _capped
+
+            # ── Channel Risk Config (matching Discord _channel_risk_config) ──
+            _risk_fields = {}
+            for _rk in ('stop_loss_pct', 'profit_target_1_pct', 'profit_target_2_pct', 'profit_target_3_pct',
+                         'profit_target_4_pct', 'trailing_stop_pct', 'trailing_activation_pct',
+                         'exit_strategy_mode', 'broker_bracket_mode', 'enable_dynamic_sl',
+                         'dynamic_sl_profile', 'enable_early_trailing', 'early_trailing_activation_pct',
+                         'early_trailing_step_pct', 'enable_giveback_guard', 'giveback_allowed_pct',
+                         'profit_target_qty_1', 'profit_target_qty_2', 'profit_target_qty_3', 'profit_target_qty_4'):
+                _rv = chat_config.get(_rk)
+                if _rv is not None:
+                    _risk_fields[_rk] = _rv
+            if _risk_fields:
+                signal['_channel_risk_config'] = _risk_fields
+
             exit_mode = chat_config.get('exit_strategy_mode')
             if exit_mode:
                 signal['_exit_strategy_mode'] = exit_mode
-            
+
+            # ── Conditional order detection (US + India) ──
+            if signal.get('_conditional_order') or signal.get('is_conditional'):
+                signal['_conditional_order'] = True
+                print(f"[TELEGRAM] ✓ Conditional order detected: {signal.get('trigger_type', 'over')} {signal.get('trigger_price', signal.get('price', '?'))}")
+
+            # ── Entry confirmation % routing ──
+            entry_confirm_pct = chat_config.get('entry_confirmation_pct')
+            if entry_confirm_pct and float(entry_confirm_pct) > 0 and signal.get('action', '').upper() == 'BTO':
+                _asset = signal.get('asset', signal.get('asset_type', ''))
+                if _asset != 'option':  # stocks only
+                    _entry_price = signal.get('price') or signal.get('limit_price')
+                    if _entry_price and float(_entry_price) > 0:
+                        signal['_conditional_order'] = True
+                        signal['trigger_price'] = float(_entry_price) * (1 + float(entry_confirm_pct) / 100)
+                        signal['trigger_type'] = 'over'
+                        print(f"[TELEGRAM] ✓ Entry confirmation: {entry_confirm_pct}% → trigger at ${signal['trigger_price']:.2f}")
+
+            # ── Save for tracking ──
             if track_enabled:
                 try:
                     self._save_signal_for_tracking(signal, msg)
                 except Exception as e:
                     print(f"[TELEGRAM] Error saving signal for tracking: {e}")
-            
+
+            # ── Queue for execution ──
             if execute_enabled:
                 _tg_action = signal.get('action', '').upper()
                 _tg_exit_mode = signal.get('_exit_strategy_mode', 'signal')
                 if _tg_action in ('STC', 'SELL') and _tg_exit_mode == 'risk':
-                    print(f"[EXIT MODE] ⛔ BLOCKED: Telegram STC signal for {signal.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
+                    print(f"[EXIT MODE] ⛔ BLOCKED: Telegram STC for {signal.get('symbol')} — exit_strategy_mode='risk'")
                 else:
                     queued = await self._submit_signal_to_queue(signal)
                     if queued:
-                        print(f"[TELEGRAM] Signal queued for execution")
-                    else:
-                        print(f"[TELEGRAM] Warning: Could not queue signal (no queue configured)")
-            
+                        print(f"[TELEGRAM] ✓ Signal queued for execution")
+
             if self._signal_callback:
                 try:
                     await self._signal_callback(signal, msg)
