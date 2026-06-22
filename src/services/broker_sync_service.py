@@ -1679,17 +1679,25 @@ class BrokerSyncService:
                         quantity = abs(broker_quantity) if broker_quantity != 0 else abs(db_quantity)
                     
                     # Calculate P&L using per-trade entry price and quantity
-                    if entry_price > 0 and current_price:
+                    if entry_price > 0 and current_price and current_price > 0:
                         multiplier = 100 if asset_type == 'option' else 1
                         pnl = (current_price - entry_price) * quantity * multiplier
                         pnl_percent = ((current_price - entry_price) / entry_price) * 100
-                    else:
+                    elif current_price and current_price > 0:
                         pnl = 0
                         pnl_percent = 0
-                    
-                    # Build update dict
-                    update_fields = {'pnl': pnl, 'pnl_percent': pnl_percent}
-                    if current_price:
+                    else:
+                        # current_price is 0 or None — DO NOT overwrite P&L
+                        # Keep previous DB values intact (prevents $0 flicker)
+                        pnl = None
+                        pnl_percent = None
+
+                    # Build update dict — only write fields that have real data
+                    update_fields = {}
+                    if pnl is not None:
+                        update_fields['pnl'] = pnl
+                        update_fields['pnl_percent'] = pnl_percent
+                    if current_price and current_price > 0:
                         update_fields['current_price'] = current_price
                     
                     if multi_trade_position:
