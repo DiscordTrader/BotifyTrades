@@ -7938,6 +7938,63 @@ class RiskManager:
             except Exception as e:
                 print(f"[RISK] 🛑 Error during auto-close cleanup: {e}")
             return
+
+        # ═══ ANTI-SHORT GUARD: Verify position still exists before placing STC ═══
+        # If the broker's native bracket SL already closed the position, placing a STC
+        # would create a new SHORT position — rejected on cash accounts, dangerous on margin.
+        broker_upper = (position.broker or '').upper()
+        try:
+            _pos_still_exists = True
+            if 'IBKR' in broker_upper:
+                ibkr_broker = self._get_broker_instance(broker_upper)
+                if ibkr_broker and hasattr(ibkr_broker, 'ib') and ibkr_broker.ib.isConnected():
+                    ib_positions = ibkr_broker.ib.positions()
+                    _found = False
+                    for p in ib_positions:
+                        if hasattr(p.contract, 'symbol') and p.contract.symbol == position.symbol:
+                            if abs(int(p.position)) > 0:
+                                _found = True
+                                break
+                    if not _found:
+                        _pos_still_exists = False
+            elif 'SCHWAB' in broker_upper:
+                schwab_broker = self._get_broker_instance(broker_upper)
+                if schwab_broker:
+                    try:
+                        import asyncio
+                        schwab_positions = await schwab_broker.get_positions()
+                        _found = any(p.get('symbol') == position.symbol and abs(p.get('quantity', 0)) > 0 for p in (schwab_positions or []))
+                        if not _found:
+                            _pos_still_exists = False
+                    except Exception:
+                        pass  # can't verify = proceed (fail-open)
+            elif 'WEBULL_OFFICIAL' in broker_upper:
+                wo_broker = self._get_broker_instance(broker_upper)
+                if wo_broker:
+                    try:
+                        wo_positions = await wo_broker.get_positions()
+                        _found = any(str(p.get('symbol', '')).upper() == position.symbol.upper() and abs(p.get('quantity', 0)) > 0 for p in (wo_positions or {}).get('positions', wo_positions or []))
+                        if not _found:
+                            _pos_still_exists = False
+                    except Exception:
+                        pass
+
+            if not _pos_still_exists:
+                print(f"[RISK] 🛡️ ANTI-SHORT: {pos_key} no longer exists on {broker_upper} — skipping STC (bracket SL likely already filled)")
+                # Mark as closed in DB
+                try:
+                    trade_id = self.cache.get_trade_id(pos_key)
+                    if trade_id:
+                        from gui_app.database import close_trade
+                        close_trade(trade_id, close_price=position.current_price,
+                                    pnl=position.unrealized_pnl, pnl_percent=position.pnl_pct)
+                        print(f"[RISK] 🛡️ Trade #{trade_id} marked as closed (broker already exited)")
+                    self.cache.remove(pos_key)
+                except Exception as _asc_err:
+                    print(f"[RISK] ⚠️ Anti-short cleanup error: {_asc_err}")
+                return
+        except Exception as _verify_err:
+            print(f"[RISK] ⚠️ Position verification failed (proceeding with STC): {_verify_err}")
         
         # Check if entering extended retry mode - send Discord notification once
         if self.cache.needs_extended_notification(pos_key):

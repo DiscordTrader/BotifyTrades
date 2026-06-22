@@ -580,7 +580,26 @@ class IBKRBroker(BrokerInterface):
             if not qualified or contract.conId == 0:
                 return OrderResult(success=False, message=f"Invalid symbol: {symbol} — contract qualification failed", symbol=symbol, action=action)
 
-            side = 'BUY' if action == 'BTO' else 'SELL'
+            side = 'BUY' if action.upper() in ('BTO', 'BUY', 'COVER') else 'SELL'
+
+            # ANTI-SHORT GUARD: For SELL orders, verify position exists before placing
+            # Prevents accidental short sells when broker bracket already closed the position
+            if side == 'SELL':
+                try:
+                    positions = self.ib.positions()
+                    held_qty = 0
+                    for pos in positions:
+                        if hasattr(pos.contract, 'symbol') and pos.contract.symbol == symbol:
+                            held_qty = int(pos.position)
+                            break
+                    if held_qty <= 0:
+                        print(f"[{self.name}] 🛡️ ANTI-SHORT: No {symbol} position found — blocking SELL to prevent short")
+                        return OrderResult(success=False, message=f"No position for {symbol} — cannot sell (would create short)", symbol=symbol, action=action)
+                    if quantity > held_qty:
+                        print(f"[{self.name}] 🛡️ ANTI-SHORT: Capping SELL qty {quantity} → {held_qty} (held position)")
+                        quantity = held_qty
+                except Exception as _pos_err:
+                    print(f"[{self.name}] ⚠️ Position check failed (proceeding): {_pos_err}")
 
             if quantity > self.MAX_ORDER_SIZE:
                 print(f"[{self.name}] ⚠️ Order size {quantity} exceeds IBKR max {self.MAX_ORDER_SIZE} — capping")

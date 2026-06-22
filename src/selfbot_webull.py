@@ -20701,6 +20701,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             fe = fail_resp.get('msg') or fail_resp.get('message') or fail_resp.get('error') or 'Unknown'
                             broker_errors.append(f"{fb}: {fe}")
                             print(f"[MULTI-BROKER] ❌ {fb} → {fe}")
+                            # ANTI-SHORT: If error mentions short/margin, position was already closed
+                            _is_short_reject = any(kw in str(fe).lower() for kw in ['short stock', 'short position', 'generate_new_short', 'margin requirement', 'cash account'])
+                            if _is_short_reject and signal.get('action', '').upper() in ('STC', 'SELL'):
+                                print(f"[MULTI-BROKER] 🛡️ ANTI-SHORT: {fb} rejected STC as short sell — position already closed by broker")
+                                # Mark position as closed in risk cache
+                                try:
+                                    _pos_key = signal.get('_position_key') or f"{fb}_{signal.get('symbol', '')}_stock"
+                                    if hasattr(self, 'position_monitor') and self.position_monitor:
+                                        self.position_monitor.cache.remove(_pos_key)
+                                        print(f"[MULTI-BROKER] 🛡️ Removed {_pos_key} from risk cache (already closed)")
+                                except Exception:
+                                    pass
                             try:
                                 from gui_app.discord_notifier import notify_order_failed
                                 notify_order_failed(
