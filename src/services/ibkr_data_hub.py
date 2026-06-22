@@ -526,13 +526,13 @@ class IBKRDataHub:
                     self._quotes[symbol] = IBKRQuoteData(symbol=symbol, contract_id=con_id)
                 q = self._quotes[symbol]
                 has_real_data = False
-                if ticker.bid is not None and ticker.bid > 0:
+                if ticker.bid is not None and ticker.bid == ticker.bid and ticker.bid > 0:
                     q.bid = float(ticker.bid)
                     has_real_data = True
-                if ticker.ask is not None and ticker.ask > 0:
+                if ticker.ask is not None and ticker.ask == ticker.ask and ticker.ask > 0:
                     q.ask = float(ticker.ask)
                     has_real_data = True
-                if ticker.last is not None and ticker.last > 0:
+                if ticker.last is not None and ticker.last == ticker.last and ticker.last > 0:
                     q.last = float(ticker.last)
                     has_real_data = True
                 elif q.bid > 0 and q.ask > 0:
@@ -541,30 +541,41 @@ class IBKRDataHub:
                 elif ticker.close is not None and ticker.close > 0:
                     q.close_price = float(ticker.close)
                 if ticker.volume is not None:
-                    q.volume = int(ticker.volume)
-                if ticker.high is not None and ticker.high > 0:
+                    try:
+                        _vol = ticker.volume
+                        if _vol == _vol:  # NaN != NaN — fastest NaN check
+                            q.volume = int(_vol)
+                    except (ValueError, OverflowError):
+                        pass
+                if ticker.high is not None and ticker.high == ticker.high and ticker.high > 0:
                     q.high = float(ticker.high)
-                if ticker.low is not None and ticker.low > 0:
+                if ticker.low is not None and ticker.low == ticker.low and ticker.low > 0:
                     q.low = float(ticker.low)
                 # Mark price via modelGreeks (tick 233) — fills bid/ask gap for illiquid options
                 try:
                     _mg = getattr(ticker, 'modelGreeks', None)
                     if _mg:
                         if not has_real_data and q.last == 0:
-                            if getattr(_mg, 'optPrice', None) and _mg.optPrice > 0:
-                                q.last = float(_mg.optPrice)
+                            _opt_p = getattr(_mg, 'optPrice', None)
+                            if _opt_p is not None and _opt_p == _opt_p and _opt_p > 0:
+                                q.last = float(_opt_p)
                                 has_real_data = True
-                        # GAP-1: Extract greeks
-                        if _mg.delta is not None:
-                            q.delta = float(_mg.delta)
-                        if _mg.gamma is not None:
-                            q.gamma = float(_mg.gamma)
-                        if _mg.theta is not None:
-                            q.theta = float(_mg.theta)
-                        if _mg.vega is not None:
-                            q.vega = float(_mg.vega)
-                        if getattr(_mg, 'impliedVol', None) is not None and _mg.impliedVol > 0:
-                            q.implied_vol = float(_mg.impliedVol)
+                        # GAP-1: Extract greeks (guard against NaN from IB)
+                        _d = getattr(_mg, 'delta', None)
+                        if _d is not None and _d == _d:
+                            q.delta = float(_d)
+                        _g = getattr(_mg, 'gamma', None)
+                        if _g is not None and _g == _g:
+                            q.gamma = float(_g)
+                        _t = getattr(_mg, 'theta', None)
+                        if _t is not None and _t == _t:
+                            q.theta = float(_t)
+                        _v = getattr(_mg, 'vega', None)
+                        if _v is not None and _v == _v:
+                            q.vega = float(_v)
+                        _iv = getattr(_mg, 'impliedVol', None)
+                        if _iv is not None and _iv == _iv and _iv > 0:
+                            q.implied_vol = float(_iv)
                 except Exception:
                     pass
                 if has_real_data or is_new:
