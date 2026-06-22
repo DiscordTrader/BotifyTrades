@@ -1429,6 +1429,237 @@ HELP_TRIGGERS = [
 ]
 
 
+# ═══ MCP Co-Pilot Query Handler ═══════════════════════════════════════════
+# Routes natural language queries to MCP tools for instant answers (no AI API call)
+
+_MCP_PATTERNS = [
+    # Positions
+    (r'\b(show|list|what are|my)\b.*\b(position|holding|portfolio)', 'get_live_positions', None),
+    (r'\b(how is|how\'s|check|status of)\b\s+(\w+)\b', 'get_position_detail', lambda m: {'symbol': m.group(2).upper()}),
+    # Risk
+    (r'\b(risk|exposure|overall)\b.*\b(state|status|overview)', 'get_risk_state', None),
+    (r'\b(market|regime|vix|volatility)\b', 'get_market_regime', None),
+    # Conditional orders
+    (r'\b(conditional|pending|trigger|monitoring)\b.*\b(order|signal|alert)', 'get_conditional_orders', None),
+    # Brokers
+    (r'\b(broker|connection|streaming)\b.*\b(status|health|connected)', 'get_broker_status', None),
+    (r'\bbroker.*connect', 'get_broker_status', None),
+    # Channel performance
+    (r'\b(channel|score|perform|leaderboard|ranking)', 'get_channel_scores', None),
+    # Execution quality
+    (r'\b(slippage|fill|execution|latency)\b.*\b(quality|analysis|report)', 'get_execution_quality', None),
+    # System
+    (r'\b(system|memory|cpu|uptime|resource)', 'get_system_metrics', None),
+    # AI
+    (r'\b(ai|intelligence|feature|module)\b.*\b(status|enabled|active)', 'get_ai_feature_status', None),
+    (r'\b(format|learn|candidate|pending format|unrecognized)', 'get_format_candidates', None),
+    (r'\b(consensus|cross.channel|agree)', 'get_consensus_signals', None),
+    (r'\b(cost|usage|api.*cost|spend|token)', 'get_cost_report', None),
+    (r'\b(recommend|suggestion|tuning|optimize)\b.*\b(risk|setting)', 'get_ai_recommendations', None),
+    # Trade history
+    (r'\b(trade|history|closed|recent)\b.*\b(history|trade|closed|recent)', 'get_trade_history', None),
+]
+
+
+def _handle_mcp_query(query: str) -> Optional[Dict]:
+    """Route natural language queries to MCP tools for instant answers."""
+    import asyncio
+    q = query.lower().strip()
+
+    for pattern, tool_name, param_fn in _MCP_PATTERNS:
+        m = re.search(pattern, q, re.IGNORECASE)
+        if m:
+            try:
+                from src.ai.mcp_server import get_mcp_server
+                mcp = get_mcp_server()
+                params = param_fn(m) if param_fn else {}
+
+                loop = asyncio.new_event_loop()
+                try:
+                    result = loop.run_until_complete(mcp.call_tool(tool_name, params))
+                finally:
+                    loop.close()
+
+                if 'error' in result and not any(k for k in result if k != 'error'):
+                    return None  # Let other handlers try
+
+                response = _format_mcp_result(tool_name, result)
+                return {
+                    "success": True,
+                    "response": response,
+                    "topic": f"mcp_{tool_name}",
+                    "confidence": 0.95,
+                    "ai_powered": False,
+                    "mcp_tool": tool_name,
+                }
+            except Exception as e:
+                return None  # Fall through to other handlers
+    return None
+
+
+def _format_mcp_result(tool_name: str, result: dict) -> str:
+    """Format MCP tool result for chatbot display."""
+
+    if tool_name == 'get_live_positions':
+        positions = result.get('positions', [])
+        if not positions:
+            return "📊 **No open positions** — all flat."
+        lines = ["📊 **Live Positions**\n"]
+        for p in positions:
+            sym = p.get('symbol', '?')
+            pnl = p.get('pnl_pct', 0)
+            icon = '🟢' if pnl >= 0 else '🔴'
+            price = p.get('current_price', 0)
+            broker = p.get('broker', '?')
+            lines.append(f"{icon} **{sym}** ${price:.2f} ({pnl:+.1f}%) — {broker}")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_position_detail':
+        if 'error' in result:
+            return f"❌ {result['error']}"
+        sym = result.get('symbol', '?')
+        price = result.get('current_price', 0)
+        pnl = result.get('pnl_pct', 0)
+        return f"📊 **{sym}**: ${price:.2f} ({pnl:+.1f}%) | Entry: ${result.get('entry_price', 0):.2f} | Qty: {result.get('quantity', 0)} | Broker: {result.get('broker', '?')}"
+
+    elif tool_name == 'get_risk_state':
+        n = result.get('open_positions', 0)
+        total = result.get('total_unrealized_pnl', 0)
+        worst = result.get('worst_position')
+        best = result.get('best_position')
+        lines = [f"🛡️ **Risk State**: {n} open positions, Total P&L: **${total:+.2f}**"]
+        if best:
+            lines.append(f"  🟢 Best: {best.get('symbol', '?')} ({best.get('pnl_pct', 0):+.1f}%)")
+        if worst:
+            lines.append(f"  🔴 Worst: {worst.get('symbol', '?')} ({worst.get('pnl_pct', 0):+.1f}%)")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_market_regime':
+        regime = result.get('regime', 'UNKNOWN')
+        vix = result.get('vix', 0)
+        mult = result.get('sizing_multiplier', 1.0)
+        emoji = {'HIGH_VOL': '🔴', 'CHOPPY': '🟡', 'TRENDING_UP': '🟢', 'TRENDING_DOWN': '🔴', 'LOW_VOL': '🟢', 'NORMAL': '🟡'}.get(regime, '⚪')
+        return f"{emoji} **Market Regime: {regime}**\nVIX: {vix} | Sizing multiplier: {mult}x"
+
+    elif tool_name == 'get_conditional_orders':
+        orders = result.get('orders', [])
+        if not orders:
+            return "⚡ **No active conditional orders**"
+        lines = ["⚡ **Active Conditional Orders**\n"]
+        for o in orders:
+            sym = o.get('symbol', '?')
+            trigger = o.get('trigger_price', 0)
+            ttype = o.get('trigger_type', 'over')
+            status = o.get('status', '?')
+            broker = o.get('broker_primary', '?')
+            current = o.get('current_price', 0)
+            dist = ((current - trigger) / trigger * 100) if trigger and current else 0
+            lines.append(f"  🎯 **{sym}** {ttype} ${trigger:.2f} | Now: ${current:.2f} ({dist:+.1f}%) | {broker} | {status}")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_broker_status':
+        brokers = result.get('brokers', result)
+        if isinstance(brokers, dict):
+            lines = ["🔌 **Broker Status**\n"]
+            for name, info in brokers.items():
+                if isinstance(info, dict):
+                    connected = info.get('connected', False)
+                    streaming = info.get('streaming', False)
+                    icon = '✅' if connected else '❌'
+                    stream = ' 📡' if streaming else ''
+                    lines.append(f"  {icon} **{name}**{stream}")
+                else:
+                    lines.append(f"  {name}: {info}")
+            return '\n'.join(lines)
+        return f"🔌 **Brokers**: {brokers}"
+
+    elif tool_name == 'get_channel_scores':
+        scores = result.get('scores', [])
+        if not scores:
+            return "📈 **No channel scores yet** — scores compute after trades close."
+        lines = ["📈 **Channel Scores**\n"]
+        for s in sorted(scores, key=lambda x: x.get('score', 0), reverse=True):
+            score = s.get('score', 0)
+            icon = '🟢' if score >= 70 else ('🟡' if score >= 50 else '🔴')
+            lines.append(f"  {icon} **{s.get('channel_name', '?')}**: {score}/100 | Win: {s.get('win_rate_30d', 0):.0f}% | PF: {s.get('profit_factor', 0):.1f}")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_system_metrics':
+        cpu = result.get('cpu_pct', 0)
+        mem = result.get('memory_mb', 0)
+        uptime = result.get('uptime_hours', 0)
+        return f"💻 **System**: CPU {cpu:.1f}% | Memory {mem:.0f}MB | Uptime {uptime:.1f}h | Python {result.get('python', '?')}"
+
+    elif tool_name == 'get_ai_feature_status':
+        flags = result.get('flags', {})
+        lines = ["🧠 **AI Modules**\n"]
+        for name, enabled in flags.items():
+            icon = '✅' if enabled else '⬜'
+            lines.append(f"  {icon} {name}")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_format_candidates':
+        candidates = result.get('candidates', [])
+        if not candidates:
+            return "📝 **No pending format candidates** — all reviewed."
+        lines = [f"📝 **{len(candidates)} Pending Format Candidates**\n"]
+        for c in candidates[:5]:
+            lines.append(f"  #{c.get('id')} {c.get('action', '?')} {c.get('symbol', '?')} ({c.get('ai_confidence', 0)*100:.0f}% confidence)")
+            lines.append(f"    `{c.get('original_text', '')[:80]}`")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_cost_report':
+        total = result.get('total_cost', 0)
+        usage = result.get('usage', [])
+        if not usage:
+            return f"💰 **AI Cost**: $0.00 (no API calls in last 30 days)"
+        lines = [f"💰 **AI Cost Report** — Total: **${total:.4f}**\n"]
+        for u in usage[:5]:
+            lines.append(f"  {u.get('provider', '?')}/{u.get('model', '?')}: {u.get('calls', 0)} calls, ${u.get('total_cost', 0):.4f}")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_consensus_signals':
+        signals = result.get('consensus', [])
+        if not signals:
+            return "🤝 **No active consensus** — no cross-channel agreement detected."
+        lines = ["🤝 **Cross-Channel Consensus**\n"]
+        for s in signals:
+            lines.append(f"  🎯 **{s.get('symbol', '?')}**: {s.get('channel_count', 0)} channels agree | Boost: {s.get('sizing_boost', 1.0):.1f}x")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_execution_quality':
+        brokers = result.get('brokers', {})
+        if not brokers:
+            return "📊 **No execution data yet** — quality stats populate on fills."
+        lines = ["📊 **Execution Quality**\n"]
+        for name, stats in brokers.items():
+            lines.append(f"  **{name}**: Slippage {stats.get('avg_slippage', 0):.2f}% | Latency {stats.get('avg_latency', 0):.0f}ms | Fills: {stats.get('fill_count', 0)}")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_ai_recommendations':
+        recs = result.get('recommendations', [])
+        if not recs:
+            return "🧠 **No pending recommendations** — risk tuning runs weekly."
+        lines = [f"🧠 **{len(recs)} Risk Recommendations**\n"]
+        for r in recs:
+            lines.append(f"  📋 **{r.get('channel_name', '?')}**: {r.get('evidence', '')[:80]}")
+        return '\n'.join(lines)
+
+    elif tool_name == 'get_trade_history':
+        trades = result.get('trades', [])
+        if not trades:
+            return "📜 **No recent trades**"
+        lines = [f"📜 **Recent Trades** ({len(trades)})\n"]
+        for t in trades[:10]:
+            pnl = t.get('pnl_percent', 0) or 0
+            icon = '🟢' if pnl >= 0 else '🔴'
+            lines.append(f"  {icon} {t.get('symbol', '?')} {t.get('direction', '?')} — {pnl:+.1f}% | {t.get('broker', '?')}")
+        return '\n'.join(lines)
+
+    # Default: raw JSON
+    import json
+    return f"```json\n{json.dumps(result, indent=2, default=str)[:1500]}\n```"
+
 def get_response(query: str) -> Dict:
     """Get AI assistant response for a query.
     
@@ -1471,6 +1702,11 @@ def get_response(query: str) -> Dict:
     event_response = handle_event_commands(query)
     if event_response:
         return event_response
+
+    # ── MCP Co-Pilot: Quick status queries via local MCP tools (no AI call) ──
+    _mcp_result = _handle_mcp_query(query)
+    if _mcp_result:
+        return _mcp_result
 
     q_lower_pre = query.lower().strip()
     _wants_channel_list = ('channel' in q_lower_pre and any(kw in q_lower_pre for kw in ['list', 'show', 'configured', 'how many', 'what are', 'which']))
