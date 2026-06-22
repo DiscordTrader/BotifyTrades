@@ -3251,12 +3251,34 @@ class RiskManager:
         except Exception as e:
             pass
         
-        _REST_CACHE_TTL = 30
+        # Cache TTL for REST position fetches.
+        # When streaming is active (hub has fresh data), use longer TTL to avoid redundant REST calls.
+        # The hub price overlay (_update_prices_from_hub) provides real-time prices every tick.
+        _any_streaming = False
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            _any_streaming = get_schwab_data_hub().is_streaming()
+        except Exception:
+            pass
+        if not _any_streaming:
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                _any_streaming = get_webull_data_hub().is_streaming()
+            except Exception:
+                pass
+
+        if _any_streaming:
+            # Streaming active: REST only for position discovery (new/closed positions), not price updates.
+            # Hub overlay provides sub-second price updates. REST every 15s for position list refresh.
+            _REST_CACHE_TTL = 15
+        else:
+            # No streaming: REST is the only price source. Keep it fast.
+            _REST_CACHE_TTL = 5
+
         if _force_global:
             self._force_rest_refresh = False
-            self._wo_positions_cache_ts = 0  # bust WBO local cache on force refresh
-            if _has_open:
-                _REST_CACHE_TTL = 0
+            self._wo_positions_cache_ts = 0
+            _REST_CACHE_TTL = 0  # Force immediate refresh when explicitly requested
 
         async def _fetch_webull_rest():
             if webull_snapshots is not None:
