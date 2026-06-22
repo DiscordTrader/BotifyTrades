@@ -9134,6 +9134,84 @@ class SelfClient(discord.Client):
             print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
             import traceback
             traceback.print_exc()
+
+        # Restore ACTIVE_MONITORING conditional orders from DB (survived restart)
+        try:
+            from src.services.conditional_orders.router import conditional_order_router
+            from gui_app.database import get_connection
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, symbol, trigger_price, adjusted_trigger_price, trigger_type,
+                       broker_primary, channel_id, asset_type, strike, opt_type, expiry,
+                       stop_loss_value, stop_loss_pct, take_profit_targets, qty_value,
+                       size_mode, exit_strategy_mode, market, lots, lot_size
+                FROM conditional_orders
+                WHERE status IN ('ACTIVE_MONITORING', 'PENDING')
+                AND expires_at > datetime('now')
+                ORDER BY created_at ASC
+            """)
+            rows = cursor.fetchall()
+            conn.close()
+            _restored = 0
+            for row in rows:
+                try:
+                    import json
+                    r = dict(row)
+                    order_signal = {
+                        'action': 'BTO',
+                        'symbol': r['symbol'],
+                        'asset': r['asset_type'] or 'stock',
+                        'asset_type': r['asset_type'] or 'stock',
+                        'price': r['trigger_price'],
+                        'trigger_price': r['adjusted_trigger_price'] or r['trigger_price'],
+                        'trigger_type': r['trigger_type'] or 'over',
+                        'channel_id': r['channel_id'],
+                        '_broker_override': r['broker_primary'],
+                        '_enabled_brokers': [r['broker_primary']] if r['broker_primary'] else [],
+                        '_conditional_order': True,
+                        'market': r['market'] or 'US',
+                        'platform': 'discord',
+                    }
+                    if r['strike']:
+                        order_signal['strike'] = r['strike']
+                    if r['opt_type']:
+                        order_signal['option_type'] = r['opt_type']
+                    if r['expiry']:
+                        order_signal['expiry'] = r['expiry']
+                    if r['stop_loss_value']:
+                        order_signal['stop_loss'] = r['stop_loss_value']
+                    if r['stop_loss_pct']:
+                        order_signal['stop_loss_pct'] = r['stop_loss_pct']
+                    if r['take_profit_targets']:
+                        try:
+                            order_signal['profit_targets'] = json.loads(r['take_profit_targets'])
+                        except Exception:
+                            pass
+
+                    # Don't re-create — just restart the price monitor for the existing order
+                    order_id = r['id']
+                    _cond_print(f"[CONDITIONAL] 🔄 Restoring order #{order_id}: {r['symbol']} {r['trigger_type']} ${r['trigger_price']} ({r['broker_primary']})")
+
+                    # Use the router to restart monitoring for this order
+                    if conditional_order_router.is_enabled():
+                        from src.services.conditional_orders.us_service import USConditionalOrderService
+                        us_service = conditional_order_router._services.get('US')
+                        if us_service and hasattr(us_service, '_start_monitor_for_order'):
+                            us_service._start_monitor_for_order(order_id, order_signal)
+                            _restored += 1
+                        elif us_service:
+                            # Fallback: mark as needing manual re-submission
+                            _cond_print(f"[CONDITIONAL] ⚠️ Order #{order_id} {r['symbol']} — service doesn't support restore. User should resubmit.")
+                except Exception as _re:
+                    _cond_print(f"[CONDITIONAL] ⚠️ Failed to restore order #{row['id'] if isinstance(row, dict) else row[0]}: {_re}")
+
+            if _restored > 0:
+                _cond_print(f"[CONDITIONAL] ✅ Restored {_restored} conditional order(s) from DB")
+            elif rows:
+                _cond_print(f"[CONDITIONAL] ⚠️ Found {len(rows)} pending orders but could not restore — monitors need manual restart")
+        except Exception as _restore_err:
+            print(f"[CONDITIONAL] ⚠️ Could not restore pending orders: {_restore_err}", flush=True)
         
         # Start EMA Candlestick Risk Engine pre-warm service
         try:
