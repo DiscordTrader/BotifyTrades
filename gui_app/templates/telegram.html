@@ -680,118 +680,112 @@
 </div>
 
 <div id="channelSettingsModal" class="settings-modal">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width:680px;">
         <div class="modal-header">
             <h3><i class="fas fa-cog"></i> Channel Settings</h3>
             <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
         </div>
         <input type="hidden" id="settingsChannelId">
 
-        <div class="settings-section">
-            <h4><i class="fas fa-chart-line"></i> Position Sizing</h4>
-            <div class="settings-row">
-                <div class="setting-item">
-                    <label>Position Size (%)</label>
-                    <input type="number" id="settingsPositionSize" placeholder="Auto" min="0.1" max="100" step="0.1">
-                </div>
-                <div class="setting-item">
-                    <label>Default Quantity</label>
-                    <input type="number" id="settingsDefaultQty" placeholder="Use global default" min="1" step="1">
+        <!-- Tab Navigation -->
+        <div style="display:flex;gap:2px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:12px;">
+            <button class="stab active" data-stab="sizing" onclick="switchSettingsTab(this,'sizing')">📊 Sizing</button>
+            <button class="stab" data-stab="risk-controls" onclick="switchSettingsTab(this,'risk-controls')">🛡️ Controls</button>
+            <button class="stab" data-stab="order-types" onclick="switchSettingsTab(this,'order-types')">📋 Orders</button>
+            <button class="stab" data-stab="conditional" onclick="switchSettingsTab(this,'conditional')">⚡ Conditional</button>
+            <button class="stab" data-stab="targets" onclick="switchSettingsTab(this,'targets')">🎯 Targets</button>
+            <button class="stab" data-stab="advanced" onclick="switchSettingsTab(this,'advanced')">⚙️ Advanced</button>
+        </div>
+        <style>.stab{padding:8px 12px;background:transparent;border:none;color:#71717A;font-size:11px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}.stab.active{color:#A5B4FC;border-bottom-color:#818CF8}</style>
+
+        <div style="padding:0 16px 16px;max-height:500px;overflow-y:auto;">
+
+        <!-- Sizing Tab -->
+        <div id="stab-sizing" class="stab-content">
+            <div class="settings-section"><h4><i class="fas fa-chart-line"></i> Execute Sizing</h4>
+                <div class="settings-row"><div class="setting-item"><label>Position Size %</label><input type="number" id="settingsPositionSize" placeholder="Auto" min="0.1" max="100" step="0.1"></div><div class="setting-item"><label>Default Qty</label><input type="number" id="settingsDefaultQty" placeholder="Auto" min="1" step="1"></div></div>
+                <div class="settings-row"><div class="setting-item"><label>Max Position $</label><input type="number" id="settingsMaxPositionSize" placeholder="No limit" min="50" max="100000" step="50"></div><div class="setting-item"><label>Balance Mode</label><select id="settingsSizingMode"><option value="live">Live</option><option value="pre_market">Pre-Market</option><option value="start_of_day">Start-of-Day</option></select></div></div>
+                <div class="setting-item" style="margin-top:8px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="settingsForceMySize"> Force My Size (ignore signal qty)</label></div>
+            </div>
+            <div class="settings-section"><h4><i class="fas fa-globe"></i> Market & Broker</h4>
+                <div class="settings-row"><div class="setting-item"><label>Market</label><select id="settingsMarket"><option value="US">🇺🇸 US</option><option value="CA">🇨🇦 Canada</option><option value="INDIA">🇮🇳 India</option></select></div><div class="setting-item"><label>Broker</label><select id="settingsBrokerOverride"><option value="">Global Default</option><option value="webull">Webull</option><option value="webull_official">Webull Official</option><option value="alpaca">Alpaca</option><option value="tastytrade">Tastytrade</option><option value="ibkr">IBKR</option><option value="schwab">Schwab</option><option value="robinhood">Robinhood</option></select></div></div>
+            </div>
+        </div>
+
+        <!-- Risk Controls Tab -->
+        <div id="stab-risk-controls" class="stab-content" style="display:none;">
+            <div class="settings-section"><h4><i class="fas fa-shield-alt"></i> Slippage Protection</h4>
+                <div class="setting-item"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="settingsSlippageEnabled"> Enable</label></div>
+                <div class="settings-row" style="margin-top:8px;"><div class="setting-item"><label>Max Slippage %</label><input type="number" id="settingsSlippageMaxPct" placeholder="10" min="1" max="100" step="1"></div><div class="setting-item"><label>Wait Min</label><input type="number" id="settingsSlippageWaitMin" placeholder="5" min="1" max="60" step="1"></div></div>
+            </div>
+            <div class="settings-section"><h4><i class="fas fa-dollar-sign"></i> Price Controls</h4>
+                <div class="setting-item"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="settingsLimitCapEnabled"> Enable Limit Cap</label></div>
+                <div class="setting-item" style="margin-top:8px;"><label>Limit Cap %</label><input type="number" id="settingsLimitCapPct" placeholder="5" min="1" max="50" step="1"></div>
+            </div>
+            <div class="settings-section"><h4><i class="fas fa-sync-alt"></i> Symbol Conversion</h4>
+                <div class="setting-item"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="settingsNdxQqq"> NDX → QQQ Conversion</label></div>
+            </div>
+        </div>
+
+        <!-- Order Types Tab -->
+        <div id="stab-order-types" class="stab-content" style="display:none;">
+            <div class="settings-section"><h4><i class="fas fa-exchange-alt"></i> Order Types</h4>
+                <div class="settings-row"><div class="setting-item"><label>Entry</label><select id="settingsEntryOrderMode"><option value="market">Market</option><option value="limit">Limit</option></select></div><div class="setting-item"><label>Trim</label><select id="settingsTrimOrderMode"><option value="market">Market</option><option value="limit">Limit</option></select></div></div>
+                <div class="settings-row"><div class="setting-item"><label>SL Order</label><select id="settingsSlOrderMode"><option value="market">Market</option><option value="limit">Limit</option></select></div><div class="setting-item"><label>SL Limit Offset %</label><input type="number" id="settingsSlLimitOffset" placeholder="3" min="0" max="20" step="0.5"></div></div>
+            </div>
+            <div class="settings-section"><h4><i class="fas fa-door-open"></i> Exit Strategy</h4>
+                <div class="setting-item"><label>Mode</label><select id="settingsExitMode"><option value="signal">Signal</option><option value="risk">Risk</option><option value="hybrid">Hybrid</option></select></div>
+            </div>
+        </div>
+
+        <!-- Conditional Tab -->
+        <div id="stab-conditional" class="stab-content" style="display:none;">
+            <div class="settings-section"><h4><i class="fas fa-bolt"></i> Conditional Orders</h4>
+                <div class="setting-item"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="settingsConditionalEnabled"> Enable</label></div>
+                <div class="settings-row" style="margin-top:8px;"><div class="setting-item"><label>Order Timeout (min)</label><input type="number" id="settingsOrderTimeout" placeholder="60" min="1" max="1440" step="1"></div><div class="setting-item"><label>Conditional Timeout (min)</label><input type="number" id="settingsConditionalTimeout" placeholder="120" min="1" max="1440" step="1"></div></div>
+                <div class="settings-row"><div class="setting-item"><label>Entry Confirmation %</label><input type="number" id="settingsEntryConfirmPct" placeholder="Off" min="0.1" max="20" step="0.1"></div><div class="setting-item"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:18px;"><input type="checkbox" id="settingsBreakoutReset"> Breakout Reset</label></div></div>
+            </div>
+        </div>
+
+        <!-- Targets & SL Tab -->
+        <div id="stab-targets" class="stab-content" style="display:none;">
+            <div class="settings-section"><h4><i class="fas fa-shield-alt"></i> Risk Management <label class="toggle-switch" style="margin-left:auto;"><input type="checkbox" id="settingsRiskEnabled" onchange="toggleRiskInputs()"><span class="toggle-slider"></span></label></h4>
+                <div id="riskInputs">
+                    <div class="settings-row"><div class="setting-item"><label>Stop Loss %</label><input type="number" id="settingsStopLoss" placeholder="25" min="1" max="100" step="1"></div><div class="setting-item"><label>Trailing Stop %</label><input type="number" id="settingsTrailingStop" placeholder="15" min="1" max="100" step="1"></div></div>
+                    <div class="settings-row"><div class="setting-item"><label>Trailing Activation %</label><input type="number" id="settingsTrailingActivation" placeholder="20" min="1" max="500" step="1"></div><div class="setting-item"></div></div>
+                    <h5 style="color:#A5B4FC;margin:12px 0 6px;font-size:12px;">Profit Targets</h5>
+                    <div class="settings-row"><div class="setting-item"><label>PT1 %</label><input type="number" id="settingsPT1" placeholder="25" min="1" max="500" step="1"></div><div class="setting-item"><label>PT2 %</label><input type="number" id="settingsPT2" placeholder="50" min="1" max="500" step="1"></div></div>
+                    <div class="settings-row"><div class="setting-item"><label>PT3 %</label><input type="number" id="settingsPT3" placeholder="100" min="1" max="500" step="1"></div><div class="setting-item"><label>PT4 %</label><input type="number" id="settingsPT4" placeholder="200" min="1" max="1000" step="1"></div></div>
+                    <h5 style="color:#A5B4FC;margin:12px 0 6px;font-size:12px;">Trim Quantities (%)</h5>
+                    <div class="settings-row"><div class="setting-item"><label>PT1 Trim</label><input type="number" id="settingsPTQty1" placeholder="Auto" min="1" max="100" step="1"></div><div class="setting-item"><label>PT2 Trim</label><input type="number" id="settingsPTQty2" placeholder="Auto" min="1" max="100" step="1"></div></div>
+                    <div class="settings-row"><div class="setting-item"><label>PT3 Trim</label><input type="number" id="settingsPTQty3" placeholder="Auto" min="1" max="100" step="1"></div><div class="setting-item"><label>PT4 Trim</label><input type="number" id="settingsPTQty4" placeholder="Auto" min="1" max="100" step="1"></div></div>
                 </div>
             </div>
         </div>
 
-        <div class="settings-section">
-            <h4><i class="fas fa-globe"></i> Market Region</h4>
-            <div class="settings-row single">
-                <div class="setting-item">
-                    <label>Market for signals from this channel</label>
-                    <select id="settingsMarket">
-                        <option value="US">🇺🇸 US Markets (NYSE/NASDAQ)</option>
-                        <option value="CA">🇨🇦 Canada Markets (TSX)</option>
-                    </select>
-                </div>
+        <!-- Advanced Tab -->
+        <div id="stab-advanced" class="stab-content" style="display:none;">
+            <div class="settings-section"><h4><i class="fas fa-cog"></i> Broker Brackets</h4>
+                <div class="setting-item"><label>Mode</label><select id="settingsBracketMode"><option value="none">Disabled</option><option value="both">Both (OCO)</option><option value="sl_only">SL Only</option><option value="pt_only">PT Only</option></select></div>
+            </div>
+            <div class="settings-section"><h4><i class="fas fa-chart-area"></i> Dynamic SL</h4>
+                <div class="setting-item"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="settingsDynamicSL"> Enable</label></div>
+                <div class="setting-item" style="margin-top:8px;"><label>Profile</label><select id="settingsDynamicSLProfile"><option value="conservative">Conservative</option><option value="standard">Standard</option><option value="aggressive">Aggressive</option></select></div>
+            </div>
+            <div class="settings-section"><h4><i class="fas fa-hiking"></i> Early Trailing</h4>
+                <div class="setting-item"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="settingsEarlyTrailing"> Enable</label></div>
+                <div class="settings-row" style="margin-top:8px;"><div class="setting-item"><label>Activation %</label><input type="number" id="settingsEarlyTrailingAct" placeholder="5" min="0.5" max="50" step="0.5"></div><div class="setting-item"><label>Step %</label><input type="number" id="settingsEarlyTrailingStep" placeholder="3" min="0.5" max="20" step="0.5"></div></div>
+            </div>
+            <div class="settings-section"><h4><i class="fas fa-hand-holding-usd"></i> Giveback Guard</h4>
+                <div class="setting-item"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="settingsGivebackGuard"> Enable</label></div>
+                <div class="setting-item" style="margin-top:8px;"><label>Allowed %</label><input type="number" id="settingsGivebackPct" placeholder="30" min="5" max="80" step="1"></div>
             </div>
         </div>
 
-        <div class="settings-section">
-            <h4><i class="fas fa-exchange-alt"></i> Broker Override</h4>
-            <div class="settings-row single">
-                <div class="setting-item">
-                    <label>Broker for this channel</label>
-                    <select id="settingsBrokerOverride">
-                        <option value="">Use Global Default</option>
-                        <option value="webull">Webull (US)</option>
-                        <option value="alpaca">Alpaca (US)</option>
-                        <option value="tastytrade">Tastytrade (US)</option>
-                        <option value="ibkr">Interactive Brokers (US)</option>
-                        <option value="robinhood">Robinhood (US)</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-
-        <div class="settings-section">
-            <h4><i class="fas fa-door-open"></i> Exit Strategy</h4>
-            <div class="settings-row single">
-                <div class="setting-item">
-                    <label>Exit Strategy Mode</label>
-                    <select id="settingsExitMode">
-                        <option value="signal">Signal - Follow trader's exit signals</option>
-                        <option value="risk">Risk - Use automated risk management only</option>
-                        <option value="hybrid">Hybrid - Both signals and risk management</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-
-        <div class="settings-section">
-            <h4>
-                <i class="fas fa-shield-alt"></i> Risk Management
-                <label class="toggle-switch" style="margin-left: auto;">
-                    <input type="checkbox" id="settingsRiskEnabled" onchange="toggleRiskInputs()">
-                    <span class="toggle-slider"></span>
-                </label>
-            </h4>
-            <div id="riskInputs">
-                <div class="settings-row">
-                    <div class="setting-item">
-                        <label>Profit Target 1 (%)</label>
-                        <input type="number" id="settingsPT1" placeholder="e.g., 25" min="1" max="500" step="1">
-                    </div>
-                    <div class="setting-item">
-                        <label>Profit Target 2 (%)</label>
-                        <input type="number" id="settingsPT2" placeholder="e.g., 50" min="1" max="500" step="1">
-                    </div>
-                </div>
-                <div class="settings-row">
-                    <div class="setting-item">
-                        <label>Profit Target 3 (%)</label>
-                        <input type="number" id="settingsPT3" placeholder="e.g., 100" min="1" max="500" step="1">
-                    </div>
-                    <div class="setting-item">
-                        <label>Stop Loss (%)</label>
-                        <input type="number" id="settingsStopLoss" placeholder="e.g., 25" min="1" max="100" step="1">
-                    </div>
-                </div>
-                <div class="settings-row">
-                    <div class="setting-item">
-                        <label>Trailing Stop (%)</label>
-                        <input type="number" id="settingsTrailingStop" placeholder="e.g., 15" min="1" max="100" step="1">
-                    </div>
-                    <div class="setting-item">
-                        <label>Trailing Activation (%)</label>
-                        <input type="number" id="settingsTrailingActivation" placeholder="e.g., 20" min="1" max="500" step="1">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="button-row" style="justify-content: flex-end;">
+        </div><!-- end scrollable -->
+        <div class="button-row" style="justify-content:flex-end;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);">
             <button class="btn-secondary" onclick="closeSettingsModal()">Cancel</button>
-            <button class="btn-primary" onclick="saveChannelSettings()">
-                <i class="fas fa-save"></i> Save Settings
-            </button>
+            <button class="btn-primary" onclick="saveChannelSettings()"><i class="fas fa-save"></i> Save</button>
         </div>
     </div>
 </div>
@@ -1103,99 +1097,139 @@
         openChannelSettings(channelId);
     }
 
+    function switchSettingsTab(btn, tabId) {
+        document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.stab-content').forEach(c => c.style.display = 'none');
+        btn.classList.add('active');
+        document.getElementById('stab-' + tabId).style.display = 'block';
+    }
+
     function openChannelSettings(channelId) {
-        const channel = telegramChannels.find(c => c.id === channelId);
-        if (!channel) {
-            showToast('Channel not found', 'error');
-            return;
-        }
+        const ch = telegramChannels.find(c => c.id === channelId);
+        if (!ch) { showToast('Channel not found', 'error'); return; }
 
         document.getElementById('settingsChannelId').value = channelId;
-        document.getElementById('settingsMarket').value = channel.market || 'US';
-        document.getElementById('settingsPositionSize').value = channel.position_size_pct || '';
-        document.getElementById('settingsDefaultQty').value = channel.default_quantity || '';
-        document.getElementById('settingsBrokerOverride').value = channel.broker_override || '';
-        document.getElementById('settingsExitMode').value = channel.exit_strategy_mode || 'signal';
-        document.getElementById('settingsRiskEnabled').checked = channel.risk_management_enabled || false;
-        document.getElementById('settingsPT1').value = channel.profit_target_1_pct || '';
-        document.getElementById('settingsPT2').value = channel.profit_target_2_pct || '';
-        document.getElementById('settingsPT3').value = channel.profit_target_3_pct || '';
-        document.getElementById('settingsStopLoss').value = channel.stop_loss_pct || '';
-        document.getElementById('settingsTrailingStop').value = channel.trailing_stop_pct || '';
-        document.getElementById('settingsTrailingActivation').value = channel.trailing_activation_pct || '';
+        // Sizing
+        document.getElementById('settingsPositionSize').value = ch.position_size_pct || '';
+        document.getElementById('settingsDefaultQty').value = ch.default_quantity || '';
+        document.getElementById('settingsMaxPositionSize').value = ch.channel_max_position_size || '';
+        document.getElementById('settingsSizingMode').value = ch.sizing_mode || 'live';
+        document.getElementById('settingsForceMySize').checked = !!ch.ignore_signal_position_size;
+        document.getElementById('settingsMarket').value = ch.market || 'US';
+        document.getElementById('settingsBrokerOverride').value = ch.broker_override || '';
+        // Risk Controls
+        document.getElementById('settingsSlippageEnabled').checked = !!ch.slippage_protection_enabled;
+        document.getElementById('settingsSlippageMaxPct').value = ch.slippage_max_pct || '';
+        document.getElementById('settingsSlippageWaitMin').value = ch.slippage_wait_minutes || '';
+        document.getElementById('settingsLimitCapEnabled').checked = !!ch.limit_cap_enabled;
+        document.getElementById('settingsLimitCapPct').value = ch.limit_cap_pct || '';
+        document.getElementById('settingsNdxQqq').checked = !!ch.ndx_to_qqq_enabled;
+        // Order Types
+        document.getElementById('settingsEntryOrderMode').value = ch.entry_order_mode || 'market';
+        document.getElementById('settingsTrimOrderMode').value = ch.trim_order_mode || 'market';
+        document.getElementById('settingsSlOrderMode').value = ch.sl_order_mode || 'market';
+        document.getElementById('settingsSlLimitOffset').value = ch.sl_limit_offset || '';
+        document.getElementById('settingsExitMode').value = ch.exit_strategy_mode || 'signal';
+        // Conditional
+        document.getElementById('settingsConditionalEnabled').checked = !!ch.conditional_order_enabled;
+        document.getElementById('settingsOrderTimeout').value = ch.order_timeout_minutes || '';
+        document.getElementById('settingsConditionalTimeout').value = ch.conditional_order_timeout_minutes || '';
+        document.getElementById('settingsEntryConfirmPct').value = ch.entry_confirmation_pct || '';
+        document.getElementById('settingsBreakoutReset').checked = !!ch.breakout_reset_enabled;
+        // Targets & SL
+        document.getElementById('settingsRiskEnabled').checked = !!ch.risk_management_enabled;
+        document.getElementById('settingsStopLoss').value = ch.stop_loss_pct || '';
+        document.getElementById('settingsTrailingStop').value = ch.trailing_stop_pct || '';
+        document.getElementById('settingsTrailingActivation').value = ch.trailing_activation_pct || '';
+        document.getElementById('settingsPT1').value = ch.profit_target_1_pct || '';
+        document.getElementById('settingsPT2').value = ch.profit_target_2_pct || '';
+        document.getElementById('settingsPT3').value = ch.profit_target_3_pct || '';
+        document.getElementById('settingsPT4').value = ch.profit_target_4_pct || '';
+        document.getElementById('settingsPTQty1').value = ch.profit_target_qty_1 || '';
+        document.getElementById('settingsPTQty2').value = ch.profit_target_qty_2 || '';
+        document.getElementById('settingsPTQty3').value = ch.profit_target_qty_3 || '';
+        document.getElementById('settingsPTQty4').value = ch.profit_target_qty_4 || '';
+        // Advanced
+        document.getElementById('settingsBracketMode').value = ch.broker_bracket_mode || 'none';
+        document.getElementById('settingsDynamicSL').checked = !!ch.enable_dynamic_sl;
+        document.getElementById('settingsDynamicSLProfile').value = ch.dynamic_sl_profile || 'conservative';
+        document.getElementById('settingsEarlyTrailing').checked = !!ch.enable_early_trailing;
+        document.getElementById('settingsEarlyTrailingAct').value = ch.early_trailing_activation_pct || '';
+        document.getElementById('settingsEarlyTrailingStep').value = ch.early_trailing_step_pct || '';
+        document.getElementById('settingsGivebackGuard').checked = !!ch.enable_giveback_guard;
+        document.getElementById('settingsGivebackPct').value = ch.giveback_allowed_pct || '';
 
         toggleRiskInputs();
+        // Reset to first tab
+        document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.stab-content').forEach(c => c.style.display = 'none');
+        document.querySelector('.stab[data-stab="sizing"]').classList.add('active');
+        document.getElementById('stab-sizing').style.display = 'block';
         document.getElementById('channelSettingsModal').classList.add('active');
     }
 
-    function closeSettingsModal() {
-        document.getElementById('channelSettingsModal').classList.remove('active');
-    }
-
-    function toggleRiskInputs() {
-        const enabled = document.getElementById('settingsRiskEnabled').checked;
-        const inputs = document.getElementById('riskInputs');
-        inputs.style.opacity = enabled ? '1' : '0.5';
-        inputs.style.pointerEvents = enabled ? 'auto' : 'none';
-    }
+    function closeSettingsModal() { document.getElementById('channelSettingsModal').classList.remove('active'); }
+    function toggleRiskInputs() { const e=document.getElementById('settingsRiskEnabled').checked; const i=document.getElementById('riskInputs'); i.style.opacity=e?'1':'0.5'; i.style.pointerEvents=e?'auto':'none'; }
 
     async function saveChannelSettings() {
         const channelId = document.getElementById('settingsChannelId').value;
-        
-        const market = document.getElementById('settingsMarket').value;
-        const posSize = document.getElementById('settingsPositionSize').value;
-        const defaultQty = document.getElementById('settingsDefaultQty').value;
-        const brokerOverride = document.getElementById('settingsBrokerOverride').value;
-        const exitMode = document.getElementById('settingsExitMode').value;
-        const riskEnabled = document.getElementById('settingsRiskEnabled').checked;
-        const pt1 = document.getElementById('settingsPT1').value;
-        const pt2 = document.getElementById('settingsPT2').value;
-        const pt3 = document.getElementById('settingsPT3').value;
-        const stopLoss = document.getElementById('settingsStopLoss').value;
-        const trailingStop = document.getElementById('settingsTrailingStop').value;
-        const trailingActivation = document.getElementById('settingsTrailingActivation').value;
+        const v = id => { const el=document.getElementById(id); return el ? el.value : ''; };
+        const n = id => { const val=v(id); return val ? parseFloat(val) : null; };
+        const i = id => { const val=v(id); return val ? parseInt(val) : null; };
+        const c = id => { const el=document.getElementById(id); return el ? el.checked : false; };
 
         const payload = {
-            market: market,
-            position_size_pct: posSize ? parseFloat(posSize) : null,
-            default_quantity: defaultQty ? parseInt(defaultQty) : null,
-            broker_override: brokerOverride || null,
-            exit_strategy_mode: exitMode,
-            risk_management_enabled: riskEnabled ? 1 : 0,
-            profit_target_1_pct: pt1 ? parseFloat(pt1) : null,
-            profit_target_2_pct: pt2 ? parseFloat(pt2) : null,
-            profit_target_3_pct: pt3 ? parseFloat(pt3) : null,
-            stop_loss_pct: stopLoss ? parseFloat(stopLoss) : null,
-            trailing_stop_pct: trailingStop ? parseFloat(trailingStop) : null,
-            trailing_activation_pct: trailingActivation ? parseFloat(trailingActivation) : null
+            // Sizing
+            market: v('settingsMarket'), position_size_pct: n('settingsPositionSize'),
+            default_quantity: i('settingsDefaultQty'), channel_max_position_size: n('settingsMaxPositionSize'),
+            sizing_mode: v('settingsSizingMode'), ignore_signal_position_size: c('settingsForceMySize') ? 1 : 0,
+            broker_override: v('settingsBrokerOverride') || null,
+            // Risk Controls
+            slippage_protection_enabled: c('settingsSlippageEnabled') ? 1 : 0,
+            slippage_max_pct: n('settingsSlippageMaxPct'), slippage_wait_minutes: i('settingsSlippageWaitMin'),
+            limit_cap_enabled: c('settingsLimitCapEnabled') ? 1 : 0, limit_cap_pct: n('settingsLimitCapPct'),
+            ndx_to_qqq_enabled: c('settingsNdxQqq') ? 1 : 0,
+            // Order Types
+            entry_order_mode: v('settingsEntryOrderMode'), trim_order_mode: v('settingsTrimOrderMode'),
+            sl_order_mode: v('settingsSlOrderMode'), sl_limit_offset: n('settingsSlLimitOffset'),
+            exit_strategy_mode: v('settingsExitMode'),
+            // Conditional
+            conditional_order_enabled: c('settingsConditionalEnabled') ? 1 : 0,
+            order_timeout_minutes: i('settingsOrderTimeout'),
+            conditional_order_timeout_minutes: i('settingsConditionalTimeout'),
+            entry_confirmation_pct: n('settingsEntryConfirmPct'),
+            breakout_reset_enabled: c('settingsBreakoutReset') ? 1 : 0,
+            // Targets & SL
+            risk_management_enabled: c('settingsRiskEnabled') ? 1 : 0,
+            stop_loss_pct: n('settingsStopLoss'), trailing_stop_pct: n('settingsTrailingStop'),
+            trailing_activation_pct: n('settingsTrailingActivation'),
+            profit_target_1_pct: n('settingsPT1'), profit_target_2_pct: n('settingsPT2'),
+            profit_target_3_pct: n('settingsPT3'), profit_target_4_pct: n('settingsPT4'),
+            profit_target_qty_1: i('settingsPTQty1'), profit_target_qty_2: i('settingsPTQty2'),
+            profit_target_qty_3: i('settingsPTQty3'), profit_target_qty_4: i('settingsPTQty4'),
+            // Advanced
+            broker_bracket_mode: v('settingsBracketMode'),
+            enable_dynamic_sl: c('settingsDynamicSL') ? 1 : 0,
+            dynamic_sl_profile: v('settingsDynamicSLProfile'),
+            enable_early_trailing: c('settingsEarlyTrailing') ? 1 : 0,
+            early_trailing_activation_pct: n('settingsEarlyTrailingAct'),
+            early_trailing_step_pct: n('settingsEarlyTrailingStep'),
+            enable_giveback_guard: c('settingsGivebackGuard') ? 1 : 0,
+            giveback_allowed_pct: n('settingsGivebackPct'),
         };
 
         try {
             const response = await fetch(`/api/telegram/channels/${channelId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
-
             const data = await response.json();
-
-            if (data.success) {
-                showToast('Channel settings saved', 'success');
-                closeSettingsModal();
-                loadChannels();
-            } else {
-                showToast(data.error || 'Failed to save settings', 'error');
-            }
-        } catch (error) {
-            console.error('Error saving channel settings:', error);
-            showToast('Error saving settings', 'error');
-        }
+            if (data.success) { showToast('Settings saved', 'success'); closeSettingsModal(); loadChannels(); }
+            else { showToast(data.error || 'Failed to save', 'error'); }
+        } catch (error) { showToast('Error: ' + error.message, 'error'); }
     }
 
     document.getElementById('channelSettingsModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeSettingsModal();
-        }
+        if (e.target === this) closeSettingsModal();
     });
 
     function escapeHtml(text) {

@@ -3,34 +3,26 @@ import sys
 import os
 import threading
 import time
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 
+# ---------- GAP-1: Greeks in IBKRQuoteData ----------
+
 class TestGAP1GreeksInQuoteData:
     """GAP-1: IBKRQuoteData should have greeks fields populated from modelGreeks."""
 
-    def _make_hub(self):
-        with patch.dict('sys.modules', {
-            'ib_insync': MagicMock(),
-        }):
-            from src.services.ibkr_data_hub import IBKRQuoteData
-            return IBKRQuoteData
-
     def test_greeks_slots_exist(self):
-        QuoteData = self._make_hub()
-        q = QuoteData('AAPL_20240120_150_C', 99999)
-        assert hasattr(q, 'delta')
-        assert hasattr(q, 'gamma')
-        assert hasattr(q, 'theta')
-        assert hasattr(q, 'vega')
-        assert hasattr(q, 'implied_vol')
+        from src.services.ibkr_data_hub import IBKRQuoteData
+        q = IBKRQuoteData('AAPL_20240120_150_C', 99999)
+        for attr in ('delta', 'gamma', 'theta', 'vega', 'implied_vol'):
+            assert hasattr(q, attr), f"Missing slot: {attr}"
 
     def test_greeks_default_zero(self):
-        QuoteData = self._make_hub()
-        q = QuoteData('SPY_20240315_500_C')
+        from src.services.ibkr_data_hub import IBKRQuoteData
+        q = IBKRQuoteData('SPY_20240315_500_C')
         assert q.delta == 0.0
         assert q.gamma == 0.0
         assert q.theta == 0.0
@@ -38,8 +30,8 @@ class TestGAP1GreeksInQuoteData:
         assert q.implied_vol == 0.0
 
     def test_greeks_settable(self):
-        QuoteData = self._make_hub()
-        q = QuoteData('AAPL')
+        from src.services.ibkr_data_hub import IBKRQuoteData
+        q = IBKRQuoteData('AAPL')
         q.delta = 0.55
         q.gamma = 0.03
         q.theta = -0.05
@@ -52,116 +44,105 @@ class TestGAP1GreeksInQuoteData:
         assert q.implied_vol == 0.35
 
     def test_slots_enforced(self):
-        QuoteData = self._make_hub()
-        q = QuoteData('TEST')
+        from src.services.ibkr_data_hub import IBKRQuoteData
+        q = IBKRQuoteData('TEST')
         with pytest.raises(AttributeError):
             q.nonexistent_field = 42
 
 
+# ---------- HUB-3: _subscribed_lock ----------
+
 class TestHUB3SubscribedLock:
     """HUB-3: _subscribed_symbols must be protected by _subscribed_lock."""
 
+    def _make_hub(self):
+        from src.services.ibkr_data_hub import IBKRDataHub
+        IBKRDataHub._instance = None
+        try:
+            hub = object.__new__(IBKRDataHub)
+            hub._initialized = False
+            hub.__init__()
+            return hub
+        finally:
+            IBKRDataHub._instance = None
+
     def test_subscribed_lock_exists(self):
-        """IBKRDataHub must have _subscribed_lock attribute."""
-        with patch.dict('sys.modules', {
-            'ib_insync': MagicMock(),
-        }):
-            from src.services.ibkr_data_hub import IBKRDataHub
-            # Reset singleton for test
-            IBKRDataHub._instance = None
-            IBKRDataHub._initialized = False
-            hub = IBKRDataHub.__new__(IBKRDataHub)
-            hub._initialized = False
-            hub.__init__()
-            assert hasattr(hub, '_subscribed_lock')
-            assert isinstance(hub._subscribed_lock, type(threading.Lock()))
-            # Cleanup
-            IBKRDataHub._instance = None
+        hub = self._make_hub()
+        assert hasattr(hub, '_subscribed_lock')
+        assert isinstance(hub._subscribed_lock, type(threading.Lock()))
 
-    def test_subscribe_symbol_checks_under_lock(self):
-        """subscribe_symbol must acquire _subscribed_lock before checking membership."""
-        import importlib
-        with patch.dict('sys.modules', {
-            'ib_insync': MagicMock(),
-        }):
-            from src.services.ibkr_data_hub import IBKRDataHub
-            IBKRDataHub._instance = None
-            hub = IBKRDataHub.__new__(IBKRDataHub)
-            hub._initialized = False
-            hub.__init__()
+    def test_subscribe_already_subscribed_noop(self):
+        hub = self._make_hub()
+        hub._subscribed_symbols.add('AAPL')
+        hub.subscribe_symbol('AAPL')
+        assert 'AAPL' in hub._subscribed_symbols
 
-            # Symbol already subscribed — should return without adding
-            with hub._subscribed_lock:
-                hub._subscribed_symbols.add('AAPL')
 
-            hub.subscribe_symbol('AAPL')  # Should be no-op since already in set
-            assert 'AAPL' in hub._subscribed_symbols
-            IBKRDataHub._instance = None
-
+# ---------- GAP-3: Option queue ----------
 
 class TestGAP3OptionQueueing:
     """GAP-3: Option symbols without contracts should be queued, not silently dropped."""
 
+    def _make_hub(self):
+        from src.services.ibkr_data_hub import IBKRDataHub
+        IBKRDataHub._instance = None
+        try:
+            hub = object.__new__(IBKRDataHub)
+            hub._initialized = False
+            hub.__init__()
+            return hub
+        finally:
+            IBKRDataHub._instance = None
+
     def test_option_without_contract_queued(self):
-        """Options with underscore and no contract go to _pending_subscriptions."""
-        with patch.dict('sys.modules', {
-            'ib_insync': MagicMock(),
-        }):
-            from src.services.ibkr_data_hub import IBKRDataHub
-            IBKRDataHub._instance = None
-            hub = IBKRDataHub.__new__(IBKRDataHub)
-            hub._initialized = False
-            hub.__init__()
+        hub = self._make_hub()
+        hub.subscribe_symbol('AAPL_20240120_150_C', contract=None)
+        assert 'AAPL_20240120_150_C' in hub._pending_subscriptions
+        assert 'AAPL_20240120_150_C' not in hub._subscribed_symbols
 
-            hub.subscribe_symbol('AAPL_20240120_150_C', contract=None)
-            assert 'AAPL_20240120_150_C' in hub._pending_subscriptions
-            assert 'AAPL_20240120_150_C' not in hub._subscribed_symbols
-            IBKRDataHub._instance = None
+    def test_option_with_contract_no_ib_goes_pending(self):
+        hub = self._make_hub()
+        mock_contract = MagicMock()
+        hub.subscribe_symbol('AAPL_20240120_150_C', contract=mock_contract)
+        # Without _ib connected, goes to pending
+        assert 'AAPL_20240120_150_C' in hub._pending_subscriptions
 
-    def test_option_with_contract_not_queued(self):
-        """Options with contract provided should proceed normally."""
-        with patch.dict('sys.modules', {
-            'ib_insync': MagicMock(),
-        }):
-            from src.services.ibkr_data_hub import IBKRDataHub
-            IBKRDataHub._instance = None
-            hub = IBKRDataHub.__new__(IBKRDataHub)
-            hub._initialized = False
-            hub.__init__()
+    def test_stock_without_ib_goes_pending(self):
+        hub = self._make_hub()
+        hub.subscribe_symbol('MSFT')
+        assert 'MSFT' in hub._pending_subscriptions
 
-            # Without IB connection, should go to pending
-            mock_contract = MagicMock()
-            hub.subscribe_symbol('AAPL_20240120_150_C', contract=mock_contract)
-            # Without _ib, goes to pending
-            assert 'AAPL_20240120_150_C' in hub._pending_subscriptions
-            IBKRDataHub._instance = None
 
+# ---------- COND-2: No callback → ERROR ----------
 
 class TestCOND2NoCallbackError:
     """COND-2: Orders with no execution_callback should go to ERROR status."""
 
-    def test_no_callback_sets_error(self):
-        """When execution_callback is None, order should go to ERROR."""
-        # We verify the else branch exists by checking the source code
+    def test_else_branch_exists_in_source(self):
+        """Verify the else branch with NO_CALLBACK event exists."""
         import inspect
         from src.services.conditional_orders.base import BaseConditionalOrderService
         source = inspect.getsource(BaseConditionalOrderService._execute_order)
-        assert 'NO_CALLBACK' in source
-        assert 'Execution callback not wired' in source
-        assert 'callback_success = False' in source
+        assert 'NO_CALLBACK' in source, "NO_CALLBACK event not found in _execute_order"
+        assert 'Execution callback not wired' in source, "Error message not found"
+        assert 'callback_success = False' in source, "callback_success not set to False"
+        # Must clean up executing state
+        assert '_executing_orders.discard(order_id)' in source, "executing cleanup missing"
+        assert '_execution_locks.pop(order_id' in source, "lock cleanup missing"
+        # Must notify on failure
+        assert 'notify_conditional_failed' in source, "failure notification missing"
 
+
+# ---------- GAP-1: Greeks in detailed quote ----------
 
 class TestGAP1GreeksInDetailedQuote:
     """GAP-1: get_quote_detailed should include greeks fields."""
 
     def test_detailed_quote_has_greeks(self):
-        """get_quote_detailed dict must include delta/gamma/theta/vega/implied_vol."""
-        with patch.dict('sys.modules', {
-            'ib_insync': MagicMock(),
-        }):
-            from src.services.ibkr_data_hub import IBKRDataHub, IBKRQuoteData
-            IBKRDataHub._instance = None
-            hub = IBKRDataHub.__new__(IBKRDataHub)
+        from src.services.ibkr_data_hub import IBKRDataHub, IBKRQuoteData
+        IBKRDataHub._instance = None
+        try:
+            hub = object.__new__(IBKRDataHub)
             hub._initialized = False
             hub.__init__()
 
@@ -174,8 +155,7 @@ class TestGAP1GreeksInDetailedQuote:
             q.vega = 0.12
             q.implied_vol = 0.35
 
-            with hub._quotes_lock:
-                hub._quotes['AAPL_OPT'] = q
+            hub._quotes['AAPL_OPT'] = q
 
             result = hub.get_quote_detailed('AAPL_OPT')
             assert result is not None
@@ -184,4 +164,5 @@ class TestGAP1GreeksInDetailedQuote:
             assert result['theta'] == -0.05
             assert result['vega'] == 0.12
             assert result['implied_vol'] == 0.35
+        finally:
             IBKRDataHub._instance = None

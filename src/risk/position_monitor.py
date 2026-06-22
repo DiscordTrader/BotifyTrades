@@ -4818,8 +4818,17 @@ class RiskManager:
             _staleness_change_age = change_age
             session = self._get_market_session()
             _effective_threshold = self._STALENESS_EXIT_BLOCK_THRESHOLD
-            # Low-volume stocks (no price change in 10s+) get a longer staleness threshold
-            _tick_gap = change_age  # change_age = time since last price change
+            # Low-volume stocks (no tick in 10s+) get a longer staleness threshold
+            # Use last_tick_ts from UPH if available for true tick gap measurement
+            _tick_gap = change_age
+            try:
+                from src.services.unified_price_hub import get_unified_price_hub as _get_uph_stale
+                _uph_stale = _get_uph_stale()
+                _uph_quote = _uph_stale.get_quote(position.symbol) if _uph_stale else None
+                if _uph_quote and _uph_quote.last_tick_ts > 0:
+                    _tick_gap = _st.time() - _uph_quote.last_tick_ts
+            except Exception:
+                pass
             if _tick_gap >= 10:
                 _effective_threshold = min(30, _tick_gap * 1.5)
             if session == 'extended':

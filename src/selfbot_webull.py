@@ -19837,7 +19837,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         except Exception as cb_err:
                             _original_print(f"[TELEGRAM BRIDGE] ⚠️ Circuit breaker check failed (continuing): {cb_err}", flush=True)
                     
-                    if signal.get('_conditional_order') and signal.get('market') == 'INDIA':
+                    if signal.get('_conditional_order'):
+                        # Route ALL conditional orders through router (was India-only, US went straight to queue)
                         await self._route_telegram_conditional_order(signal)
                     else:
                         _tb_action = signal.get('action', '').upper()
@@ -21476,6 +21477,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 '_risk_management_order': signal.get('_risk_management_order', False),
                                 'position_key': signal.get('_position_key') or signal.get('_exit_marker_key'),
                             }
+                            _wk_tif = signal.get('tif') or signal.get('time_in_force')
+                            if _wk_tif:
+                                order_kwargs['tif'] = _wk_tif
                             if use_market_order and signal.get('price'):
                                 order_kwargs['_signal_price_fallback'] = signal.get('price')
                             
@@ -21643,12 +21647,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             if _lt_stk_fp and _lt_stk_fp > 0:
                                                 stock_price = _lt_stk_fp
                                                 _original_print(f"[{broker_name_used}] [SLIPPAGE] Updated stock limit price → ${_lt_stk_fp:.4f}")
-                                resp = await live_broker.place_stock_order(
+                                _lt_stk_kwargs = dict(
                                     symbol=signal['symbol'],
                                     action=signal['action'],
                                     quantity=signal['qty'],
                                     price=stock_price
                                 )
+                                _lt_stk_tif = signal.get('tif') or signal.get('time_in_force')
+                                if _lt_stk_tif:
+                                    _lt_stk_kwargs['tif'] = _lt_stk_tif
+                                resp = await live_broker.place_stock_order(**_lt_stk_kwargs)
                             _original_print(f"[LIVE TRADE] Broker response received: {resp}", flush=True)
                             
                             live_stock_success = False

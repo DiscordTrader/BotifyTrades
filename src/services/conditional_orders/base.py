@@ -2986,6 +2986,18 @@ class BaseConditionalOrderService(ABC):
                 error_message='Execution callback not wired — bot may still be starting up. Resubmit the order.'
             )
             callback_success = False
+            self._executing_orders.discard(order_id)
+            self._execution_locks.pop(order_id, None)
+            try:
+                notify_conditional_failed(
+                    symbol=symbol,
+                    broker=order.get('broker_primary', ''),
+                    order_id=order_id,
+                    error='Execution callback not wired',
+                    stage="execution"
+                )
+            except Exception as ne:
+                self._log(f"Notification error (no callback): {ne}")
     
     def cancel_order(self, order_id: int) -> bool:
         """Cancel a conditional order."""

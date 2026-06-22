@@ -8382,49 +8382,27 @@ def update_telegram_settings(enabled: bool = None, api_id: str = None, api_hash:
 
 
 def get_telegram_channels() -> List[Dict[str, Any]]:
-    """Get all Telegram channels (platform = 'telegram')"""
+    """Get all Telegram channels with ALL settings (parity with Discord)."""
     conn = get_connection()
     cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT id, name, telegram_chat_id, telegram_chat_type, telegram_username,
-               execute_enabled, track_enabled, broker_override, enabled_brokers,
-               risk_management_enabled, position_size_pct, profit_target_1_pct,
-               profit_target_2_pct, profit_target_3_pct, stop_loss_pct,
-               trailing_stop_pct, trailing_activation_pct, exit_strategy_mode,
-               default_quantity, is_active, created_at, market
-        FROM channels
-        WHERE platform = 'telegram'
-        ORDER BY name
-    ''')
-    
+    cursor.execute('SELECT * FROM channels WHERE platform = ? ORDER BY name', ('telegram',))
     channels = []
     for row in cursor.fetchall():
-        channels.append({
-            'id': row['id'],
-            'name': row['name'],
-            'telegram_chat_id': row['telegram_chat_id'],
-            'telegram_chat_type': row['telegram_chat_type'],
-            'telegram_username': row['telegram_username'],
-            'execute_enabled': bool(row['execute_enabled']),
-            'track_enabled': bool(row['track_enabled']),
-            'broker_override': row['broker_override'],
-            'enabled_brokers': json.loads(row['enabled_brokers']) if row['enabled_brokers'] else [],
-            'risk_management_enabled': bool(row['risk_management_enabled']),
-            'position_size_pct': row['position_size_pct'],
-            'profit_target_1_pct': row['profit_target_1_pct'],
-            'profit_target_2_pct': row['profit_target_2_pct'],
-            'profit_target_3_pct': row['profit_target_3_pct'],
-            'stop_loss_pct': row['stop_loss_pct'],
-            'trailing_stop_pct': row['trailing_stop_pct'],
-            'trailing_activation_pct': row['trailing_activation_pct'],
-            'exit_strategy_mode': row['exit_strategy_mode'] or 'hybrid',
-            'default_quantity': row['default_quantity'],
-            'is_active': bool(row['is_active']),
-            'created_at': row['created_at'],
-            'market': row['market'] or 'US'
-        })
-    
+        ch = dict(row)
+        # Normalize JSON fields
+        if ch.get('enabled_brokers'):
+            try:
+                ch['enabled_brokers'] = json.loads(ch['enabled_brokers']) if isinstance(ch['enabled_brokers'], str) else ch['enabled_brokers']
+            except (json.JSONDecodeError, TypeError):
+                ch['enabled_brokers'] = []
+        else:
+            ch['enabled_brokers'] = []
+        if not ch.get('exit_strategy_mode'):
+            ch['exit_strategy_mode'] = 'hybrid'
+        if not ch.get('market'):
+            ch['market'] = 'US'
+        channels.append(ch)
+    conn.close()
     return channels
 
 
@@ -8474,56 +8452,56 @@ def add_telegram_channel(telegram_chat_id: str, name: str, chat_type: str = 'gro
 
 
 def get_channel_by_telegram_id(telegram_chat_id: str) -> Optional[Dict[str, Any]]:
-    """Get channel settings by Telegram chat ID (unified lookup for both platforms)"""
+    """Get channel settings by Telegram chat ID — returns ALL columns (parity with Discord).
+
+    Uses SELECT * to ensure Telegram channels get the same 70+ settings as Discord channels.
+    Previously only returned 21 columns, causing 44 settings to be invisible.
+    """
     conn = get_connection()
     cursor = conn.cursor()
-    
+
     chat_id_str = str(telegram_chat_id)
     normalized_id = chat_id_str.lstrip('@').lstrip('-')
     if normalized_id.startswith('100'):
         normalized_id = normalized_id[3:]
-    
+
     cursor.execute('''
-        SELECT id, name, discord_channel_id, telegram_chat_id, telegram_username, platform,
-               execute_enabled, track_enabled, broker_override, enabled_brokers,
-               risk_management_enabled, position_size_pct, profit_target_1_pct,
-               profit_target_2_pct, profit_target_3_pct, stop_loss_pct,
-               trailing_stop_pct, trailing_activation_pct, exit_strategy_mode,
-               default_quantity, is_active
+        SELECT *
         FROM channels
-        WHERE telegram_chat_id = ? 
-           OR telegram_username = ? 
+        WHERE telegram_chat_id = ?
+           OR telegram_username = ?
            OR REPLACE(REPLACE(telegram_chat_id, '-100', ''), '-', '') = ?
         LIMIT 1
     ''', (chat_id_str, chat_id_str.lstrip('@'), normalized_id))
-    
+
     row = cursor.fetchone()
+    conn.close()
     if not row:
         return None
-    
-    return {
-        'id': row['id'],
-        'name': row['name'],
-        'discord_channel_id': row['discord_channel_id'],
-        'telegram_chat_id': row['telegram_chat_id'],
-        'telegram_username': row['telegram_username'],
-        'platform': row['platform'],
-        'execute_enabled': bool(row['execute_enabled']),
-        'track_enabled': bool(row['track_enabled']),
-        'broker_override': row['broker_override'],
-        'enabled_brokers': json.loads(row['enabled_brokers']) if row['enabled_brokers'] else [],
-        'risk_management_enabled': bool(row['risk_management_enabled']),
-        'position_size_pct': row['position_size_pct'],
-        'profit_target_1_pct': row['profit_target_1_pct'],
-        'profit_target_2_pct': row['profit_target_2_pct'],
-        'profit_target_3_pct': row['profit_target_3_pct'],
-        'stop_loss_pct': row['stop_loss_pct'],
-        'trailing_stop_pct': row['trailing_stop_pct'],
-        'trailing_activation_pct': row['trailing_activation_pct'],
-        'exit_strategy_mode': row['exit_strategy_mode'] or 'hybrid',
-        'default_quantity': row['default_quantity'],
-        'is_active': bool(row['is_active'])
-    }
+
+    # Convert Row to dict — includes ALL 70+ columns
+    result = dict(row)
+    # Normalize boolean fields
+    for bool_field in ('execute_enabled', 'track_enabled', 'risk_management_enabled', 'is_active',
+                       'slippage_protection_enabled', 'limit_cap_enabled', 'ndx_to_qqq_enabled',
+                       'conditional_order_enabled', 'breakout_reset_enabled', 'ignore_signal_position_size',
+                       'leave_runner_enabled', 'enable_dynamic_sl', 'enable_early_trailing',
+                       'enable_giveback_guard', 'ema_risk_enabled', 'enable_pt_near_lock',
+                       'escalation_only_mode', 'order_chase_enabled', 'entry_chase_enabled'):
+        if bool_field in result:
+            result[bool_field] = bool(result[bool_field]) if result[bool_field] is not None else False
+    # Normalize JSON fields
+    if result.get('enabled_brokers'):
+        try:
+            result['enabled_brokers'] = json.loads(result['enabled_brokers']) if isinstance(result['enabled_brokers'], str) else result['enabled_brokers']
+        except (json.JSONDecodeError, TypeError):
+            result['enabled_brokers'] = []
+    else:
+        result['enabled_brokers'] = []
+    # Default exit_strategy_mode
+    if not result.get('exit_strategy_mode'):
+        result['exit_strategy_mode'] = 'hybrid'
+    return result
 
 
 # ============ TRADING SETTINGS ============
