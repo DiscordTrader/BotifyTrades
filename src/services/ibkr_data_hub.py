@@ -108,10 +108,13 @@ class IBKRDataHub:
         self._qualify_in_progress: Set[str] = set()
         self._using_delayed_data = False
 
-        # reqTickByTickData — bypasses IB internal aggregation for sub-ms delivery
+        # reqTickByTickData — bypasses IB internal aggregation for sub-ms delivery.
+        # IB formula: max = market_data_lines / 100, min=3, max=60.
+        # Default 100 lines → 3 slots. Paid subscriptions (500+) → more slots.
+        # We clamp to the IB formula; user can override via settings if they have more lines.
         self._tick_by_tick_tickers: Dict[int, Any] = {}  # conId -> ib_insync Ticker
         self._tick_by_tick_count: int = 0
-        self._TICK_BY_TICK_LIMIT = 20
+        self._TICK_BY_TICK_LIMIT = 3  # Conservative default (100 market data lines / 100 = 1, min 3)
 
         self._reconnect_in_progress = False
         self._reconnect_lock = threading.Lock()
@@ -128,6 +131,22 @@ class IBKRDataHub:
         self._PER_SYMBOL_DEAD_THRESHOLD = 60.0
 
         print("[IBKR_HUB] ✓ IBKRDataHub initialized (singleton)")
+
+    def configure_tick_by_tick_limit(self, market_data_lines: int = 100):
+        """Set TickByTick limit based on IB account's market data line allocation.
+
+        IB formula: max_tbt = market_data_lines / 100, clamped to [3, 60].
+        Default 100 lines = 3 slots. Call after connect with actual allocation.
+
+        Args:
+            market_data_lines: Number of simultaneous market data lines (default 100).
+                Check in TWS: File > Global Configuration > API > Market Data.
+        """
+        computed = max(3, min(60, market_data_lines // 100))
+        old = self._TICK_BY_TICK_LIMIT
+        self._TICK_BY_TICK_LIMIT = computed
+        if computed != old:
+            print(f"[IBKR_HUB] TickByTick limit: {old} -> {computed} ({market_data_lines} market data lines)")
 
     def on(self, event: str, handler: Callable):
         with self._event_lock:
