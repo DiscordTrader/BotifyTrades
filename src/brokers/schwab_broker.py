@@ -615,19 +615,29 @@ class SchwabBroker(BrokerInterface):
     async def _reset_http_client(self, reason: str = ""):
         """Close and recreate the HTTP client to recover from pool exhaustion."""
         import httpx
+        import time as _reset_time
         if self._http_client is not None:
             try:
                 await self._http_client.aclose()
             except Exception:
                 pass
+        # Exponential backoff: if resetting too frequently, wait before recreating
+        if not hasattr(self, '_pool_reset_count'):
+            self._pool_reset_count = 0
+        if not hasattr(self, '_last_reset_ts'):
+            self._last_reset_ts = 0
+        _since_last = _reset_time.time() - self._last_reset_ts
+        if _since_last < 5 and self._pool_reset_count > 3:
+            _backoff = min(30, 2 ** min(self._pool_reset_count - 3, 5))
+            print(f"[{self.name}] ⏳ HTTP backoff {_backoff}s (reset #{self._pool_reset_count}, API may be down)")
+            await asyncio.sleep(_backoff)
         self._http_client = self._create_http_client()
         try:
             self._http_client_loop_id = id(asyncio.get_running_loop())
         except RuntimeError:
             self._http_client_loop_id = None
-        if not hasattr(self, '_pool_reset_count'):
-            self._pool_reset_count = 0
         self._pool_reset_count += 1
+        self._last_reset_ts = _reset_time.time()
         print(f"[{self.name}] 🔄 HTTP client reset #{self._pool_reset_count}: {reason}")
 
     async def _make_request(self, method, url, is_exit_order: bool = False, is_entry_order: bool = False, **kwargs):
@@ -902,9 +912,12 @@ class SchwabBroker(BrokerInterface):
         print(f"[{self.name}] ⚠️ GLOBAL 429 BACKOFF: {backoff:.0f}s (consecutive: {self._consecutive_429s})")
     
     def _register_success(self):
-        """Register a successful API call - resets 429 counter"""
+        """Register a successful API call - resets 429 and pool reset counters"""
         self._consecutive_429s = 0
         self._last_successful_call = time.time()
+        # Reset pool reset counter on success — API is healthy again
+        if hasattr(self, '_pool_reset_count') and self._pool_reset_count > 0:
+            self._pool_reset_count = 0
     
     def _is_in_429_backoff(self) -> float:
         """Check if we're in global 429 backoff. Returns seconds remaining, 0 if clear."""
