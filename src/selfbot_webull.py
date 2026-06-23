@@ -22086,6 +22086,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     _original_print(f"[RISK-RETRY] ❌ Max retries exhausted for {signal['_position_key']}", flush=True)
                                     _original_print(f"[RISK-RETRY] ❌ MANUAL INTERVENTION REQUIRED - Close position manually", flush=True)
                                 elif retry_state.get('use_market'):
+                                    # CRITICAL: Set use_market_order on position cache entry
+                                    # so the NEXT _execute_exit reads it via should_use_market_order()
+                                    try:
+                                        entry = cache.get(signal['_position_key'])
+                                        if entry:
+                                            entry.use_market_order = True
+                                            _original_print(f"[RISK-RETRY] ✅ use_market_order=True set on cache for {signal['_position_key']}")
+                                    except Exception:
+                                        pass
                                     _original_print(f"[RISK-RETRY] 📊 Next attempt will use MARKET order", flush=True)
                             else:
                                 _original_print(f"[RISK-RETRY] ⚠️ Risk manager not available to record failure", flush=True)
