@@ -1910,9 +1910,11 @@ function _updatePositionCardInPlace(trade) {
     const bidPrice = parseFloat(trade.bid_price) || (currentPrice * 0.995);
     const askPrice = parseFloat(trade.ask_price) || (currentPrice * 1.005);
     const midPrice = (bidPrice + askPrice) / 2;
-    const bidBtn = document.querySelector(`#drawer-${pid} .btn-quote.bid .quote-price`);
-    const midBtn = document.querySelector(`#drawer-${pid} .btn-quote.mid .quote-price`);
-    const askBtn = document.querySelector(`#drawer-${pid} .btn-quote.ask .quote-price`);
+    // Escape dots in pid for CSS selector (e.g., WO_HIMS_33.0_2026-06-26_P → 33\.0)
+    const escapedPid = String(pid).replace(/\./g, '\\\\.');
+    const bidBtn = document.querySelector(`#drawer-${escapedPid} .btn-quote.bid .quote-price`);
+    const midBtn = document.querySelector(`#drawer-${escapedPid} .btn-quote.mid .quote-price`);
+    const askBtn = document.querySelector(`#drawer-${escapedPid} .btn-quote.ask .quote-price`);
     if (bidBtn) bidBtn.textContent = '$' + bidPrice.toFixed(2);
     if (midBtn) midBtn.textContent = '$' + midPrice.toFixed(2);
     if (askBtn) askBtn.textContent = '$' + askPrice.toFixed(2);
