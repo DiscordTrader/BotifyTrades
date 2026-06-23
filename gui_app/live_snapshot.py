@@ -1113,7 +1113,13 @@ def _canonical_symbol(sym):
     return _SYMBOL_CANONICAL.get(str(sym).upper(), str(sym).upper())
 
 def _make_match_key(broker, symbol, strike, expiry, call_put):
-    return f"{str(broker).upper()}|{_canonical_symbol(symbol)}|{_normalize_strike(strike)}|{_normalize_expiry(expiry)}|{(call_put or '').upper()[:1]}"
+    # Normalize broker: strip _LIVE/_PAPER suffixes so WEBULL_OFFICIAL_LIVE matches WEBULL_OFFICIAL
+    _b = str(broker).upper()
+    for _suffix in ('_LIVE', '_PAPER'):
+        if _b.endswith(_suffix):
+            _b = _b[:-len(_suffix)]
+            break
+    return f"{_b}|{_canonical_symbol(symbol)}|{_normalize_strike(strike)}|{_normalize_expiry(expiry)}|{(call_put or '').upper()[:1]}"
 
 
 def _build_channel_risk_map() -> Dict[str, Dict]:
