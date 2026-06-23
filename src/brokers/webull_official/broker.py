@@ -327,6 +327,11 @@ class WebullOfficialBroker:
             }
             otype = type_map.get(order_type.upper(), order_type.upper())
 
+        # MARKET orders must NOT have limit_price — Webull rejects with "invalid limit_price"
+        if otype == "MARKET":
+            price = None
+            stop_price = None
+
         tif_map = {"DAY": "DAY", "GTC": "GTC", "IOC": "IOC"}
         tif = tif_map.get(duration.upper(), "DAY")
 
