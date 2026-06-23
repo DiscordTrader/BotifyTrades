@@ -427,8 +427,8 @@ class WebullOfficialBroker:
             err_msg = str(e)
             # Auto-retry as MARKET if limit_price rejected
             # Webull rejects certain limit prices (e.g., outside acceptable range)
-            if 'invalid limit_price' in err_msg.lower() or 'invalid_limit_price' in err_msg.lower():
-                print(f"[{self.name}] ⚠️ Limit price rejected — retrying as MARKET order (no limit_price)")
+            if 'invalid limit_price' in err_msg.lower() or 'invalid_limit_price' in err_msg.lower() or 'invalid support_trading_session' in err_msg.lower():
+                print(f"[{self.name}] ⚠️ Order rejected — retrying as MARKET order (CORE session, DAY TIF)")
                 try:
                     result = await self._orders.place_stock_order(
                         account_id=self.account_id,
@@ -438,17 +438,17 @@ class WebullOfficialBroker:
                         order_type="MARKET",
                         limit_price=None,
                         stop_price=None,
-                        time_in_force=tif,
-                        extended_hours=extended_hours,
+                        time_in_force="DAY",
+                        extended_hours=False,
                     )
                     return OrderResult(
                         success=True,
                         order_id=result.client_order_id or result.order_id,
-                        message=f"MARKET order placed (limit rejected): {side} {quantity} {symbol}",
+                        message=f"MARKET order placed: {side} {quantity} {symbol}",
                         symbol=symbol, action=action, quantity=quantity,
                     )
                 except Exception as market_err:
-                    return OrderResult(success=False, message=f"MARKET retry also failed: {market_err}", symbol=symbol, action=action, quantity=quantity)
+                    return OrderResult(success=False, message=f"MARKET retry failed: {market_err}", symbol=symbol, action=action, quantity=quantity)
             return OrderResult(success=False, message=err_msg, symbol=symbol, action=action, quantity=quantity)
 
     async def get_option_quote(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[dict]:
