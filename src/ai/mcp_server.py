@@ -479,7 +479,7 @@ class MCPServer:
             conn.row_factory = _dict_factory
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM conditional_orders WHERE status IN ('PENDING','MONITORING') "
+                "SELECT * FROM conditional_orders WHERE status IN ('PENDING','MONITORING','ACTIVE_MONITORING') "
                 "ORDER BY created_at DESC LIMIT 50"
             )
             rows = cursor.fetchall()
