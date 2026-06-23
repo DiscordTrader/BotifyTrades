@@ -1698,16 +1698,10 @@ def get_response(query: str) -> Dict:
     if format_response:
         return format_response
 
-    # Event commands (show events, show failures, etc.) — always use dedicated handlers
-    event_response = handle_event_commands(query)
-    if event_response:
-        return event_response
-
     # ── MCP Co-Pilot: Quick status queries via local MCP tools (no AI call) ──
     _mcp_result = _handle_mcp_query(query)
     if _mcp_result:
         return _mcp_result
-
 
     # ── AI Co-Pilot: Diagnostic engine for "why did X fail?" queries (FREE, <50ms) ──
     try:
@@ -1717,6 +1711,14 @@ def get_response(query: str) -> Dict:
             return _copilot_result
     except Exception:
         pass
+
+    # Event commands — ONLY for explicit "show events/failures/fills" commands
+    # (natural language like "why did X fail" is handled by copilot above)
+    q_lower_cmd = query.lower().strip()
+    if q_lower_cmd.startswith('show ') or q_lower_cmd.startswith('event '):
+        event_response = handle_event_commands(query)
+        if event_response:
+            return event_response
     q_lower_pre = query.lower().strip()
     _wants_channel_list = ('channel' in q_lower_pre and any(kw in q_lower_pre for kw in ['list', 'show', 'configured', 'how many', 'what are', 'which']))
     if _wants_channel_list:
