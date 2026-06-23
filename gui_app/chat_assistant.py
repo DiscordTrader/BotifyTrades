@@ -1708,6 +1708,15 @@ def get_response(query: str) -> Dict:
     if _mcp_result:
         return _mcp_result
 
+
+    # ── AI Co-Pilot: Diagnostic engine for "why did X fail?" queries (FREE, <50ms) ──
+    try:
+        from src.ai.copilot import copilot_respond
+        _copilot_result = copilot_respond(query)
+        if _copilot_result:
+            return _copilot_result
+    except Exception:
+        pass
     q_lower_pre = query.lower().strip()
     _wants_channel_list = ('channel' in q_lower_pre and any(kw in q_lower_pre for kw in ['list', 'show', 'configured', 'how many', 'what are', 'which']))
     if _wants_channel_list:
