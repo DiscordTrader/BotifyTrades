@@ -427,8 +427,17 @@ class WebullOfficialBroker:
             err_msg = str(e)
             # Auto-retry as MARKET if limit_price rejected
             # Webull rejects certain limit prices (e.g., outside acceptable range)
-            if 'invalid limit_price' in err_msg.lower() or 'invalid_limit_price' in err_msg.lower() or 'invalid support_trading_session' in err_msg.lower():
-                print(f"[{self.name}] ⚠️ Order rejected — retrying as MARKET order (CORE session, DAY TIF)")
+            _is_short_reject = any(kw in err_msg.lower() for kw in [
+                'invalid limit_price', 'invalid_limit_price', 'invalid support_trading_session',
+                'reverse', 'short position', 'generate_new_short',
+            ])
+            if _is_short_reject:
+                # Check if this is an anti-short scenario (position already closed)
+                if any(kw in err_msg.lower() for kw in ['reverse', 'short position', 'generate_new_short']):
+                    print(f"[{self.name}] 🛡️ ANTI-SHORT: Position already closed by broker — skipping STC")
+                    return OrderResult(success=False, message=f"Position already closed (would create short): {err_msg[:100]}", symbol=symbol, action=action, quantity=quantity)
+                # Otherwise try MARKET with CORE session
+                print(f"[{self.name}] ⚠️ Order rejected — retrying as MARKET (CORE session, DAY TIF)")
                 try:
                     result = await self._orders.place_stock_order(
                         account_id=self.account_id,
@@ -448,6 +457,10 @@ class WebullOfficialBroker:
                         symbol=symbol, action=action, quantity=quantity,
                     )
                 except Exception as market_err:
+                    _me = str(market_err).lower()
+                    if any(kw in _me for kw in ['reverse', 'short position', 'generate_new_short']):
+                        print(f"[{self.name}] 🛡️ ANTI-SHORT: Position already closed — stopping retries")
+                        return OrderResult(success=False, message=f"Position already closed by broker bracket", symbol=symbol, action=action, quantity=quantity)
                     return OrderResult(success=False, message=f"MARKET retry failed: {market_err}", symbol=symbol, action=action, quantity=quantity)
             return OrderResult(success=False, message=err_msg, symbol=symbol, action=action, quantity=quantity)
 
