@@ -92,7 +92,8 @@ _TICKER_STOPWORDS = {
     'SET', 'ALL', 'MY', 'IS', 'IT', 'OR', 'IF', 'AT', 'TO', 'DO', 'ON',
     'IN', 'SO', 'UP', 'BE', 'BY', 'NO', 'YES', 'SL', 'PT', 'PL', 'API',
     'MCP', 'BOT', 'FAQ', 'AI', 'OUT', 'OFF', 'BTO', 'STC', 'BUY', 'SELL',
-    'DAY', 'GTC', 'EST', 'UTC', 'NOW', 'NEW', 'OLD',
+    'DAY', 'GTC', 'EST', 'UTC', 'NOW', 'NEW', 'OLD', 'FAIL', 'STOP', 'LOSS',
+    'WHAT', 'SHOW', 'LIST', 'OPEN', 'CLOSE', 'ORDER', 'TRADE', 'PRICE',
 }
 
 
