@@ -1483,6 +1483,17 @@ def _handle_mcp_query(query: str) -> Optional[Dict]:
                 if 'error' in result and not any(k for k in result if k != 'error'):
                     return None  # Let other handlers try
 
+                # If result has empty data, fall through to AI for richer analysis
+                _empty_checks = {
+                    'get_channel_scores': lambda r: not r.get('scores'),
+                    'get_consensus_signals': lambda r: not r.get('consensus'),
+                    'get_ai_recommendations': lambda r: not r.get('recommendations'),
+                    'get_execution_quality': lambda r: not r.get('brokers'),
+                    'get_format_candidates': lambda r: not r.get('candidates'),
+                }
+                if tool_name in _empty_checks and _empty_checks[tool_name](result):
+                    return None  # Fall through to AI — it can query trade history directly
+
                 response = _format_mcp_result(tool_name, result)
                 return {
                     "success": True,
