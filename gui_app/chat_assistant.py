@@ -1732,7 +1732,8 @@ def get_response(query: str) -> Dict:
             return event_response
     q_lower_pre = query.lower().strip()
     _wants_channel_list = ('channel' in q_lower_pre and any(kw in q_lower_pre for kw in ['list', 'show', 'configured', 'how many', 'what are', 'which']))
-    if _wants_channel_list:
+    _is_performance_q = any(kw in q_lower_pre for kw in ['profitable', 'profit', 'performance', 'best', 'worst', 'winning', 'losing', 'compare', 'ranking', 'score'])
+    if _wants_channel_list and not _is_performance_q:
         if not any(kw in q_lower_pre for kw in ['how do i', 'how to', 'what is a', 'explain', 'add channel']):
             return _list_channels_from_db()
 
@@ -1743,15 +1744,18 @@ def get_response(query: str) -> Dict:
         sym = _extract_symbol(query)
         q_lower = query.lower()
 
-        is_trade_question = sym and any(kw in q_lower for kw in [
+        is_trade_question = (sym and any(kw in q_lower for kw in [
             'trade', 'what happened', 'position', 'pnl', 'p&l', 'profit', 'loss',
             'buy', 'sell', 'entry', 'exit', 'fill', 'order', 'execute', 'status',
             'close', 'open', 'held', 'stop', 'target', 'sl', 'why', 'fail',
+        ])) or any(kw in q_lower for kw in [
+            'profitable', 'performance', 'win rate', 'best channel', 'worst channel',
+            'compare channel', 'ranking', 'which channel',
         ])
         is_config_question = any(kw in q_lower for kw in [
-            'channel', 'setting', 'config', 'broker', 'risk', 'sizing', 'setup',
-            'how many', 'which', 'enable', 'disable', 'connect',
-        ])
+            'setting', 'config', 'broker', 'sizing', 'setup',
+            'how many', 'enable', 'disable', 'connect',
+        ]) and not _is_performance_q
         is_issue_question = any(kw in q_lower for kw in [
             'log', 'error', 'fail', 'issue', 'problem', 'not working', 'crash', 'bug',
         ])
