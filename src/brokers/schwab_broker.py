@@ -690,6 +690,16 @@ class SchwabBroker(BrokerInterface):
         except (asyncio.TimeoutError, TimeoutError) as timeout_err:
             await self._reset_http_client(f"TimeoutError on {method} {short_url}")
             raise
+        except RuntimeError as rt_err:
+            if 'client has been closed' in str(rt_err).lower():
+                await self._reset_http_client(f"Client closed — recreating on {method} {short_url}")
+                # Retry once with fresh client
+                response = await asyncio.wait_for(
+                    self._http_client.request(method, url, headers=headers, **kwargs),
+                    timeout=10.0
+                )
+            else:
+                raise
 
         if response.status_code == 429:
             retry_after = int(response.headers.get('Retry-After', '60'))
