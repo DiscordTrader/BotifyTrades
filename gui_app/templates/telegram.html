@@ -730,8 +730,8 @@
         <!-- Order Types Tab -->
         <div id="stab-order-types" class="stab-content" style="display:none;">
             <div class="settings-section"><h4><i class="fas fa-exchange-alt"></i> Order Types</h4>
-                <div class="settings-row"><div class="setting-item"><label>Entry</label><select id="settingsEntryOrderMode"><option value="market">Market</option><option value="limit">Limit</option></select></div><div class="setting-item"><label>Trim</label><select id="settingsTrimOrderMode"><option value="market">Market</option><option value="limit">Limit</option></select></div></div>
-                <div class="settings-row"><div class="setting-item"><label>SL Order</label><select id="settingsSlOrderMode"><option value="market">Market</option><option value="limit">Limit</option></select></div><div class="setting-item"><label>SL Limit Offset %</label><input type="number" id="settingsSlLimitOffset" placeholder="3" min="0" max="20" step="0.5"></div></div>
+                <div class="settings-row"><div class="setting-item"><label>Entry</label><select id="settingsEntryOrderMode"><option value="limit">Limit</option><option value="market">Market</option></select></div><div class="setting-item"><label>Trim</label><select id="settingsTrimOrderMode"><option value="market">Market</option><option value="limit">Limit</option></select></div></div>
+                <div class="settings-row"><div class="setting-item"><label>SL Order</label><select id="settingsSlOrderMode"><option value="limit">Limit</option><option value="market">Market</option></select></div><div class="setting-item"><label>SL Limit Offset %</label><input type="number" id="settingsSlLimitOffset" placeholder="3" min="0" max="20" step="0.5"></div></div>
             </div>
             <div class="settings-section"><h4><i class="fas fa-door-open"></i> Exit Strategy</h4>
                 <div class="setting-item"><label>Mode</label><select id="settingsExitMode"><option value="signal">Signal</option><option value="risk">Risk</option><option value="hybrid">Hybrid</option></select></div>
@@ -1125,9 +1125,9 @@
         document.getElementById('settingsLimitCapPct').value = ch.limit_cap_pct || '';
         document.getElementById('settingsNdxQqq').checked = !!ch.ndx_to_qqq_enabled;
         // Order Types
-        document.getElementById('settingsEntryOrderMode').value = ch.entry_order_mode || 'market';
+        document.getElementById('settingsEntryOrderMode').value = ch.entry_order_mode || 'limit';
         document.getElementById('settingsTrimOrderMode').value = ch.trim_order_mode || 'market';
-        document.getElementById('settingsSlOrderMode').value = ch.sl_order_mode || 'market';
+        document.getElementById('settingsSlOrderMode').value = ch.sl_order_mode || 'limit';
         document.getElementById('settingsSlLimitOffset').value = ch.sl_limit_offset || '';
         document.getElementById('settingsExitMode').value = ch.exit_strategy_mode || 'signal';
         // Conditional

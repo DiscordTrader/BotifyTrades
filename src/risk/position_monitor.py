@@ -5887,13 +5887,22 @@ class RiskManager:
                         print(f"[RISK] 📋 trim_order_mode='market' — skipping OCO, risk engine will handle PT sells")
 
                     if _use_oco and _schwab_stop_symbol:
+                        # Pass sl_order_mode to Schwab OCO — compute stop_limit_price when mode='limit'
+                        _ch_sl_mode = getattr(channel_settings, 'sl_order_mode', 'limit') or 'limit'
+                        _schwab_sl_limit = None
+                        if _ch_sl_mode == 'limit':
+                            _sl_offset = getattr(channel_settings, 'sl_limit_offset', 0.03) or 0.03
+                            _schwab_sl_limit = round(sl_price * (1 - _sl_offset), 4)
+                            if _schwab_sl_limit <= 0:
+                                _schwab_sl_limit = None
                         oco_result = await self.schwab_broker.place_oco_order(
                             symbol=_schwab_stop_symbol,
                             quantity=pt1_qty,
                             stop_loss_price=sl_price,
                             profit_target_price=pt1_price,
                             side='sell',
-                            asset_type=_asset_type
+                            asset_type=_asset_type,
+                            stop_limit_price=_schwab_sl_limit,
                         )
                         if oco_result and oco_result.success and oco_result.order_id:
                             cache.broker_oco_order_id = str(oco_result.order_id)
