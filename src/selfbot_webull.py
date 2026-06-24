@@ -18737,7 +18737,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'msg': result.message,
                         'broker': broker_name,
                         'orderId': result.order_id if result.success else None,
-                        'executed_qty': signal['qty']
+                        'executed_qty': signal['qty'],
+                        'fill_price': getattr(result, 'price', None),
+                        'price': getattr(result, 'price', None),
                     }
                 else:
                     # Result is a dict, create a new dict with broker name
@@ -19264,7 +19266,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'msg': result.message,
                         'broker': broker_name,
                         'orderId': result.order_id if result.success else None,
-                        'executed_qty': signal['qty']
+                        'executed_qty': signal['qty'],
+                        'fill_price': getattr(result, 'price', None),
+                        'price': getattr(result, 'price', None),
                     }
                 elif isinstance(result, dict):
                     resp = dict(result)
@@ -19492,7 +19496,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'msg': result.message,
                         'broker': broker_name,
                         'orderId': result.order_id if result.success else None,
-                        'executed_qty': signal['qty']
+                        'executed_qty': signal['qty'],
+                        'fill_price': getattr(result, 'price', None),
+                        'price': getattr(result, 'price', None),
                     }
                 elif isinstance(result, dict):
                     resp = dict(result)
