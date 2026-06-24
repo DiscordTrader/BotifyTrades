@@ -1407,6 +1407,7 @@ class SchwabBroker(BrokerInterface):
                                 )
                             elif schwab_status == 'FILLED':
                                 fill_price = status_result.get('price', price)
+                                price = fill_price  # Use actual fill for OrderResult
                                 print(f"[{self.name}] ✅ Order {order_id} FILLED immediately @ ${fill_price}")
                     except Exception as verify_err:
                         print(f"[{self.name}] ⚠️ Post-order verify failed (non-critical): {verify_err}")

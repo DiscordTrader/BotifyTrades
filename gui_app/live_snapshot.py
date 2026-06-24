@@ -1312,7 +1312,8 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
             entry_price = float(t.get('entry_price') or t.get('executed_price') or t.get('intended_price') or 0)
             cur_price = float(t.get('current_price') or entry_price)
             pnl_pct = ((cur_price - entry_price) / entry_price * 100) if entry_price > 0 else 0.0
-            unrealized = float(t.get('unrealized_pnl') or (cur_price - entry_price) * float(t.get('quantity') or 0))
+            _mult = 100 if t.get('asset_type') == 'option' else 1
+            unrealized = float(t.get('unrealized_pnl') or (cur_price - entry_price) * float(t.get('quantity') or 0) * _mult)
 
             pos = _make_position(
                 pos_id=str(tid) if tid is not None else tid,
