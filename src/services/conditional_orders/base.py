@@ -2578,7 +2578,9 @@ class BaseConditionalOrderService(ABC):
             if first_seen is None:
                 self._trigger_first_seen[order_id] = now_mono
                 return
-            if now_mono - first_seen < 0.15:
+            # Configurable confirmation window (default 150ms, configurable per channel)
+            _confirm_window = getattr(self, '_confirmation_window_s', 0.15)
+            if now_mono - first_seen < _confirm_window:
                 return
             self._trigger_first_seen.pop(order_id, None)
             self._executing_orders.add(order_id)
