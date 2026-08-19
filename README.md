@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/BotifyTrades-v15.1.0-blueviolet?style=for-the-badge&logo=bitcoin&logoColor=white" alt="Version"/>
+  <img src="https://img.shields.io/badge/BotifyTrades-v16.1.8-blueviolet?style=for-the-badge&logo=bitcoin&logoColor=white" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/Brokers-5-green?style=for-the-badge&logo=tradingview&logoColor=white" alt="Brokers"/>
+  <img src="https://img.shields.io/badge/Brokers-11-green?style=for-the-badge&logo=tradingview&logoColor=white" alt="Brokers"/>
   <img src="https://img.shields.io/badge/Signal_Parsers-188+-orange?style=for-the-badge&logo=regex&logoColor=white" alt="Parsers"/>
-  <img src="https://img.shields.io/badge/Lines_of_Code-275K-red?style=for-the-badge&logo=codacy&logoColor=white" alt="LOC"/>
+  <img src="https://img.shields.io/badge/Lines_of_Code-300K-red?style=for-the-badge&logo=codacy&logoColor=white" alt="LOC"/>
 </p>
 
 <h1 align="center">BotifyTrades</h1>
@@ -24,16 +24,17 @@
 
 ---
 
-> **A trading bot that monitors Discord & Telegram for signals and auto-executes across 5 brokers simultaneously** &mdash; with 188 regex parsers, triple-AI fallback, real-time streaming, and an institutional-grade risk engine that runs 275,000 lines of production Python.
+> **A trading bot that monitors Discord & Telegram for signals and auto-executes across 11 brokers simultaneously** &mdash; with 188 regex parsers, triple-AI fallback, real-time streaming, and an institutional-grade risk engine that runs 300,000 lines of production Python.
 
 ```
-Discord/Telegram Signal ──> 188 Regex Parsers ──> Risk Engine ──> 5 Brokers (simultaneous)
+Discord/Telegram Signal ──> 188 Regex Parsers ──> Risk Engine ──> 11 Brokers (simultaneous)
          │                         │                    │               │
-         │                    No match?             4-tier PT       Schwab
-         │                         │               Dynamic SL       Webull
-         └── AI Fallback ──────────┘               Trailing        Alpaca
-             (Claude/GPT/Gemini)                   EMA-gated        IBKR
-                                                   Per-author     Tastytrade
+         │                    No match?             4-tier PT       Schwab, Webull
+         │                         │               Dynamic SL      Alpaca, IBKR
+         └── AI Fallback ──────────┘               Trailing        Tastytrade
+             (Claude/GPT/Gemini)                   EMA-gated       Robinhood (Agentic MCP)
+                                                   Per-author      Trading212, Questrade
+                                                                   DhanQ, Upstox, Zerodha
 ```
 
 ---
@@ -45,7 +46,7 @@ Most trading bots parse one format from one channel into one broker. **BotifyTra
 | Problem | BotifyTrades Solution |
 |---|---|
 | Signal providers all use different formats | 188 regex parsers + AI fallback that learns new formats |
-| Manual copy-paste loses seconds on entries | Sub-second execution across all 5 brokers at once |
+| Manual copy-paste loses seconds on entries | Sub-second execution across all 11 brokers at once |
 | One broker goes down, you miss the trade | Multi-broker redundancy &mdash; if Webull is down, Schwab still fills |
 | No risk management on signal trades | 4-tier profit targets, dynamic SL, trailing stops, EMA gating, per-channel rules |
 | Can't track P&L across brokers | Unified dashboard with real-time streaming from all brokers |
@@ -55,30 +56,44 @@ Most trading bots parse one format from one channel into one broker. **BotifyTra
 
 ## Quick Start
 
-### Prerequisites
-- Python 3.11+
-- A Discord user token ([guide](https://www.androidauthority.com/get-discord-token-3149920/))
-- At least one broker account (Webull, Schwab, Alpaca, IBKR, or Tastytrade)
+### Download & Run (Recommended)
 
-### Install & Run
+Download the latest executable from [Releases](https://github.com/DiscordTrader/BotifyTrades/releases) &mdash; standalone desktop app, no Python needed.
 
-```bash
-# Clone
-git clone https://github.com/DiscordTrader/BotifyTrades.git
-cd BotifyTrades
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Launch
-python src/selfbot_webull.py
+**Windows:**
+```
+1. Download QuantumPulse_Trading_Bot.exe from Releases
+2. Double-click to launch
+3. Open http://localhost:5000 in your browser
+4. Configure Discord token, brokers, and channels via the web GUI
 ```
 
-Open **http://localhost:5000** &rarr; Configure Discord token, brokers, and channels.
+**macOS:**
+```
+1. Download QuantumPulse_Trading_Bot_macOS from Releases
+2. chmod +x QuantumPulse_Trading_Bot_macOS
+3. ./QuantumPulse_Trading_Bot_macOS
+4. Open http://localhost:5000 in your browser
+```
 
-### One-Click Install (Windows)
+**Linux:**
+```
+1. Download QuantumPulse_Trading_Bot_linux from Releases
+2. chmod +x QuantumPulse_Trading_Bot_linux
+3. ./QuantumPulse_Trading_Bot_linux
+4. Open http://localhost:5000 in your browser
+```
 
-Download the latest `.exe` from [Releases](https://github.com/DiscordTrader/BotifyTrades/releases) &mdash; standalone desktop app with system tray, no Python needed.
+### Auto-Restart (Production)
+
+**Windows** &mdash; double-click `run_forever.bat` (auto-restarts on crash, logs to files)
+
+**Linux/macOS:**
+```bash
+./run_daemon.sh start    # Starts in background with auto-restart
+./run_daemon.sh status   # Check if running
+./run_daemon.sh stop     # Graceful shutdown
+```
 
 ---
 
@@ -115,15 +130,35 @@ Download the latest `.exe` from [Releases](https://github.com/DiscordTrader/Boti
 
 ### Multi-Broker Execution
 
-| Broker | Stocks | Options | Futures | Crypto | Streaming | Paper |
-|--------|:------:|:-------:|:-------:|:------:|:---------:|:-----:|
-| **Schwab** | &check; | &check; | &cross; | &cross; | WebSocket | &cross; |
-| **Webull** | &check; | &check; | &check; | &check; | MQTT | &check; |
-| **Alpaca** | &check; | &check; | &cross; | &check; | WebSocket | &check; |
-| **Interactive Brokers** | &check; | &check; | &check; | &cross; | TWS/Gateway | &check; |
-| **Tastytrade** | &check; | &check; | &check; | &cross; | DXLink | &check; |
+| Broker | Stocks | Options | Futures | Crypto | Streaming | Paper | Market |
+|--------|:------:|:-------:|:-------:|:------:|:---------:|:-----:|:------:|
+| **Schwab** | &check; | &check; | &cross; | &cross; | WebSocket | &cross; | US |
+| **Webull** | &check; | &check; | &check; | &check; | MQTT | &check; | US |
+| **Webull Official** | &check; | &check; | &cross; | &cross; | REST + WebSocket | &check; | US/UK |
+| **Alpaca** | &check; | &check; | &cross; | &check; | WebSocket | &check; | US |
+| **Interactive Brokers** | &check; | &check; | &check; | &cross; | TWS/Gateway | &check; | US/EU/Asia |
+| **Tastytrade** | &check; | &check; | &check; | &cross; | DXLink | &check; | US |
+| **Robinhood (Agentic)** | &check; | &check; | &cross; | &check; | MCP (REST) | &cross; | US |
+| **Robinhood (Classic)** | &check; | &check; | &cross; | &check; | REST | &cross; | US |
+| **Trading212** | &check; | &cross; | &cross; | &cross; | REST | &check; | UK/EU |
+| **DhanQ** | &check; | &check; | &cross; | &cross; | REST | &cross; | India |
+| **Upstox** | &check; | &check; | &cross; | &cross; | WebSocket | &cross; | India |
+| **Zerodha (Kite)** | &check; | &check; | &cross; | &cross; | REST | &cross; | India |
+| **Questrade** | &check; | &check; | &cross; | &cross; | REST | &cross; | Canada |
 
 > Every signal fires across **all connected brokers simultaneously**. Partial fills on one broker don't block others.
+
+### Robinhood Agentic Trading (MCP)
+
+Robinhood's official [Agentic Trading MCP server](https://robinhood.com/us/en/agentic-trading/) integration:
+
+- **OAuth authentication** &mdash; connect through Robinhood's login flow, tokens auto-refresh
+- **Dedicated agentic account** &mdash; trades scoped to a separately funded sub-account
+- **Equities, options, and crypto** &mdash; full order lifecycle (review &rarr; place &rarr; fill)
+- **Live quotes** via `get_equity_quotes` / `get_option_quotes` MCP tools
+- **Option chain browsing** &mdash; strike/expiry selection for option signals
+- **Extended hours** &mdash; auto MARKET&rarr;LIMIT conversion outside 9:35-16:00 ET
+- **Hot-connect** &mdash; authorize via web GUI, broker goes live without restart
 
 ### Risk Engine (Institutional-Grade)
 
@@ -153,6 +188,8 @@ Signal Detected
   │
   ├─ PT Near-Lock ── locks profits near each tier (soft + hard thresholds)
   │
+  ├─ Broker Brackets ── native SL/PT orders on broker side (Schwab, IBKR, Alpaca, TT)
+  │
   └─ Per-Author Overrides ── different risk rules per signal provider
 ```
 
@@ -167,16 +204,6 @@ Channel: "ProTrader Alerts"
   └─ Author "phoenix88804": trailing=8%     (wider trailing)
 ```
 
-### Asset Type Gating
-
-Control exactly what each channel can trade:
-
-| Setting | Effect |
-|---|---|
-| Stocks &check; Options &check; Futures &cross; Crypto &cross; | Only stock and option signals execute |
-| Stocks &cross; Options &check; | Options-only channel (ignores stock signals) |
-| Futures &check; | Futures signals detected and executed (ES, NQ, CL, GC...) |
-
 ### Futures Trading
 
 Full futures pipeline &mdash; from signal detection to execution:
@@ -186,6 +213,21 @@ Full futures pipeline &mdash; from signal detection to execution:
 - **Micro conversion**: Auto-convert ES &rarr; MES when account is too small
 - **Session filtering**: Regular hours only, or extended/globex
 - **PnL calculation**: Correct multiplier for all asset types
+
+### Unified Price Hub (UPH)
+
+Cross-broker price aggregation with streaming from all sources:
+
+| Source | Protocol | Latency |
+|--------|----------|---------|
+| IBKR reqMktData | TWS streaming | ~200ms |
+| IBKR reqTickByTickData | Tick-by-tick | ~100&mu;s |
+| Schwab | WebSocket (LEVELONE) | ~300ms |
+| Webull | MQTT pub/sub | ~200ms |
+| Tastytrade | DXLink (Quote + Trade + TimeAndSale) | ~200ms |
+| Alpaca | WebSocket (SIP/IEX) | ~150ms |
+
+The UPH resolves the best available price across all connected hubs, with stuck-price detection and REST fallback for illiquid symbols.
 
 ### Real-Time Dashboard
 
@@ -228,7 +270,7 @@ Price-level triggers that fire when conditions are met:
 ```
 "SPY 555 resistance, calls above 548 support, puts below 0DTE"
   → Creates 2 conditional orders
-  → StreamingPriceMonitor watches SPY via all brokers
+  → StreamingPriceMonitor watches SPY via UPH (all brokers)
   → Price hits 555? → BTO CALL, execute across all brokers
   → Price drops to 548? → BTO PUT, execute across all brokers
 ```
@@ -239,6 +281,16 @@ Price-level triggers that fire when conditions are met:
 - Same parser pipeline, same risk engine, same execution
 - Channel-level settings inherited
 
+### Relay Server (Platform Mode)
+
+Connect to the BotifyTrades relay server for signal streaming without a Discord selfbot:
+
+- **Platform authentication** via Discord/Google OAuth
+- **WebSocket connection** to `wss://botifytrades.com/ws/bot`
+- **Provider browsing** &mdash; subscribe to signal channels from the dashboard
+- **Auto-channel creation** on subscribe
+- **Remote access** &mdash; monitor positions, pause trading, close trades from mobile
+
 ---
 
 ## Architecture
@@ -246,10 +298,10 @@ Price-level triggers that fire when conditions are met:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     SIGNAL SOURCES                          │
-│  Discord (selfbot)  │  Telegram (relay)  │  API webhooks    │
-└──────────┬──────────┴────────┬───────────┴──────┬───────────┘
-           │                   │                  │
-           ▼                   ▼                  ▼
+│  Discord (selfbot)  │  Telegram (Telethon)  │  Relay WS    │
+└──────────┬──────────┴────────┬──────────────┴──────┬────────┘
+           │                   │                     │
+           ▼                   ▼                     ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   SIGNAL PARSER PIPELINE                     │
 │  188 Regex Parsers (priority-ordered)                       │
@@ -264,22 +316,24 @@ Price-level triggers that fire when conditions are met:
 │  ChannelRiskSettings → Per-Author Overrides                 │
 │  Position Sizing → 4-Tier Profit Targets                    │
 │  Dynamic SL → Trailing → EMA Gating → Giveback Guard        │
-│  Conditional Orders → StreamingPriceMonitor                 │
+│  Broker Brackets (SL/PT on exchange) → Conditional Orders   │
 └──────────────────────────┬──────────────────────────────────┘
                            │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
-│  Schwab  │ │  Webull  │ │  Alpaca  │ │   IBKR   │ │Tastytrade│
-│WebSocket │ │   MQTT   │ │WebSocket │ │TWS/Gateway│ │  DXLink  │
-└──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
-              │            │            │
-              ▼            ▼            ▼
+     ┌────────┬────────┬───┼───┬────────┬────────┬────────┐
+     ▼        ▼        ▼   ▼   ▼        ▼        ▼        ▼
+┌────────┐┌────────┐┌──────┐┌──────┐┌────────┐┌────────┐┌──────────┐
+│ Schwab ││ Webull ││Alpaca││ IBKR ││Tasty-  ││Robin-  ││Trading212│
+│  WS    ││  MQTT  ││  WS  ││ TWS  ││trade   ││hood    ││  REST    │
+│        ││        ││      ││      ││DXLink  ││MCP     ││          │
+└────────┘└────────┘└──────┘└──────┘└────────┘└────────┘└──────────┘
+     │        │        │       │        │         │          │
+     └────────┴────────┴───┬───┴────────┴─────────┴──────────┘
+                           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │              UNIFIED PRICE HUB & MONITORING                  │
 │  Real-time streaming from ALL brokers                       │
 │  Position sync every 15s │ Risk eval every cycle            │
-│  Dashboard (Flask) │ Health monitor │ Execution logs        │
+│  Dashboard (Flask) │ Health monitor │ P&L engine            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -287,13 +341,13 @@ Price-level triggers that fire when conditions are met:
 
 | Layer | Technology |
 |---|---|
-| **Core** | Python 3.11, asyncio, 275K lines |
+| **Core** | Python 3.11, asyncio, 300K lines |
 | **Discord** | discord.py-self (selfbot) |
 | **Telegram** | Telethon (relay client) |
 | **Web GUI** | Flask + vanilla JS dashboard |
 | **Desktop** | PySide6 system tray, PyInstaller |
 | **Database** | SQLite (91 tables, WAL mode) |
-| **Streaming** | WebSocket (Schwab), MQTT (Webull), DXLink (Tastytrade) |
+| **Streaming** | WebSocket (Schwab/Alpaca), MQTT (Webull), DXLink (Tastytrade), TWS (IBKR), MCP (Robinhood) |
 | **AI** | Claude API, OpenAI API, Gemini API |
 | **Build** | PyInstaller + PyArmor obfuscation |
 | **CI/CD** | GitHub Actions (Windows/Linux/macOS) |
@@ -349,7 +403,7 @@ Each Discord/Telegram channel is independently configurable:
 | **Asset Types** | Enable/disable stocks, options, futures, crypto |
 | **Position Sizing** | % of buying power, fixed qty, or signal-derived |
 | **Exit Strategy** | Risk-managed, trailing-only, or manual |
-| **EMA Overlay** | Period, timeframe, buffer — only exit when EMA confirms |
+| **EMA Overlay** | Period, timeframe, buffer &mdash; only exit when EMA confirms |
 | **Author Overrides** | Per-signal-provider risk adjustments |
 | **Conditional Orders** | Auto-create price-level triggers |
 
@@ -384,25 +438,16 @@ Each Discord/Telegram channel is independently configurable:
 
 | Metric | Value |
 |---|---|
-| Lines of code | **275,878** |
-| Source files | **268** |
+| Lines of code | **300,000+** |
+| Source files | **290+** |
 | Test files | **72** (26K lines) |
+| E2E tests | **888** |
 | Signal parsers | **188** |
-| Broker integrations | **5** |
+| Broker integrations | **11** |
 | DB tables | **91** |
-| Commits | **5,894** |
 | Asset types | **4** (stocks, options, futures, crypto) |
 | AI providers | **3** (Claude, GPT, Gemini) |
-
----
-
-## Roadmap
-
-- [ ] **Image Signal Parsing** &mdash; Vision AI for broker screenshot alerts (Robinhood, Webull, ThinkorSwim)
-- [ ] **Voice Channel Monitoring** &mdash; Speech-to-text for verbal trading calls
-- [ ] **TradingView Webhooks** &mdash; Direct alert-to-execution pipeline
-- [ ] **Options Flow Scanner** &mdash; Unusual activity detection
-- [ ] **Mobile Companion** &mdash; React Native app for monitoring on the go
+| Markets | **4** (US, UK/EU, India, Canada) |
 
 ---
 
