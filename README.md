@@ -294,7 +294,7 @@ Connect to the BotifyTrades relay server for signal streaming without a Discord 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     SIGNAL SOURCES                          │
-│  Discord (selfbot)  │  Telegram (Telethon)  │  Relay WS    │
+│  Discord  │  Telegram (Telethon)  │  Relay WS    │
 └──────────┬──────────┴────────┬──────────────┴──────┬────────┘
            │                   │                     │
            ▼                   ▼                     ▼
@@ -338,7 +338,7 @@ Connect to the BotifyTrades relay server for signal streaming without a Discord 
 | Layer | Technology |
 |---|---|
 | **Core** | Python 3.11, asyncio, 300K lines |
-| **Discord** | discord.py-self (selfbot) |
+| **Discord** | discord.py-self |
 | **Telegram** | Telethon (relay client) |
 | **Web GUI** | Flask + vanilla JS dashboard |
 | **Desktop** | PySide6 system tray, PyInstaller |
