@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/BotifyTrades-v16.1.8-blueviolet?style=for-the-badge&logo=bitcoin&logoColor=white" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/Brokers-11-green?style=for-the-badge&logo=tradingview&logoColor=white" alt="Brokers"/>
+  <img src="https://img.shields.io/badge/Brokers-7-green?style=for-the-badge&logo=tradingview&logoColor=white" alt="Brokers"/>
   <img src="https://img.shields.io/badge/Signal_Parsers-188+-orange?style=for-the-badge&logo=regex&logoColor=white" alt="Parsers"/>
   <img src="https://img.shields.io/badge/Lines_of_Code-300K-red?style=for-the-badge&logo=codacy&logoColor=white" alt="LOC"/>
 </p>
@@ -24,17 +24,17 @@
 
 ---
 
-> **A trading bot that monitors Discord & Telegram for signals and auto-executes across 11 brokers simultaneously** &mdash; with 188 regex parsers, triple-AI fallback, real-time streaming, and an institutional-grade risk engine that runs 300,000 lines of production Python.
+> **A trading bot that monitors Discord & Telegram for signals and auto-executes across 7 brokers simultaneously** &mdash; with 188 regex parsers, triple-AI fallback, real-time streaming, and an institutional-grade risk engine that runs 300,000 lines of production Python.
 
 ```
-Discord/Telegram Signal ──> 188 Regex Parsers ──> Risk Engine ──> 11 Brokers (simultaneous)
+Discord/Telegram Signal ──> 188 Regex Parsers ──> Risk Engine ──> 7 Brokers (simultaneous)
          │                         │                    │               │
          │                    No match?             4-tier PT       Schwab, Webull
          │                         │               Dynamic SL      Alpaca, IBKR
          └── AI Fallback ──────────┘               Trailing        Tastytrade
              (Claude/GPT/Gemini)                   EMA-gated       Robinhood (Agentic MCP)
                                                    Per-author      Trading212, Questrade
-                                                                   DhanQ, Upstox, Zerodha
+                                                                   
 ```
 
 ---
@@ -46,7 +46,7 @@ Most trading bots parse one format from one channel into one broker. **BotifyTra
 | Problem | BotifyTrades Solution |
 |---|---|
 | Signal providers all use different formats | 188 regex parsers + AI fallback that learns new formats |
-| Manual copy-paste loses seconds on entries | Sub-second execution across all 11 brokers at once |
+| Manual copy-paste loses seconds on entries | Sub-second execution across all 7 brokers at once |
 | One broker goes down, you miss the trade | Multi-broker redundancy &mdash; if Webull is down, Schwab still fills |
 | No risk management on signal trades | 4-tier profit targets, dynamic SL, trailing stops, EMA gating, per-channel rules |
 | Can't track P&L across brokers | Unified dashboard with real-time streaming from all brokers |
@@ -141,10 +141,6 @@ Download the latest executable from [Releases](https://github.com/DiscordTrader/
 | **Robinhood (Agentic)** | &check; | &check; | &cross; | &check; | MCP (REST) | &cross; | US |
 | **Robinhood (Classic)** | &check; | &check; | &cross; | &check; | REST | &cross; | US |
 | **Trading212** | &check; | &cross; | &cross; | &cross; | REST | &check; | UK/EU |
-| **DhanQ** | &check; | &check; | &cross; | &cross; | REST | &cross; | India |
-| **Upstox** | &check; | &check; | &cross; | &cross; | WebSocket | &cross; | India |
-| **Zerodha (Kite)** | &check; | &check; | &cross; | &cross; | REST | &cross; | India |
-| **Questrade** | &check; | &check; | &cross; | &cross; | REST | &cross; | Canada |
 
 > Every signal fires across **all connected brokers simultaneously**. Partial fills on one broker don't block others.
 
@@ -443,11 +439,11 @@ Each Discord/Telegram channel is independently configurable:
 | Test files | **72** (26K lines) |
 | E2E tests | **888** |
 | Signal parsers | **188** |
-| Broker integrations | **11** |
+| Broker integrations | **7** |
 | DB tables | **91** |
 | Asset types | **4** (stocks, options, futures, crypto) |
 | AI providers | **3** (Claude, GPT, Gemini) |
-| Markets | **4** (US, UK/EU, India, Canada) |
+| Markets | **2** (US, UK/EU) |
 
 ---
 
