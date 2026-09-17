@@ -1,0 +1,250 @@
+##############################################################################
+# THIS FILE GOES IN THE PUBLIC REPO: DiscordTrader/BotifyTrades
+# Copy to: .github/workflows/build-from-obfuscated.yml
+#
+# Stage 2: Build executables from PyArmor-obfuscated bundles
+# Triggered by private repo via repository_dispatch
+# ALL RUNNERS FREE — public repo gets unlimited minutes
+##############################################################################
+
+name: Build from Obfuscated Source
+
+on:
+  repository_dispatch:
+    types: [build-from-obfuscated]
+
+env:
+  VERSION: ${{ github.event.client_payload.version }}
+  RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+  SOURCE_REPO: ${{ github.event.client_payload.source_repo }}
+
+jobs:
+  build-windows:
+    runs-on: windows-latest  # FREE on public repo
+    steps:
+      - name: Download obfuscated bundle
+        shell: bash
+        run: |
+          gh release download "${{ env.RELEASE_TAG }}" \
+            --repo "${{ env.SOURCE_REPO }}" \
+            --pattern "bundle-windows.tar.gz"
+          tar -xzf bundle-windows.tar.gz
+          # Move bundle contents to workspace root
+          cp -r bundle-windows/* .
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        shell: powershell
+        run: |
+          # PyArmor runtime is already in the bundle — copy to src/
+          Get-ChildItem -Directory -Filter "pyarmor_runtime_*" | ForEach-Object {
+            Write-Host "Copying PyArmor runtime: $($_.Name)"
+            Copy-Item -Path $_.FullName -Destination "src/$($_.Name)" -Recurse -Force
+          }
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          Rename-Item -Path dist/DiscordTradingBot.exe -NewName BotifyTrades-Windows.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Windows-v${{ env.VERSION }}
+          path: dist/BotifyTrades-Windows.exe
+          retention-days: 3
+
+  build-linux:
+    runs-on: ubuntu-latest  # FREE on public repo
+    steps:
+      - name: Download obfuscated bundle
+        run: |
+          gh release download "${{ env.RELEASE_TAG }}" \
+            --repo "${{ env.SOURCE_REPO }}" \
+            --pattern "bundle-linux.tar.gz"
+          tar -xzf bundle-linux.tar.gz
+          cp -r bundle-linux/* .
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: |
+          for rd in pyarmor_runtime_*; do
+            [ -d "$rd" ] && cp -r "$rd" "src/$rd"
+          done
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          mkdir -p dist/BotifyTrades-Linux
+          mv dist/DiscordTradingBot dist/BotifyTrades-Linux/BotifyTrades-Linux
+          cp build/linux_launcher.sh dist/BotifyTrades-Linux/start.sh
+          chmod +x dist/BotifyTrades-Linux/start.sh dist/BotifyTrades-Linux/BotifyTrades-Linux
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Linux-v${{ env.VERSION }}
+          path: dist/BotifyTrades-Linux/
+          retention-days: 3
+
+  build-macos-intel:
+    runs-on: macos-15-intel  # FREE on public repo!
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+    steps:
+      - name: Download obfuscated bundle
+        run: |
+          gh release download "${{ env.RELEASE_TAG }}" \
+            --repo "${{ env.SOURCE_REPO }}" \
+            --pattern "bundle-macos-intel.tar.gz"
+          tar -xzf bundle-macos-intel.tar.gz
+          cp -r bundle-macos-intel/* .
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r requirements.txt
+          pip install "cryptography==42.0.8"
+
+      - name: Build with PyInstaller
+        run: |
+          for rd in pyarmor_runtime_*; do
+            [ -d "$rd" ] && cp -r "$rd" "src/$rd"
+          done
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Intel
+
+      - name: Sign and package
+        run: |
+          chmod +x dist/BotifyTrades-macOS-Intel
+          codesign --force --deep --sign - dist/BotifyTrades-macOS-Intel
+          xattr -cr dist/BotifyTrades-macOS-Intel
+          cd dist && tar -czvf BotifyTrades-macOS-Intel.tar.gz BotifyTrades-macOS-Intel
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-macOS-Intel-v${{ env.VERSION }}
+          path: dist/BotifyTrades-macOS-Intel.tar.gz
+          retention-days: 3
+
+  build-macos-silicon:
+    runs-on: macos-14  # FREE on public repo!
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+    steps:
+      - name: Download obfuscated bundle
+        run: |
+          gh release download "${{ env.RELEASE_TAG }}" \
+            --repo "${{ env.SOURCE_REPO }}" \
+            --pattern "bundle-macos-silicon.tar.gz"
+          tar -xzf bundle-macos-silicon.tar.gz
+          cp -r bundle-macos-silicon/* .
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r requirements.txt
+          pip install "cryptography==42.0.8"
+
+      - name: Build with PyInstaller
+        run: |
+          for rd in pyarmor_runtime_*; do
+            [ -d "$rd" ] && cp -r "$rd" "src/$rd"
+          done
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Silicon
+
+      - name: Sign and package
+        run: |
+          chmod +x dist/BotifyTrades-macOS-Silicon
+          codesign --force --deep --sign - dist/BotifyTrades-macOS-Silicon
+          xattr -cr dist/BotifyTrades-macOS-Silicon
+          cd dist && tar -czvf BotifyTrades-macOS-Silicon.tar.gz BotifyTrades-macOS-Silicon
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-macOS-Silicon-v${{ env.VERSION }}
+          path: dist/BotifyTrades-macOS-Silicon.tar.gz
+          retention-days: 3
+
+  publish-release:
+    needs: [build-windows, build-linux, build-macos-intel, build-macos-silicon]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: releases
+          pattern: BotifyTrades-*
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: BotifyTrades v${{ env.VERSION }}
+          body: |
+            ## BotifyTrades v${{ env.VERSION }}
+            
+            ### Downloads
+            - **Windows**: BotifyTrades-Windows.exe
+            - **Linux**: BotifyTrades-Linux
+            - **macOS (Intel)**: BotifyTrades-macOS-Intel.tar.gz
+            - **macOS (Apple Silicon)**: BotifyTrades-macOS-Silicon.tar.gz
+            
+            ### Installation
+            
+            **Windows/Linux:**
+            1. Download the appropriate file for your OS
+            2. Run the executable
+            3. Follow the setup wizard
+            
+            **macOS:**
+            1. Download the .tar.gz file for your Mac (Intel or Apple Silicon)
+            2. Double-click to extract, or run: `tar -xzf BotifyTrades-macOS-*.tar.gz`
+            3. Run the extracted executable
+            4. If blocked, go to System Settings > Privacy & Security and click "Open Anyway"
+          files: |
+            releases/**/*
+          draft: false
+          prerelease: false
+
+      - name: Delete old releases (keep last 10)
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        with:
+          keep_latest: 10
+          delete_tags: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
